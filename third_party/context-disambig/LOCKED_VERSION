@@ -1,0 +1,9 @@
+asset=disambig-table-v1.json
+sha256=37640f8db628071a343fe5cb2f0edad6beee7107b641f68d5c7fa2b2543d1dd8
+license=project-generated
+generator=Claude subagent (blind: fed only pinyin+candidate words, NOT owner contexts)
+generated=2026-07-20
+rules=22
+purpose=INPUT-QUALITY Chunk Q4 context disambiguation (replaces failed C2 bigram)
+anti_gaming=verified: triggers are general Chinese knowledge; 4/299 coincidental single-word overlaps with owner text (common words, not eval-set answers); owner eval set never shown to generator
+note=owner real data is eval-only; this table is train-side, physically separate

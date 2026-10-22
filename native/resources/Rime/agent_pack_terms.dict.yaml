@@ -1,0 +1,9 @@
+# Optional vocabulary packs (CAD, industry): names, formats and acronyms (exact spelling, lowercase letters-only reading).
+# Built by scripts/lexicon/curate_packs.py + export_packs.py from researched, source-checked lists; do not edit by hand.
+# Rows for this layer are distributed through the zhizi-lexicon repository,
+# not this source tree. The file stays as an empty shell so build lists and imports resolve.
+---
+name: agent_pack_terms
+version: "0.1.0"
+sort: by_weight
+...

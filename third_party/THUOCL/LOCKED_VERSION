@@ -1,0 +1,12 @@
+repository=https://github.com/thunlp/THUOCL
+commit=a30ce79d895d01ab5132a5c74c29703ff7efb4cc
+asset=data/THUOCL_chengyu.txt
+rows=8519
+sha256=c339d5d6e37d4f8ecdcb82f2a02b7fdfc66796f0a5215155f2aff8a77e89a7eb
+asset=data/THUOCL_IT.txt
+rows=16000
+sha256=e8cd42c9f5559735fa3bfb91515cbe051f991efd4a803038a1d5c0da85af3526
+asset=data/THUOCL_caijing.txt
+rows=3830
+sha256=68e63d2009e59c6f388eeaa789d19b6a681657de3e8e56cc3479b21cd8548542
+license=MIT

@@ -1,0 +1,14 @@
+{
+  "formatVersion": 1,
+  "generatorCommit": "69dc2280420c1f52df22bd593e83f32687e76bb5",
+  "packageVersion": "0.1.0",
+  "storageSourceSHA256": "5a664cfca62de9dfd155630a41d257a3035822196bc7cdafdace10cbc3971ca9",
+  "entries": {
+    "agent-input-layer.history": "[{\"id\":\"v010-history-favorite\",\"rawInput\":\"synthetic legacy login prompt\",\"modeId\":\"codex-execution\",\"targetTool\":\"Codex\",\"output\":\"synthetic legacy generated prompt\",\"favorite\":true,\"createdAt\":\"2026-07-01T08:00:00.000Z\"},{\"id\":\"v010-history-second\",\"rawInput\":\"synthetic legacy bug prompt\",\"modeId\":\"bug-fix\",\"output\":\"synthetic legacy bug-fix output\",\"favorite\":false,\"createdAt\":\"2026-07-01T08:01:00.000Z\"}]",
+    "agent-input-layer.provider-settings": "{\"enabled\":true,\"baseUrl\":\"https://provider.invalid/v1\",\"model\":\"synthetic-v010-model\",\"apiKey\":\"synthetic-v010-key-never-contacted\"}",
+    "agent-input-layer.selected-mode": "bug-fix",
+    "agent-input-layer.shortcut-settings": "{\"shortcut\":\"control+space\"}",
+    "agent-input-layer.user-rules": "[{\"id\":\"v010-rule-enabled\",\"text\":\"synthetic enabled legacy rule\",\"enabled\":true},{\"id\":\"v010-rule-disabled\",\"text\":\"synthetic disabled legacy rule\",\"enabled\":false}]"
+  },
+  "privacy": "All values are synthetic; the reserved invalid TLD is never contacted."
+}

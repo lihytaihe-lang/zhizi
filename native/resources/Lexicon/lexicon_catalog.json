@@ -1,0 +1,99 @@
+{
+  "formatVersion": 1,
+  "layers": [
+    {
+      "id": "pinyin_simp",
+      "name": "基础词库",
+      "description": "通用汉语词汇",
+      "group": "core",
+      "defaultEnabled": true,
+      "rows": 65125
+    },
+    {
+      "id": "agent_common_fix",
+      "name": "常用修正",
+      "description": "少量常见排序修正",
+      "group": "core",
+      "defaultEnabled": true,
+      "rows": 3
+    },
+    {
+      "id": "agent_daily",
+      "name": "日常修正",
+      "description": "少量日常用词修正",
+      "group": "core",
+      "defaultEnabled": true,
+      "rows": 3
+    },
+    {
+      "id": "agent_general",
+      "name": "通用词库",
+      "description": "常用词与短语",
+      "group": "core",
+      "defaultEnabled": true,
+      "rows": 26947
+    },
+    {
+      "id": "agent_modern",
+      "name": "现代词",
+      "description": "微信、直播、外卖等现代日常词",
+      "group": "core",
+      "defaultEnabled": true,
+      "rows": 151
+    },
+    {
+      "id": "agent_spoken",
+      "name": "口语短语",
+      "description": "日常说话的整句与短语",
+      "group": "core",
+      "defaultEnabled": true,
+      "rows": 10853
+    },
+    {
+      "id": "agent_newwords",
+      "name": "日常名词",
+      "description": "动物、食物、物品等日常名称",
+      "group": "core",
+      "defaultEnabled": true,
+      "rows": 14633
+    },
+    {
+      "id": "agent_idioms",
+      "name": "成语",
+      "description": "常用成语",
+      "group": "extension",
+      "defaultEnabled": true,
+      "rows": 7635
+    },
+    {
+      "id": "agent_thuocl_it",
+      "name": "IT 词汇",
+      "description": "编程与互联网常用词",
+      "group": "extension",
+      "defaultEnabled": true,
+      "rows": 12212
+    },
+    {
+      "id": "agent_thuocl_caijing",
+      "name": "财经词汇",
+      "description": "财经金融常用词",
+      "group": "extension",
+      "defaultEnabled": true,
+      "rows": 2464
+    }
+  ],
+  "unlisted": [
+    "agent_ai_terms",
+    "agent_english",
+    "agent_pack_terms",
+    "agent_pinyin",
+    "agent_project_terms",
+    "agent_tech_terms"
+  ],
+  "missing": [
+    "agent_ai_names",
+    "agent_pack_poetry",
+    "agent_pack_cad",
+    "agent_pack_industry"
+  ]
+}

@@ -1,0 +1,66 @@
+Zhizi Free Skin Assets License
+
+English
+
+1. Scope
+The licensor is the Zhizi project owner. This license covers only the images,
+sprite sheets, and art settings in skin.json in these free skin directories
+under native/resources/Skins/Builtin/:
+
+baitu, chaiquan, denglong, fenghong, juzimao, luoying, nihong, shuitun,
+songxue, system, xuanmo, youzi, yueye.
+
+It does not cover code (Apache-2.0) or lexicon data (CC BY-SA 4.0). Skins
+added later, whether free or paid, are distributed separately by a dedicated
+skin module and are neither part of this repository nor covered by this
+license.
+
+2. Permission
+Individuals and organizations may use these assets free of charge, modify them
+for their own use, and redistribute or package unmodified copies with the
+Zhizi input method, free of charge. Keep this license with redistributed assets.
+
+3. Restrictions
+You may not resell these assets separately, charge for their distribution, or
+include them in a paid product or skin pack for sale. You may not claim that
+you created the original assets. No trademark rights to the names "知字" or
+"Zhizi", or to their icons, are granted.
+
+4. Reserved rights and AI-generated assets
+The licensor reserves all rights not expressly granted. Some illustrations
+were generated using AI image tools. The licensor grants only the rights they
+hold in the assets and makes no promise of copyright protection or exclusivity.
+
+5. No warranty
+The assets are provided "as is", without warranties of any kind.
+
+中文对照
+
+知字免费皮肤素材授权
+
+1. 范围
+授权方为知字项目所有者。本授权仅适用于 native/resources/Skins/Builtin/
+下列免费皮肤目录中的图片、精灵图和 skin.json 中的美术配置：
+
+baitu、chaiquan、denglong、fenghong、juzimao、luoying、nihong、shuitun、
+songxue、system、xuanmo、youzi、yueye。
+
+本授权不覆盖代码（Apache-2.0）或词库数据（CC BY-SA 4.0）。以后新增的皮肤
+（无论免费或付费）由独立的皮肤模块单独分发，不在本仓库中，也不在本授权
+范围内。
+
+2. 允许
+个人和团体可以免费使用这些素材，为自用修改，并随知字输入法免费转发或
+打包分发未经修改的素材副本。转发素材时须保留本授权。
+
+3. 限制
+不得单独转售这些素材、收费分发，或将其放入收费产品或皮肤包中销售。
+不得声称原始素材由自己创作。本授权不授予“知字”“Zhizi”名称及其图标的
+任何商标权。
+
+4. 保留权利与 AI 生成素材
+授权方保留一切未明示授权的权利。部分插画由 AI 图像工具生成。授权方仅
+授予自己对这些素材享有的权利，不保证素材可受版权保护或具有独占性。
+
+5. 无担保
+素材按现状提供，不附带任何担保。

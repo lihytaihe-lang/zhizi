@@ -1,0 +1,160 @@
+{
+  "id": "fenghong",
+  "displayName": {
+    "zh": "枫红",
+    "en": "Maple Red"
+  },
+  "formatVersion": 1,
+  "author": "Agent Input Method",
+  "description": "暖棕红底，枫叶枝从右上角垂下轻摆，落叶缓缓飘落；开启「减弱动态效果」时静止。",
+  "candidateFont": {
+    "family": "Xingkai SC",
+    "size": 17,
+    "weight": "medium"
+  },
+  "indexFont": {
+    "family": "systemMonospacedDigit",
+    "size": 10.5,
+    "weight": "medium"
+  },
+  "candidateColor": {
+    "light": "#FBEBD6",
+    "dark": "#FBEBD6"
+  },
+  "secondaryCandidateColor": {
+    "light": "#D8B28C",
+    "dark": "#D8B28C"
+  },
+  "indexColor": {
+    "light": "#D2A67E",
+    "dark": "#D2A67E"
+  },
+  "highlightedCandidateColor": {
+    "light": "#FFB347",
+    "dark": "#FFB347"
+  },
+  "highlightFillColor": {
+    "light": "#FFB34722",
+    "dark": "#FFB34722"
+  },
+  "highlightFillOpacity": 1,
+  "highlightBorderColor": {
+    "light": "#00000000",
+    "dark": "#00000000"
+  },
+  "highlightBorderOpacity": 1,
+  "rowHeight": 38,
+  "horizontalPadding": 11,
+  "verticalPadding": 6,
+  "indexCandidateSpacing": 6,
+  "candidateSpacing": 11,
+  "rowSpacing": 8,
+  "capsuleCornerRadius": 14,
+  "panelCornerRadius": 14,
+  "edgeInsets": {
+    "top": 11,
+    "left": 13,
+    "bottom": 11,
+    "right": 84
+  },
+  "material": "hudWindow",
+  "minimumPanelSize": {
+    "width": 120,
+    "height": 60
+  },
+  "maximumPanelWidth": 760,
+  "widthQuantization": 20,
+  "panelBackground": {
+    "light": "#2E140E",
+    "dark": "#2E140E"
+  },
+  "panelBorderColor": {
+    "light": "#C98A4B",
+    "dark": "#C98A4B"
+  },
+  "panelBorderWidth": 1,
+  "shadowEnabled": true,
+  "overflow": {
+    "top": 30,
+    "left": 0,
+    "bottom": 0,
+    "right": 8
+  },
+  "decorations": [
+    {
+      "type": "gradient",
+      "from": {
+        "light": "#2C130D",
+        "dark": "#2C130D"
+      },
+      "to": {
+        "light": "#62291A",
+        "dark": "#62291A"
+      },
+      "angle": 15,
+      "layer": "below"
+    },
+    {
+      "type": "petals",
+      "rate": 1.8,
+      "size": {
+        "min": 7,
+        "max": 12
+      },
+      "color": {
+        "light": "#F08A2A",
+        "dark": "#F08A2A"
+      },
+      "lifetime": 6.5,
+      "fallSpeed": 17,
+      "drift": -8,
+      "layer": "above",
+      "region": {
+        "x": 0.6,
+        "y": 0.6,
+        "width": 0.38,
+        "height": 0.4
+      }
+    },
+    {
+      "type": "shimmer",
+      "color": {
+        "light": "#FFD08A66",
+        "dark": "#FFD08A66"
+      },
+      "period": 11,
+      "width": 0.16,
+      "angle": 18,
+      "layer": "above"
+    },
+    {
+      "type": "sprite",
+      "sheet": "maple.png",
+      "frames": 1,
+      "size": {
+        "width": 84,
+        "height": 86
+      },
+      "anchor": {
+        "x": 1,
+        "y": 1
+      },
+      "offset": {
+        "x": 8,
+        "y": 30
+      },
+      "overflow": true,
+      "pivot": {
+        "x": 1,
+        "y": 1
+      },
+      "motion": [
+        {
+          "kind": "sway",
+          "degrees": 1.4,
+          "period": 7
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,159 @@
+# Generated from the project-authored DICT-D2 curation; do not edit by hand.
+# Readings: pypinyin 0.55.0; weights are category-based and capped at 520.
+---
+name: agent_modern
+version: "0.4.0"
+sort: by_weight
+...
+
+微信	wei xin	520
+微博	wei bo	520
+抖音	dou yin	520
+小红书	xiao hong shu	520
+拼多多	pin duo duo	520
+美团	mei tuan	520
+飞书	fei shu	520
+钉钉	ding ding	520
+快手	kuai shou	520
+闲鱼	xian yu	520
+得物	de wu	520
+同程	tong cheng	520
+夸克	kua ke	520
+虎扑	hu pu	520
+知识星球	zhi shi xing qiu	520
+视频号	shi pin hao	520
+朋友圈	peng you quan	520
+直播间	zhi bo jian	520
+直播带货	zhi bo dai huo	520
+内容电商	nei rong dian shang	520
+短视频	duan shi pin	520
+云闪付	yun shan fu	520
+数字人民币	shu zi ren min bi	520
+网约车	wang yue che	520
+外卖平台	wai mai ping tai	520
+平台经济	ping tai jing ji	520
+内容创作者	nei rong chuang zuo zhe	520
+博主	bo zhu	520
+信息流	xin xi liu	520
+关注页	guan zhu ye	520
+推荐页	tui jian ye	520
+热搜	re sou	520
+热榜	re bang	520
+话题榜	hua ti bang	520
+同城页	tong cheng ye	520
+弹幕	dan mu	520
+私域	si yu	520
+公域	gong yu	520
+流量池	liu liang chi	520
+用户池	yong hu chi	520
+大模型	da mo xing	520
+大语言模型	da yu yan mo xing	520
+多模态	duo mo tai	520
+生成式人工智能	sheng cheng shi ren gong zhi neng	520
+提示词	ti shi ci	520
+上下文窗口	shang xia wen chuang kou	520
+向量库	xiang liang ku	520
+向量数据库	xiang liang shu ju ku	520
+数据标注	shu ju biao zhu	520
+数据治理	shu ju zhi li	520
+数据看板	shu ju kan ban	520
+数据中台	shu ju zhong tai	520
+业务中台	ye wu zhong tai	520
+模型推理	mo xing tui li	520
+智能体	zhi neng ti	520
+云原生	yun yuan sheng	520
+容器化	rong qi hua	520
+中台	zhong tai	520
+埋点	mai dian	520
+可观测性	ke guan ce xing	520
+算力	suan li	520
+闭源	bi yuan	520
+全栈	quan zhan	520
+无服务器	wu fu wu qi	520
+低代码	di dai ma	520
+零代码	ling dai ma	520
+隐私计算	yin si ji suan	520
+联邦学习	lian bang xue xi	520
+边缘计算	bian yuan ji suan	520
+端侧模型	duan ce mo xing	520
+本地模型	ben di mo xing	520
+文生图	wen sheng tu	520
+图生图	tu sheng tu	520
+文生视频	wen sheng shi pin	520
+内卷	nei juan	470
+躺平	tang ping	470
+破防	po fang	470
+复盘	fu pan	460
+颗粒度	ke li du	460
+赋能	fu neng	460
+痛点	tong dian	460
+爽点	shuang dian	460
+卡点	ka dian	460
+堵点	du dian	460
+需求池	xu qiu chi	460
+底层逻辑	di ceng luo ji	460
+顶层设计	ding ceng she ji	460
+业务场景	ye wu chang jing	460
+核心诉求	he xin su qiu	460
+价值主张	jia zhi zhu zhang	460
+转化率	zhuan hua lv	460
+复购率	fu gou lv	460
+留存率	liu cun lv	460
+活跃度	huo yue du	460
+完播率	wan bo lv	460
+曝光量	bao guang liang	460
+播放量	bo fang liang	460
+阅读量	yue du liang	460
+粉丝量	fen si liang	460
+点赞量	dian zan liang	460
+收藏量	shou cang liang	460
+转发量	zhuan fa liang	460
+互动率	hu dong lv	460
+客单价	ke dan jia	460
+情绪价值	qing xu jia zhi	470
+松弛感	song chi gan	470
+获得感	huo de gan	470
+体验感	ti yan gan	470
+参与感	can yu gan	470
+陪伴感	pei ban gan	470
+仪式感	yi shi gan	470
+氛围感	fen wei gan	470
+网感	wang gan	470
+体感	ti gan	470
+代入感	dai ru gan	470
+共鸣感	gong ming gan	470
+通用性	tong yong xing	460
+基本盘	ji ben pan	460
+增长曲线	zeng zhang qu xian	460
+数据化	shu ju hua	460
+流程化	liu cheng hua	460
+体系化	ti xi hua	460
+扫码	sao ma	470
+刷脸	shua lian	470
+人脸支付	ren lian zhi fu	470
+无感支付	wu gan zhi fu	470
+线上会议	xian shang hui yi	470
+居家办公	ju jia ban gong	470
+灵活办公	ling huo ban gong	470
+共享办公	gong xiang ban gong	470
+语音消息	yu yin xiao xi	470
+云盘	yun pan	470
+点赞	dian zan	470
+取关	qu guan	470
+拉黑	la hei	470
+免打扰	mian da rao	470
+已读	yi du	470
+未读	wei du	470
+录屏	lu ping	470
+投屏	tou ping	470
+倍速	bei su	470
+流量套餐	liu liang tao can	470
+自动续费	zi dong xu fei	470
+免密支付	mian mi zhi fu	470
+特斯拉	te si la	520
+蒸汽机	zheng qi ji	520
+瓦特	wa te	520
+举例子	ju li zi	520
+熟读	shu du	520
+甄维斯	zhen wei si	520
+顺手知字	shun shou zhi zi	520

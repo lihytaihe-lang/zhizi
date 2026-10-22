@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "id": "HR1-blocked",
+      "query": "ni",
+      "app": "replay.hr1",
+      "base": [{"text": "你", "reading": "ni"}, {"text": "泥", "reading": "ni"}],
+      "entries": [{"id": "blocked", "text": "你", "pinyin": "ni", "disabled": true}],
+      "expectedFirst": ["泥"],
+      "absent": ["你"]
+    },
+    {
+      "id": "HR2-fixed-prefix",
+      "query": "ni",
+      "app": "replay.hr2",
+      "base": [{"text": "泥", "reading": "ni"}],
+      "entries": [{"id": "fixed", "text": "你好", "pinyin": "nihao", "fixed": true}],
+      "expectedFirst": ["你好", "泥"]
+    },
+    {
+      "id": "HR3-deduplicate",
+      "query": "ni",
+      "app": "replay.hr3",
+      "base": [{"text": "你", "reading": "ni"}],
+      "entries": [{"id": "duplicate", "text": "你", "pinyin": "ni"}],
+      "expectedFirst": ["你"]
+    },
+    {
+      "id": "HR4-base-preservation",
+      "query": "ni",
+      "app": "replay.hr4",
+      "base": [{"text": "你", "reading": "ni"}, {"text": "呢", "reading": "ni"}, {"text": "泥", "reading": "ni"}],
+      "entries": [],
+      "expectedFirst": ["你", "呢", "泥"]
+    },
+    {
+      "id": "HR5-deterministic",
+      "query": "ni",
+      "app": "replay.hr5",
+      "base": [{"text": "你", "reading": "ni"}, {"text": "泥", "reading": "ni"}],
+      "entries": [{"id": "personal", "text": "拟定", "pinyin": "ni"}],
+      "expectedFirst": ["拟定", "你", "泥"],
+      "repeat": 20
+    },
+    {
+      "id": "HR6-bounded-promotion",
+      "query": "ce",
+      "app": "replay.hr6",
+      "base": [{"text": "一", "reading": "ce"}, {"text": "二", "reading": "ce"}, {"text": "三", "reading": "ce"}, {"text": "四", "reading": "ce"}, {"text": "五", "reading": "ce"}],
+      "entries": [],
+      "expectedFirst": ["一", "二", "三", "四", "五"],
+      "selectIndex": 4,
+      "expectedReopenedIndex": 1
+    },
+    {
+      "id": "HR7-second-layer",
+      "query": "niha",
+      "app": "replay.hr7",
+      "base": [{"text": "拟哈", "reading": "niha"}],
+      "entries": [],
+      "expectedFirst": ["拟哈"],
+      "typoEnabled": true,
+      "expectedSecondContains": []
+    },
+    {
+      "id": "HR8-project-active",
+      "query": "ni",
+      "app": "com.example.project",
+      "base": [{"text": "你", "reading": "ni"}],
+      "entries": [{"id": "project", "text": "项目专词", "pinyin": "ni", "domains": ["com.example.project"]}],
+      "expectedFirst": ["项目专词", "你"]
+    },
+    {
+      "id": "HR8-project-inactive",
+      "query": "ni",
+      "app": "com.example.other",
+      "base": [{"text": "你", "reading": "ni"}],
+      "entries": [{"id": "project", "text": "项目专词", "pinyin": "ni", "domains": ["com.example.project"]}],
+      "expectedFirst": ["你"],
+      "absent": ["项目专词"]
+    }
+  ]
+}

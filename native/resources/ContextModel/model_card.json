@@ -1,0 +1,10 @@
+{
+  "checkpoint": "runs/gpu-v2-30m/runs/v2-30m-homo/best.pt",
+  "input": "tokens Int32[8,40]",
+  "output": "logprobs Float16[8,39]",
+  "pad": 0,
+  "bos": 1,
+  "unk": 2,
+  "policy": "blend beta=2 within same-length same-reading homophone group",
+  "heldout_adjudicated": "15.5% -> 7.7% errors (net +131 of 1666)"
+}

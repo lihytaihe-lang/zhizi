@@ -1,0 +1,11 @@
+config_version: "0.3.0"
+
+schema_list:
+  - schema: agent_pinyin
+
+menu:
+  page_size: 5
+
+switcher:
+  caption: Agent Input Method
+  hotkeys: []

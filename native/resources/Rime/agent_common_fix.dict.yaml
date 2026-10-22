@@ -1,0 +1,12 @@
+# Project-authored INPUT-QUALITY Q1 correction table.
+# Rows come only from the frozen verifier-mined q1_dict bucket after current-
+# build replay, plus the two acceptance examples explicitly frozen in the task.
+---
+name: agent_common_fix
+version: "1.0.0"
+sort: by_weight
+...
+
+完成了	wan cheng le	520
+难用	nan yong	520
+超级烦	chao ji fan	520

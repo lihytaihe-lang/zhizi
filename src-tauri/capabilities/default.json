@@ -1,0 +1,15 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capability for the main workspace and compact input panel",
+  "windows": ["main", "compact"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-center",
+    "core:window:allow-hide",
+    "core:window:allow-set-size",
+    "clipboard-manager:allow-write-text",
+    "dialog:allow-open",
+    "opener:default"
+  ]
+}

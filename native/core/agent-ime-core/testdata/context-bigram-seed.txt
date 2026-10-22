@@ -1,0 +1,4 @@
+# Project-authored unit-test seed. These synthetic tokens are not evaluation data.
+前文	候选一	2
+前文	候选二	7
+另一段	候选一	5

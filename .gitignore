@@ -1,0 +1,46 @@
+# Public repository root .gitignore. The export script copies this file to
+# `.gitignore` at the root of the exported tree; the repository's own root
+# .gitignore is internal and is not exported.
+# 公开仓库根 .gitignore。导出脚本会把本文件复制为导出树根部的 `.gitignore`；
+# 仓库自身的根 .gitignore 是内部文件，不导出。
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+.build-deps/
+build/
+target/
+.swiftpm/
+native/macos/.build/
+tmp/
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+__pycache__/
+
+# Distributable installers / 安装包产物
+*.dmg
+*.exe
+
+# local training workspace (not part of this repository)
+ime_context_model/
+# local evaluation outputs (not part of this repository)
+eval-runs/

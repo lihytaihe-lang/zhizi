@@ -1,0 +1,209 @@
+{
+  "id": "chaiquan",
+  "displayName": {
+    "zh": "柴犬",
+    "en": "Shiba Inu"
+  },
+  "formatVersion": 1,
+  "author": "Agent Input Method",
+  "description": "淡天蓝底，柴犬在右侧：招手、坐、走来走去、奔跑、蹦一下，一套动作循环着演；开启「减弱动态效果」时静止。",
+  "candidateFont": {
+    "family": "Yuanti SC",
+    "size": 17,
+    "weight": "medium"
+  },
+  "indexFont": {
+    "family": "systemMonospacedDigit",
+    "size": 10.5,
+    "weight": "medium"
+  },
+  "candidateColor": {
+    "light": "#2F3F52",
+    "dark": "#2F3F52"
+  },
+  "secondaryCandidateColor": {
+    "light": "#6B7E94",
+    "dark": "#6B7E94"
+  },
+  "indexColor": {
+    "light": "#6B7E94",
+    "dark": "#6B7E94"
+  },
+  "highlightedCandidateColor": {
+    "light": "#C2631A",
+    "dark": "#C2631A"
+  },
+  "highlightFillColor": {
+    "light": "#E89A5A30",
+    "dark": "#E89A5A30"
+  },
+  "highlightFillOpacity": 1,
+  "highlightBorderColor": {
+    "light": "#5E7E9E66",
+    "dark": "#5E7E9E66"
+  },
+  "highlightBorderOpacity": 1,
+  "rowHeight": 36,
+  "horizontalPadding": 10,
+  "verticalPadding": 5,
+  "indexCandidateSpacing": 5,
+  "candidateSpacing": 10,
+  "rowSpacing": 7,
+  "capsuleCornerRadius": 12,
+  "panelCornerRadius": 12,
+  "edgeInsets": {
+    "top": 11,
+    "left": 13,
+    "bottom": 11,
+    "right": 150
+  },
+  "material": "popover",
+  "minimumPanelSize": {
+    "width": 120,
+    "height": 56
+  },
+  "maximumPanelWidth": 760,
+  "widthQuantization": 20,
+  "panelBackground": {
+    "light": "#EEF5FB",
+    "dark": "#EEF5FB"
+  },
+  "panelBorderColor": {
+    "light": "#BFD3E6",
+    "dark": "#BFD3E6"
+  },
+  "panelBorderWidth": 0.5,
+  "shadowEnabled": false,
+  "decorations": [
+    {
+      "type": "gradient",
+      "from": {
+        "light": "#F3F8FD",
+        "dark": "#F3F8FD"
+      },
+      "to": {
+        "light": "#D6E6F5",
+        "dark": "#D6E6F5"
+      },
+      "angle": 0,
+      "layer": "below"
+    },
+    {
+      "type": "sprite",
+      "sheet": "shiba-actions.png",
+      "frames": 8,
+      "size": {
+        "width": 38.0,
+        "height": 46.5
+      },
+      "anchor": {
+        "x": 1,
+        "y": 0
+      },
+      "offset": {
+        "x": -6,
+        "y": 4
+      },
+      "layer": "below",
+      "zone": {
+        "width": 140
+      },
+      "clips": [
+        {
+          "row": 1,
+          "frames": 6,
+          "fps": 7,
+          "seconds": 4.0,
+          "move": {
+            "from": 0.85,
+            "to": 0.85
+          }
+        },
+        {
+          "row": 0,
+          "frames": 4,
+          "fps": 4,
+          "seconds": 1.5,
+          "move": {
+            "from": 0.85,
+            "to": 0.85
+          }
+        },
+        {
+          "row": 5,
+          "frames": 6,
+          "fps": 4,
+          "seconds": 3.5,
+          "move": {
+            "from": 0.85,
+            "to": 0.85
+          }
+        },
+        {
+          "row": 2,
+          "frames": 8,
+          "fps": 9,
+          "seconds": 3.5,
+          "move": {
+            "from": 0.85,
+            "to": 0.45
+          },
+          "flip": true
+        },
+        {
+          "row": 6,
+          "frames": 6,
+          "fps": 7,
+          "seconds": 2.5,
+          "move": {
+            "from": 0.45,
+            "to": 0.2
+          },
+          "flip": true
+        },
+        {
+          "row": 0,
+          "frames": 4,
+          "fps": 4,
+          "seconds": 2.0,
+          "move": {
+            "from": 0.2,
+            "to": 0.2
+          },
+          "flip": true
+        },
+        {
+          "row": 3,
+          "frames": 8,
+          "fps": 13,
+          "seconds": 2.5,
+          "move": {
+            "from": 0.2,
+            "to": 0.85
+          }
+        },
+        {
+          "row": 4,
+          "frames": 8,
+          "fps": 9,
+          "seconds": 2.0,
+          "move": {
+            "from": 0.85,
+            "to": 0.85
+          }
+        }
+      ]
+    },
+    {
+      "type": "shimmer",
+      "color": {
+        "light": "#FFFFFF66",
+        "dark": "#FFFFFF66"
+      },
+      "period": 9,
+      "width": 0.18,
+      "angle": 16,
+      "layer": "above"
+    }
+  ]
+}

@@ -1,0 +1,160 @@
+{
+  "id": "luoying",
+  "displayName": {
+    "zh": "落樱",
+    "en": "Falling Sakura"
+  },
+  "formatVersion": 1,
+  "author": "Agent Input Method",
+  "description": "深梅紫底、金色细边，樱花枝从右上角垂下轻摆，花瓣缓缓飘落；开启「减弱动态效果」时静止。",
+  "candidateFont": {
+    "family": "Kaiti SC",
+    "size": 17,
+    "weight": "medium"
+  },
+  "indexFont": {
+    "family": "systemMonospacedDigit",
+    "size": 10.5,
+    "weight": "medium"
+  },
+  "candidateColor": {
+    "light": "#F8ECE0",
+    "dark": "#F8ECE0"
+  },
+  "secondaryCandidateColor": {
+    "light": "#CDAA97",
+    "dark": "#CDAA97"
+  },
+  "indexColor": {
+    "light": "#C9A58F",
+    "dark": "#C9A58F"
+  },
+  "highlightedCandidateColor": {
+    "light": "#FFB9C9",
+    "dark": "#FFB9C9"
+  },
+  "highlightFillColor": {
+    "light": "#FFB9C922",
+    "dark": "#FFB9C922"
+  },
+  "highlightFillOpacity": 1,
+  "highlightBorderColor": {
+    "light": "#00000000",
+    "dark": "#00000000"
+  },
+  "highlightBorderOpacity": 1,
+  "rowHeight": 38,
+  "horizontalPadding": 11,
+  "verticalPadding": 6,
+  "indexCandidateSpacing": 6,
+  "candidateSpacing": 11,
+  "rowSpacing": 8,
+  "capsuleCornerRadius": 14,
+  "panelCornerRadius": 14,
+  "edgeInsets": {
+    "top": 11,
+    "left": 13,
+    "bottom": 11,
+    "right": 84
+  },
+  "material": "hudWindow",
+  "minimumPanelSize": {
+    "width": 120,
+    "height": 60
+  },
+  "maximumPanelWidth": 760,
+  "widthQuantization": 20,
+  "panelBackground": {
+    "light": "#2A1520",
+    "dark": "#2A1520"
+  },
+  "panelBorderColor": {
+    "light": "#D8B073",
+    "dark": "#D8B073"
+  },
+  "panelBorderWidth": 1,
+  "shadowEnabled": true,
+  "overflow": {
+    "top": 26,
+    "left": 0,
+    "bottom": 0,
+    "right": 8
+  },
+  "decorations": [
+    {
+      "type": "gradient",
+      "from": {
+        "light": "#28131F",
+        "dark": "#28131F"
+      },
+      "to": {
+        "light": "#4E2838",
+        "dark": "#4E2838"
+      },
+      "angle": 15,
+      "layer": "below"
+    },
+    {
+      "type": "petals",
+      "rate": 2.6,
+      "size": {
+        "min": 6,
+        "max": 11
+      },
+      "color": {
+        "light": "#FFB7C5",
+        "dark": "#FFB7C5"
+      },
+      "lifetime": 6.5,
+      "fallSpeed": 15,
+      "drift": -7,
+      "layer": "above",
+      "region": {
+        "x": 0.62,
+        "y": 0.6,
+        "width": 0.36,
+        "height": 0.4
+      }
+    },
+    {
+      "type": "shimmer",
+      "color": {
+        "light": "#FFD6E080",
+        "dark": "#FFD6E080"
+      },
+      "period": 10,
+      "width": 0.16,
+      "angle": 18,
+      "layer": "above"
+    },
+    {
+      "type": "sprite",
+      "sheet": "sakura.png",
+      "frames": 1,
+      "size": {
+        "width": 92,
+        "height": 102
+      },
+      "anchor": {
+        "x": 1,
+        "y": 1
+      },
+      "offset": {
+        "x": 8,
+        "y": 26
+      },
+      "overflow": true,
+      "pivot": {
+        "x": 1,
+        "y": 1
+      },
+      "motion": [
+        {
+          "kind": "sway",
+          "degrees": 1.5,
+          "period": 6.5
+        }
+      ]
+    }
+  ]
+}

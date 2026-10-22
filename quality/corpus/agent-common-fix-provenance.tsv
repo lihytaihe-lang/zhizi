@@ -1,0 +1,4 @@
+text	pinyin	weight	frozen_source	trigger	selection_reason
+完成了	wan cheng le	520	quality/mined/common-word-misrank-v1.json:q1_dict	wancl	Frozen verifier-mined q1_dict row remained non-Top-1 on the current build.
+难用	nan yong	520	docs/current/tasks/INPUT-QUALITY.md:Chunk Q1	nanyong	Explicit owner acceptance example remained absent from Top-5 on the current build.
+超级烦	chao ji fan	520	docs/current/tasks/INPUT-QUALITY.md:Chunk Q1	chaojifan	Explicit owner acceptance example remained absent from Top-5 on the current build.

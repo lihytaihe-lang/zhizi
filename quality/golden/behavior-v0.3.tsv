@@ -1,0 +1,30 @@
+id	expected
+idle-letter	starts composition with candidates
+space-candidate	commits highlighted candidate
+multi-segment-space	preserves confirmed prefix when Space commits a paged suffix
+space-no-candidate	commits raw plus ASCII space
+digit-in-range	commits numbered candidate
+digit-out-of-range	extends alphanumeric composition when the page has no Chinese candidate
+page-contract	minus/equal and PageUp/PageDown page candidates
+up-down	moves highlighted candidate
+left-right	moves composition cursor only
+backspace	deletes previous composition unit
+enter	commits raw input
+escape	cancels without commit
+control-delete	removes UserDB weighting without ending composition
+apostrophe	xi'an remains a pinyin composition
+punctuation	commits candidate then mapped Chinese punctuation
+idle-quotes	alternates Chinese quote pairs
+shift-idle	toggles persistent mode
+shift-composing	commits then toggles persistent mode
+shift-letter	opens inline English (LoRA) until Space without mode change
+caps-lock	passes ASCII without mode change
+system-modifiers	Command Option and ordinary Control pass through
+unsupported-composing	commits composition then passes action
+focus-lost	commits composition once
+deactivate	commits composition once
+sleep-resume	clears without duplicate commit and resumes idle
+secure	fails closed without candidates or learning
+unknown-security	fails closed without candidates or learning
+multi-session	composition state remains isolated
+per-app-mode	mode is remembered only for the same app

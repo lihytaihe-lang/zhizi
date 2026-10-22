@@ -1,0 +1,5 @@
+/* 输入法在系统输入源菜单与设置中的显示名 */
+"CFBundleName" = "知字输入法";
+
+/* 输入模式在输入源菜单与设置中的显示名 */
+"com.hongye.facai.inputmethod.pinyin" = "知字拼音";

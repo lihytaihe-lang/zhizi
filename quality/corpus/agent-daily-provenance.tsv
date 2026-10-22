@@ -1,0 +1,4 @@
+text	pinyin	weight	source	selection_reason
+大	da	114000	project-authored	Common primary character; the frozen independent must-pass fixture selected it over upstream 打 weight 107925; correction is ceil(107925 * 1.05 / 1000) * 1000.
+关	guan	16000	project-authored	Common primary character; the frozen independent must-pass fixture selected it over upstream 管 weight 15029; correction is ceil(15029 * 1.05 / 1000) * 1000.
+热爱	re ai	3000	project-authored	Chunk 11 restores the common ra abbreviation after ASCII project tables are isolated; correction is ceil(2244 * 1.05 / 1000) * 1000.

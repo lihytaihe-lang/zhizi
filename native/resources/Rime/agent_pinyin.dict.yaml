@@ -1,0 +1,27 @@
+# Project-authored aggregate dictionary for the v0.3 offline core.
+# `pinyin_simp` remains the pinned unmodified Apache-2.0 upstream table;
+# `agent_daily` is the small project-owned daily-input correction table and
+# `agent_idioms` plus the IT/finance tables are generated from the pinned
+# MIT-licensed THUOCL source.
+# ASCII dictionaries are deliberately not imported: the core performs exact
+# local lookup so Rime's global abbreviation algebra cannot shorten them.
+---
+name: agent_pinyin
+version: "0.3.0"
+sort: by_weight
+import_tables:
+  - agent_common_fix
+  - agent_daily
+  - agent_idioms
+  - agent_thuocl_it
+  - agent_thuocl_caijing
+  - agent_modern
+  - agent_general
+  - agent_newwords
+  - agent_spoken
+  - agent_ai_names
+  - agent_pack_poetry
+  - agent_pack_cad
+  - agent_pack_industry
+  - pinyin_simp
+...

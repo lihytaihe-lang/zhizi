@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 安全漏洞 · Security vulnerability
+    url: https://github.com/lihytaihe-lang/zhizi/security/advisories/new
+    about: 请勿用 issue 报告安全漏洞；请用仓库 Security 页的私密漏洞报告，见 SECURITY.md。/ Do not report security issues via issues; use private vulnerability reporting from the repository's Security page; see SECURITY.md.

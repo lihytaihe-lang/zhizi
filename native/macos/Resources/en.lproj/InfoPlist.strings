@@ -1,0 +1,5 @@
+/* Input method display name in the input source menu and Settings */
+"CFBundleName" = "Zhizi Input Method";
+
+/* Input mode display name in the input source menu and Settings */
+"com.hongye.facai.inputmethod.pinyin" = "Zhizi Pinyin";

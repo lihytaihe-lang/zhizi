@@ -1,0 +1,156 @@
+{
+  "id": "nihong",
+  "displayName": {
+    "zh": "霓虹",
+    "en": "Neon"
+  },
+  "formatVersion": 1,
+  "author": "Agent Input Method",
+  "description": "近黑底，右侧一个霓虹线框超立方体持续旋转，扫过一道流光；开启「减弱动态效果」时静止。",
+  "candidateFont": {
+    "family": "PingFang SC",
+    "size": 17,
+    "weight": "medium"
+  },
+  "indexFont": {
+    "family": "systemMonospacedDigit",
+    "size": 10.5,
+    "weight": "medium"
+  },
+  "candidateColor": {
+    "light": "#F4F1FF",
+    "dark": "#F4F1FF"
+  },
+  "secondaryCandidateColor": {
+    "light": "#9A92C4",
+    "dark": "#9A92C4"
+  },
+  "indexColor": {
+    "light": "#8D86B8",
+    "dark": "#8D86B8"
+  },
+  "highlightedCandidateColor": {
+    "light": "#FF6BD6",
+    "dark": "#FF6BD6"
+  },
+  "highlightFillColor": {
+    "light": "#FF6BD62A",
+    "dark": "#FF6BD62A"
+  },
+  "highlightFillOpacity": 1,
+  "highlightBorderColor": {
+    "light": "#00000000",
+    "dark": "#00000000"
+  },
+  "highlightBorderOpacity": 1,
+  "rowHeight": 38,
+  "horizontalPadding": 11,
+  "verticalPadding": 6,
+  "indexCandidateSpacing": 6,
+  "candidateSpacing": 11,
+  "rowSpacing": 8,
+  "capsuleCornerRadius": 14,
+  "panelCornerRadius": 14,
+  "edgeInsets": {
+    "top": 11,
+    "left": 13,
+    "bottom": 11,
+    "right": 76
+  },
+  "material": "hudWindow",
+  "minimumPanelSize": {
+    "width": 120,
+    "height": 60
+  },
+  "maximumPanelWidth": 760,
+  "widthQuantization": 20,
+  "panelBackground": {
+    "light": "#08080F",
+    "dark": "#08080F"
+  },
+  "panelBorderColor": {
+    "light": "#6F5BFF",
+    "dark": "#6F5BFF"
+  },
+  "panelBorderWidth": 1,
+  "shadowEnabled": true,
+  "decorations": [
+    {
+      "type": "gradient",
+      "from": {
+        "light": "#07070E",
+        "dark": "#07070E"
+      },
+      "to": {
+        "light": "#1A1636",
+        "dark": "#1A1636"
+      },
+      "angle": 0,
+      "layer": "below"
+    },
+    {
+      "type": "sprite",
+      "sheet": "neon-cube.png",
+      "frames": 16,
+      "fps": 10,
+      "size": {
+        "width": 58,
+        "height": 58
+      },
+      "anchor": {
+        "x": 1,
+        "y": 0.5
+      },
+      "offset": {
+        "x": -8,
+        "y": 0
+      },
+      "layer": "below",
+      "staticFrame": 5,
+      "motion": [
+        {
+          "kind": "glow",
+          "color": {
+            "light": "#C050FF",
+            "dark": "#C050FF"
+          },
+          "radius": 10,
+          "period": 4
+        }
+      ]
+    },
+    {
+      "type": "shimmer",
+      "color": {
+        "light": "#9D8CFF66",
+        "dark": "#9D8CFF66"
+      },
+      "period": 7,
+      "width": 0.14,
+      "angle": 20,
+      "layer": "above"
+    }
+  ],
+  "slotColors": [
+    {
+      "light": "#FF6BD6",
+      "dark": "#FF6BD6"
+    },
+    {
+      "light": "#7DE8FF",
+      "dark": "#7DE8FF"
+    },
+    {
+      "light": "#B8FF63",
+      "dark": "#B8FF63"
+    },
+    {
+      "light": "#FFB347",
+      "dark": "#FFB347"
+    },
+    {
+      "light": "#C79BFF",
+      "dark": "#C79BFF"
+    }
+  ]
+}

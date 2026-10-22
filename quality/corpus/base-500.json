@@ -1,0 +1,4628 @@
+{
+  "formatVersion": 4,
+  "frozenAt": "2026-07-13",
+  "revision": {
+    "previousProjectionSha256": "d0df937f7b746a7ba9dcf6d00a4788b9cd012dd67c4acbd3036e197948c2b296",
+    "reason": "pre-RC linguistic review corrected four pinyin transcription errors without changing any allowed answer"
+  },
+  "groundTruth": {
+    "file": "quality/corpus/base-500-ground-truth.txt",
+    "sha256": "8cb632d158e312dfe14f6e752b84dd724bfa0ddfa2686a7a18bdb119f6b96a9c",
+    "method": "independently authored project Mandarin daily-input ground truth; no target dictionary or decoder output used to select queries or allowed answers",
+    "reviewState": "engineering linguistic review complete; final RC replay and human dogfood remain mandatory"
+  },
+  "cases": [
+    {
+      "id": "single-001",
+      "category": "single",
+      "query": "wo",
+      "allowed": [
+        "我"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-002",
+      "category": "single",
+      "query": "ni",
+      "allowed": [
+        "你"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-003",
+      "category": "single",
+      "query": "ta",
+      "allowed": [
+        "他",
+        "她",
+        "它"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-004",
+      "category": "single",
+      "query": "de",
+      "allowed": [
+        "的",
+        "得",
+        "地"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-005",
+      "category": "single",
+      "query": "shi",
+      "allowed": [
+        "是",
+        "时",
+        "事"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-006",
+      "category": "single",
+      "query": "le",
+      "allowed": [
+        "了",
+        "乐"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-007",
+      "category": "single",
+      "query": "zai",
+      "allowed": [
+        "在",
+        "再"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-008",
+      "category": "single",
+      "query": "you",
+      "allowed": [
+        "有",
+        "又"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-009",
+      "category": "single",
+      "query": "ren",
+      "allowed": [
+        "人"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-010",
+      "category": "single",
+      "query": "zhong",
+      "allowed": [
+        "中",
+        "种"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-011",
+      "category": "single",
+      "query": "guo",
+      "allowed": [
+        "国",
+        "过"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-012",
+      "category": "single",
+      "query": "da",
+      "allowed": [
+        "大"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-013",
+      "category": "single",
+      "query": "xiao",
+      "allowed": [
+        "小"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-014",
+      "category": "single",
+      "query": "hao",
+      "allowed": [
+        "好",
+        "号"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-015",
+      "category": "single",
+      "query": "bu",
+      "allowed": [
+        "不"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-016",
+      "category": "single",
+      "query": "yi",
+      "allowed": [
+        "一",
+        "以"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-017",
+      "category": "single",
+      "query": "ge",
+      "allowed": [
+        "个",
+        "各"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-018",
+      "category": "single",
+      "query": "shang",
+      "allowed": [
+        "上"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-019",
+      "category": "single",
+      "query": "xia",
+      "allowed": [
+        "下"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-020",
+      "category": "single",
+      "query": "lai",
+      "allowed": [
+        "来"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-021",
+      "category": "single",
+      "query": "qu",
+      "allowed": [
+        "去"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-022",
+      "category": "single",
+      "query": "kan",
+      "allowed": [
+        "看"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-023",
+      "category": "single",
+      "query": "ting",
+      "allowed": [
+        "听"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-024",
+      "category": "single",
+      "query": "shuo",
+      "allowed": [
+        "说"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-025",
+      "category": "single",
+      "query": "chi",
+      "allowed": [
+        "吃"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-026",
+      "category": "single",
+      "query": "he",
+      "allowed": [
+        "和",
+        "喝"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-027",
+      "category": "single",
+      "query": "zuo",
+      "allowed": [
+        "做",
+        "作",
+        "坐"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-028",
+      "category": "single",
+      "query": "kai",
+      "allowed": [
+        "开"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-029",
+      "category": "single",
+      "query": "guan",
+      "allowed": [
+        "关"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-030",
+      "category": "single",
+      "query": "xiang",
+      "allowed": [
+        "想",
+        "向",
+        "像"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-031",
+      "category": "single",
+      "query": "yao",
+      "allowed": [
+        "要"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-032",
+      "category": "single",
+      "query": "neng",
+      "allowed": [
+        "能"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-033",
+      "category": "single",
+      "query": "hui",
+      "allowed": [
+        "会",
+        "回"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-034",
+      "category": "single",
+      "query": "ke",
+      "allowed": [
+        "可",
+        "科"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-035",
+      "category": "single",
+      "query": "ma",
+      "allowed": [
+        "吗",
+        "马"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-036",
+      "category": "single",
+      "query": "ne",
+      "allowed": [
+        "呢"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-037",
+      "category": "single",
+      "query": "ba",
+      "allowed": [
+        "吧",
+        "把"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-038",
+      "category": "single",
+      "query": "zhe",
+      "allowed": [
+        "这"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-039",
+      "category": "single",
+      "query": "na",
+      "allowed": [
+        "那",
+        "哪"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-040",
+      "category": "single",
+      "query": "mei",
+      "allowed": [
+        "没",
+        "每"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-041",
+      "category": "single",
+      "query": "hen",
+      "allowed": [
+        "很"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-042",
+      "category": "single",
+      "query": "ye",
+      "allowed": [
+        "也"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-043",
+      "category": "single",
+      "query": "dou",
+      "allowed": [
+        "都"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-044",
+      "category": "single",
+      "query": "jiu",
+      "allowed": [
+        "就",
+        "九"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-045",
+      "category": "single",
+      "query": "hai",
+      "allowed": [
+        "还",
+        "海"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-046",
+      "category": "single",
+      "query": "dui",
+      "allowed": [
+        "对"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-047",
+      "category": "single",
+      "query": "cuo",
+      "allowed": [
+        "错"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-048",
+      "category": "single",
+      "query": "xin",
+      "allowed": [
+        "新",
+        "心"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-049",
+      "category": "single",
+      "query": "lao",
+      "allowed": [
+        "老"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-050",
+      "category": "single",
+      "query": "gao",
+      "allowed": [
+        "高"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "single-051",
+      "category": "single",
+      "query": "chang",
+      "allowed": [
+        "长",
+        "常"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-052",
+      "category": "single",
+      "query": "duan",
+      "allowed": [
+        "短"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-053",
+      "category": "single",
+      "query": "qian",
+      "allowed": [
+        "前",
+        "钱"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-054",
+      "category": "single",
+      "query": "hou",
+      "allowed": [
+        "后"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-055",
+      "category": "single",
+      "query": "li",
+      "allowed": [
+        "里",
+        "理"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-056",
+      "category": "single",
+      "query": "wai",
+      "allowed": [
+        "外"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-057",
+      "category": "single",
+      "query": "dong",
+      "allowed": [
+        "东",
+        "动"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-058",
+      "category": "single",
+      "query": "xi",
+      "allowed": [
+        "西",
+        "系"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-059",
+      "category": "single",
+      "query": "nan",
+      "allowed": [
+        "南",
+        "难"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-060",
+      "category": "single",
+      "query": "bei",
+      "allowed": [
+        "北",
+        "被"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-061",
+      "category": "single",
+      "query": "tian",
+      "allowed": [
+        "天"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-062",
+      "category": "single",
+      "query": "di",
+      "allowed": [
+        "地",
+        "第"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-063",
+      "category": "single",
+      "query": "ri",
+      "allowed": [
+        "日"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-064",
+      "category": "single",
+      "query": "yue",
+      "allowed": [
+        "月",
+        "越"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-065",
+      "category": "single",
+      "query": "nian",
+      "allowed": [
+        "年"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-066",
+      "category": "single",
+      "query": "jin",
+      "allowed": [
+        "今",
+        "进"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-067",
+      "category": "single",
+      "query": "ming",
+      "allowed": [
+        "明",
+        "名"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-068",
+      "category": "single",
+      "query": "zao",
+      "allowed": [
+        "早"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-069",
+      "category": "single",
+      "query": "wan",
+      "allowed": [
+        "晚",
+        "万"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-070",
+      "category": "single",
+      "query": "shui",
+      "allowed": [
+        "水",
+        "谁"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-071",
+      "category": "single",
+      "query": "huo",
+      "allowed": [
+        "火",
+        "或"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-072",
+      "category": "single",
+      "query": "mu",
+      "allowed": [
+        "木"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-073",
+      "category": "single",
+      "query": "tu",
+      "allowed": [
+        "土",
+        "图"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-074",
+      "category": "single",
+      "query": "feng",
+      "allowed": [
+        "风"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-075",
+      "category": "single",
+      "query": "yu",
+      "allowed": [
+        "雨",
+        "语"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-076",
+      "category": "single",
+      "query": "yun",
+      "allowed": [
+        "云"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-077",
+      "category": "single",
+      "query": "shan",
+      "allowed": [
+        "山"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-078",
+      "category": "single",
+      "query": "jiang",
+      "allowed": [
+        "江",
+        "将"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-079",
+      "category": "single",
+      "query": "hu",
+      "allowed": [
+        "湖",
+        "户"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-080",
+      "category": "single",
+      "query": "cheng",
+      "allowed": [
+        "城",
+        "成"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-081",
+      "category": "single",
+      "query": "jia",
+      "allowed": [
+        "家",
+        "加"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-082",
+      "category": "single",
+      "query": "men",
+      "allowed": [
+        "门",
+        "们"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-083",
+      "category": "single",
+      "query": "che",
+      "allowed": [
+        "车"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-084",
+      "category": "single",
+      "query": "lu",
+      "allowed": [
+        "路"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-085",
+      "category": "single",
+      "query": "dian",
+      "allowed": [
+        "点",
+        "电"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-086",
+      "category": "single",
+      "query": "hua",
+      "allowed": [
+        "话",
+        "花"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-087",
+      "category": "single",
+      "query": "wen",
+      "allowed": [
+        "问",
+        "文"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-088",
+      "category": "single",
+      "query": "ti",
+      "allowed": [
+        "题",
+        "提"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-089",
+      "category": "single",
+      "query": "xue",
+      "allowed": [
+        "学"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-090",
+      "category": "single",
+      "query": "gong",
+      "allowed": [
+        "工",
+        "公"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-091",
+      "category": "single",
+      "query": "si",
+      "allowed": [
+        "四",
+        "思"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-092",
+      "category": "single",
+      "query": "wu",
+      "allowed": [
+        "五",
+        "无"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-093",
+      "category": "single",
+      "query": "liu",
+      "allowed": [
+        "六",
+        "流"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-094",
+      "category": "single",
+      "query": "qi",
+      "allowed": [
+        "七",
+        "起"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-095",
+      "category": "single",
+      "query": "er",
+      "allowed": [
+        "二",
+        "儿"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-096",
+      "category": "single",
+      "query": "san",
+      "allowed": [
+        "三"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-097",
+      "category": "single",
+      "query": "ling",
+      "allowed": [
+        "零",
+        "另"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-098",
+      "category": "single",
+      "query": "bai",
+      "allowed": [
+        "百",
+        "白"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-099",
+      "category": "single",
+      "query": "sheng",
+      "allowed": [
+        "生",
+        "声"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "single-100",
+      "category": "single",
+      "query": "ai",
+      "allowed": [
+        "爱"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-001",
+      "category": "common-word",
+      "query": "nihao",
+      "allowed": [
+        "你好"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-002",
+      "category": "common-word",
+      "query": "xiexie",
+      "allowed": [
+        "谢谢"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-003",
+      "category": "common-word",
+      "query": "zaijian",
+      "allowed": [
+        "再见"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-004",
+      "category": "common-word",
+      "query": "qingwen",
+      "allowed": [
+        "请问"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-005",
+      "category": "common-word",
+      "query": "duibuqi",
+      "allowed": [
+        "对不起"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-006",
+      "category": "common-word",
+      "query": "meiguanxi",
+      "allowed": [
+        "没关系"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-007",
+      "category": "common-word",
+      "query": "bukeqi",
+      "allowed": [
+        "不客气"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-008",
+      "category": "common-word",
+      "query": "keyi",
+      "allowed": [
+        "可以"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-009",
+      "category": "common-word",
+      "query": "zhidao",
+      "allowed": [
+        "知道"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-010",
+      "category": "common-word",
+      "query": "mingbai",
+      "allowed": [
+        "明白"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-011",
+      "category": "common-word",
+      "query": "xihuan",
+      "allowed": [
+        "喜欢"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-012",
+      "category": "common-word",
+      "query": "xuyao",
+      "allowed": [
+        "需要"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-013",
+      "category": "common-word",
+      "query": "xiangyao",
+      "allowed": [
+        "想要"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-014",
+      "category": "common-word",
+      "query": "juede",
+      "allowed": [
+        "觉得"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-015",
+      "category": "common-word",
+      "query": "yinwei",
+      "allowed": [
+        "因为"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-016",
+      "category": "common-word",
+      "query": "suoyi",
+      "allowed": [
+        "所以"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-017",
+      "category": "common-word",
+      "query": "danshi",
+      "allowed": [
+        "但是"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-018",
+      "category": "common-word",
+      "query": "ranhou",
+      "allowed": [
+        "然后"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-019",
+      "category": "common-word",
+      "query": "ruguo",
+      "allowed": [
+        "如果"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-020",
+      "category": "common-word",
+      "query": "suiran",
+      "allowed": [
+        "虽然"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-021",
+      "category": "common-word",
+      "query": "jintian",
+      "allowed": [
+        "今天"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-022",
+      "category": "common-word",
+      "query": "mingtian",
+      "allowed": [
+        "明天"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-023",
+      "category": "common-word",
+      "query": "zuotian",
+      "allowed": [
+        "昨天"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-024",
+      "category": "common-word",
+      "query": "xianzai",
+      "allowed": [
+        "现在"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-025",
+      "category": "common-word",
+      "query": "shijian",
+      "allowed": [
+        "时间"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-026",
+      "category": "common-word",
+      "query": "difang",
+      "allowed": [
+        "地方"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-027",
+      "category": "common-word",
+      "query": "dongxi",
+      "allowed": [
+        "东西"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-028",
+      "category": "common-word",
+      "query": "wenti",
+      "allowed": [
+        "问题"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-029",
+      "category": "common-word",
+      "query": "daan",
+      "allowed": [
+        "答案"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-030",
+      "category": "common-word",
+      "query": "shiqing",
+      "allowed": [
+        "事情"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-031",
+      "category": "common-word",
+      "query": "gongzuo",
+      "allowed": [
+        "工作"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-032",
+      "category": "common-word",
+      "query": "xuexi",
+      "allowed": [
+        "学习"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-033",
+      "category": "common-word",
+      "query": "shenghuo",
+      "allowed": [
+        "生活"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-034",
+      "category": "common-word",
+      "query": "pengyou",
+      "allowed": [
+        "朋友"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-035",
+      "category": "common-word",
+      "query": "jiaren",
+      "allowed": [
+        "家人"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-036",
+      "category": "common-word",
+      "query": "haizi",
+      "allowed": [
+        "孩子"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-037",
+      "category": "common-word",
+      "query": "laoshi",
+      "allowed": [
+        "老师"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-038",
+      "category": "common-word",
+      "query": "xuesheng",
+      "allowed": [
+        "学生"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-039",
+      "category": "common-word",
+      "query": "gongsi",
+      "allowed": [
+        "公司"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-040",
+      "category": "common-word",
+      "query": "xiangmu",
+      "allowed": [
+        "项目"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-041",
+      "category": "common-word",
+      "query": "wenjian",
+      "allowed": [
+        "文件"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-042",
+      "category": "common-word",
+      "query": "xitong",
+      "allowed": [
+        "系统"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-043",
+      "category": "common-word",
+      "query": "ruanjian",
+      "allowed": [
+        "软件"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-044",
+      "category": "common-word",
+      "query": "yingjian",
+      "allowed": [
+        "硬件"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-045",
+      "category": "common-word",
+      "query": "shuju",
+      "allowed": [
+        "数据"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-046",
+      "category": "common-word",
+      "query": "wangluo",
+      "allowed": [
+        "网络"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-047",
+      "category": "common-word",
+      "query": "anquan",
+      "allowed": [
+        "安全"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-048",
+      "category": "common-word",
+      "query": "shezhi",
+      "allowed": [
+        "设置"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-049",
+      "category": "common-word",
+      "query": "gengxin",
+      "allowed": [
+        "更新"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-050",
+      "category": "common-word",
+      "query": "xiazai",
+      "allowed": [
+        "下载"
+      ],
+      "mustPassTop1": true
+    },
+    {
+      "id": "word-051",
+      "category": "common-word",
+      "query": "shangchuan",
+      "allowed": [
+        "上传"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-052",
+      "category": "common-word",
+      "query": "anzhuang",
+      "allowed": [
+        "安装"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-053",
+      "category": "common-word",
+      "query": "shanchu",
+      "allowed": [
+        "删除"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-054",
+      "category": "common-word",
+      "query": "baocun",
+      "allowed": [
+        "保存"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-055",
+      "category": "common-word",
+      "query": "dakai",
+      "allowed": [
+        "打开"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-056",
+      "category": "common-word",
+      "query": "guanbi",
+      "allowed": [
+        "关闭"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-057",
+      "category": "common-word",
+      "query": "fuzhi",
+      "allowed": [
+        "复制"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-058",
+      "category": "common-word",
+      "query": "zhantie",
+      "allowed": [
+        "粘贴"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-059",
+      "category": "common-word",
+      "query": "sousuo",
+      "allowed": [
+        "搜索"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-060",
+      "category": "common-word",
+      "query": "queren",
+      "allowed": [
+        "确认"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-061",
+      "category": "common-word",
+      "query": "quxiao",
+      "allowed": [
+        "取消"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-062",
+      "category": "common-word",
+      "query": "kaishi",
+      "allowed": [
+        "开始"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-063",
+      "category": "common-word",
+      "query": "jieshu",
+      "allowed": [
+        "结束"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-064",
+      "category": "common-word",
+      "query": "chenggong",
+      "allowed": [
+        "成功"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-065",
+      "category": "common-word",
+      "query": "shibai",
+      "allowed": [
+        "失败"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-066",
+      "category": "common-word",
+      "query": "cuowu",
+      "allowed": [
+        "错误"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-067",
+      "category": "common-word",
+      "query": "bangzhu",
+      "allowed": [
+        "帮助"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-068",
+      "category": "common-word",
+      "query": "jianyi",
+      "allowed": [
+        "建议"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-069",
+      "category": "common-word",
+      "query": "yijian",
+      "allowed": [
+        "意见"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-070",
+      "category": "common-word",
+      "query": "jihua",
+      "allowed": [
+        "计划"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-071",
+      "category": "common-word",
+      "query": "renwu",
+      "allowed": [
+        "任务"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-072",
+      "category": "common-word",
+      "query": "mubiao",
+      "allowed": [
+        "目标"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-073",
+      "category": "common-word",
+      "query": "jieguo",
+      "allowed": [
+        "结果"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-074",
+      "category": "common-word",
+      "query": "guocheng",
+      "allowed": [
+        "过程"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-075",
+      "category": "common-word",
+      "query": "fangfa",
+      "allowed": [
+        "方法"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-076",
+      "category": "common-word",
+      "query": "fangshi",
+      "allowed": [
+        "方式"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-077",
+      "category": "common-word",
+      "query": "yuanyin",
+      "allowed": [
+        "原因"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-078",
+      "category": "common-word",
+      "query": "qingkuang",
+      "allowed": [
+        "情况"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-079",
+      "category": "common-word",
+      "query": "neirong",
+      "allowed": [
+        "内容"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-080",
+      "category": "common-word",
+      "query": "gongneng",
+      "allowed": [
+        "功能"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-081",
+      "category": "common-word",
+      "query": "banben",
+      "allowed": [
+        "版本"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-082",
+      "category": "common-word",
+      "query": "chengxu",
+      "allowed": [
+        "程序"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-083",
+      "category": "common-word",
+      "query": "daima",
+      "allowed": [
+        "代码"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-084",
+      "category": "common-word",
+      "query": "kaifa",
+      "allowed": [
+        "开发"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-085",
+      "category": "common-word",
+      "query": "ceshi",
+      "allowed": [
+        "测试"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-086",
+      "category": "common-word",
+      "query": "goujian",
+      "allowed": [
+        "构建"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-087",
+      "category": "common-word",
+      "query": "yunxing",
+      "allowed": [
+        "运行"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-088",
+      "category": "common-word",
+      "query": "qidong",
+      "allowed": [
+        "启动"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-089",
+      "category": "common-word",
+      "query": "tingzhi",
+      "allowed": [
+        "停止"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-090",
+      "category": "common-word",
+      "query": "huifu",
+      "allowed": [
+        "恢复"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-091",
+      "category": "common-word",
+      "query": "beifen",
+      "allowed": [
+        "备份"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-092",
+      "category": "common-word",
+      "query": "shengji",
+      "allowed": [
+        "升级"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-093",
+      "category": "common-word",
+      "query": "huigun",
+      "allowed": [
+        "回滚"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-094",
+      "category": "common-word",
+      "query": "zhuangtai",
+      "allowed": [
+        "状态"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-095",
+      "category": "common-word",
+      "query": "moshi",
+      "allowed": [
+        "模式"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-096",
+      "category": "common-word",
+      "query": "shuru",
+      "allowed": [
+        "输入"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-097",
+      "category": "common-word",
+      "query": "shuchu",
+      "allowed": [
+        "输出"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-098",
+      "category": "common-word",
+      "query": "houxuan",
+      "allowed": [
+        "候选"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-099",
+      "category": "common-word",
+      "query": "pinyin",
+      "allowed": [
+        "拼音"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-100",
+      "category": "common-word",
+      "query": "zhongwen",
+      "allowed": [
+        "中文"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-101",
+      "category": "common-word",
+      "query": "yingwen",
+      "allowed": [
+        "英文"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-102",
+      "category": "common-word",
+      "query": "biaodian",
+      "allowed": [
+        "标点"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-103",
+      "category": "common-word",
+      "query": "chuangkou",
+      "allowed": [
+        "窗口"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-104",
+      "category": "common-word",
+      "query": "caidan",
+      "allowed": [
+        "菜单"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-105",
+      "category": "common-word",
+      "query": "anjian",
+      "allowed": [
+        "按键"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-106",
+      "category": "common-word",
+      "query": "guangbiao",
+      "allowed": [
+        "光标"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-107",
+      "category": "common-word",
+      "query": "pingmu",
+      "allowed": [
+        "屏幕"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-108",
+      "category": "common-word",
+      "query": "xianshi",
+      "allowed": [
+        "显示"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-109",
+      "category": "common-word",
+      "query": "yincang",
+      "allowed": [
+        "隐藏"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-110",
+      "category": "common-word",
+      "query": "yidong",
+      "allowed": [
+        "移动"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-111",
+      "category": "common-word",
+      "query": "xuanze",
+      "allowed": [
+        "选择"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-112",
+      "category": "common-word",
+      "query": "tijiao",
+      "allowed": [
+        "提交"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-113",
+      "category": "common-word",
+      "query": "bianji",
+      "allowed": [
+        "编辑"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-114",
+      "category": "common-word",
+      "query": "chexiao",
+      "allowed": [
+        "撤销"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-115",
+      "category": "common-word",
+      "query": "chongzuo",
+      "allowed": [
+        "重做"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-116",
+      "category": "common-word",
+      "query": "lishi",
+      "allowed": [
+        "历史"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-117",
+      "category": "common-word",
+      "query": "jilu",
+      "allowed": [
+        "记录"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-118",
+      "category": "common-word",
+      "query": "rizhi",
+      "allowed": [
+        "日志"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-119",
+      "category": "common-word",
+      "query": "zhenduan",
+      "allowed": [
+        "诊断"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-120",
+      "category": "common-word",
+      "query": "xingneng",
+      "allowed": [
+        "性能"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-121",
+      "category": "common-word",
+      "query": "sudu",
+      "allowed": [
+        "速度"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-122",
+      "category": "common-word",
+      "query": "yanchi",
+      "allowed": [
+        "延迟"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-123",
+      "category": "common-word",
+      "query": "wending",
+      "allowed": [
+        "稳定"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-124",
+      "category": "common-word",
+      "query": "jianrong",
+      "allowed": [
+        "兼容"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-125",
+      "category": "common-word",
+      "query": "quanxian",
+      "allowed": [
+        "权限"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-126",
+      "category": "common-word",
+      "query": "mima",
+      "allowed": [
+        "密码"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-127",
+      "category": "common-word",
+      "query": "zhanghao",
+      "allowed": [
+        "账号"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-128",
+      "category": "common-word",
+      "query": "denglu",
+      "allowed": [
+        "登录"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-129",
+      "category": "common-word",
+      "query": "tuichu",
+      "allowed": [
+        "退出"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-130",
+      "category": "common-word",
+      "query": "yinsi",
+      "allowed": [
+        "隐私"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-131",
+      "category": "common-word",
+      "query": "lixian",
+      "allowed": [
+        "离线"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-132",
+      "category": "common-word",
+      "query": "zaixian",
+      "allowed": [
+        "在线"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-133",
+      "category": "common-word",
+      "query": "wangye",
+      "allowed": [
+        "网页"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-134",
+      "category": "common-word",
+      "query": "liulanqi",
+      "allowed": [
+        "浏览器"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-135",
+      "category": "common-word",
+      "query": "zhongduan",
+      "allowed": [
+        "终端"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-136",
+      "category": "common-word",
+      "query": "bianjiqi",
+      "allowed": [
+        "编辑器"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-137",
+      "category": "common-word",
+      "query": "shujuku",
+      "allowed": [
+        "数据库"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-138",
+      "category": "common-word",
+      "query": "fuwuqi",
+      "allowed": [
+        "服务器"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-139",
+      "category": "common-word",
+      "query": "kehu",
+      "allowed": [
+        "客户"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-140",
+      "category": "common-word",
+      "query": "yonghu",
+      "allowed": [
+        "用户"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-141",
+      "category": "common-word",
+      "query": "guanliyuan",
+      "allowed": [
+        "管理员"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-142",
+      "category": "common-word",
+      "query": "kaifazhe",
+      "allowed": [
+        "开发者"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-143",
+      "category": "common-word",
+      "query": "chanpin",
+      "allowed": [
+        "产品"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-144",
+      "category": "common-word",
+      "query": "sheji",
+      "allowed": [
+        "设计"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-145",
+      "category": "common-word",
+      "query": "xuqiu",
+      "allowed": [
+        "需求"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-146",
+      "category": "common-word",
+      "query": "guige",
+      "allowed": [
+        "规格"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-147",
+      "category": "common-word",
+      "query": "wendang",
+      "allowed": [
+        "文档"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-148",
+      "category": "common-word",
+      "query": "shuoming",
+      "allowed": [
+        "说明"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-149",
+      "category": "common-word",
+      "query": "zhinan",
+      "allowed": [
+        "指南"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-150",
+      "category": "common-word",
+      "query": "baogao",
+      "allowed": [
+        "报告"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-151",
+      "category": "common-word",
+      "query": "zhengju",
+      "allowed": [
+        "证据"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-152",
+      "category": "common-word",
+      "query": "yanshou",
+      "allowed": [
+        "验收"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-153",
+      "category": "common-word",
+      "query": "fabu",
+      "allowed": [
+        "发布"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-154",
+      "category": "common-word",
+      "query": "banfa",
+      "allowed": [
+        "办法"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-155",
+      "category": "common-word",
+      "query": "fengxian",
+      "allowed": [
+        "风险"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-156",
+      "category": "common-word",
+      "query": "quexian",
+      "allowed": [
+        "缺陷"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-157",
+      "category": "common-word",
+      "query": "zuzhi",
+      "allowed": [
+        "组织"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-158",
+      "category": "common-word",
+      "query": "tuandui",
+      "allowed": [
+        "团队"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-159",
+      "category": "common-word",
+      "query": "chengyuan",
+      "allowed": [
+        "成员"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-160",
+      "category": "common-word",
+      "query": "fuzeren",
+      "allowed": [
+        "负责人"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-161",
+      "category": "common-word",
+      "query": "huiyi",
+      "allowed": [
+        "会议"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-162",
+      "category": "common-word",
+      "query": "tongzhi",
+      "allowed": [
+        "通知"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-163",
+      "category": "common-word",
+      "query": "xiaoxi",
+      "allowed": [
+        "消息"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-164",
+      "category": "common-word",
+      "query": "youjian",
+      "allowed": [
+        "邮件"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-165",
+      "category": "common-word",
+      "query": "dianhua",
+      "allowed": [
+        "电话"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-166",
+      "category": "common-word",
+      "query": "dizhi",
+      "allowed": [
+        "地址"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-167",
+      "category": "common-word",
+      "query": "mingzi",
+      "allowed": [
+        "名字"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-168",
+      "category": "common-word",
+      "query": "riqi",
+      "allowed": [
+        "日期"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-169",
+      "category": "common-word",
+      "query": "xingqi",
+      "allowed": [
+        "星期"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-170",
+      "category": "common-word",
+      "query": "zhoumo",
+      "allowed": [
+        "周末"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-171",
+      "category": "common-word",
+      "query": "zaoshang",
+      "allowed": [
+        "早上"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-172",
+      "category": "common-word",
+      "query": "zhongwu",
+      "allowed": [
+        "中午"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-173",
+      "category": "common-word",
+      "query": "xiawu",
+      "allowed": [
+        "下午"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-174",
+      "category": "common-word",
+      "query": "wanshang",
+      "allowed": [
+        "晚上"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-175",
+      "category": "common-word",
+      "query": "shijie",
+      "allowed": [
+        "世界"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-176",
+      "category": "common-word",
+      "query": "guojia",
+      "allowed": [
+        "国家"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-177",
+      "category": "common-word",
+      "query": "chengshi",
+      "allowed": [
+        "城市"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-178",
+      "category": "common-word",
+      "query": "jiaotong",
+      "allowed": [
+        "交通"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-179",
+      "category": "common-word",
+      "query": "ditie",
+      "allowed": [
+        "地铁"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-180",
+      "category": "common-word",
+      "query": "gongjiao",
+      "allowed": [
+        "公交"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-181",
+      "category": "common-word",
+      "query": "feiji",
+      "allowed": [
+        "飞机"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-182",
+      "category": "common-word",
+      "query": "huoche",
+      "allowed": [
+        "火车"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-183",
+      "category": "common-word",
+      "query": "qiche",
+      "allowed": [
+        "汽车"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-184",
+      "category": "common-word",
+      "query": "danche",
+      "allowed": [
+        "单车"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-185",
+      "category": "common-word",
+      "query": "jiudian",
+      "allowed": [
+        "酒店"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-186",
+      "category": "common-word",
+      "query": "canting",
+      "allowed": [
+        "餐厅"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-187",
+      "category": "common-word",
+      "query": "chaoshi",
+      "allowed": [
+        "超市"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-188",
+      "category": "common-word",
+      "query": "yinhang",
+      "allowed": [
+        "银行"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-189",
+      "category": "common-word",
+      "query": "yiyuan",
+      "allowed": [
+        "医院"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-190",
+      "category": "common-word",
+      "query": "xuexiao",
+      "allowed": [
+        "学校"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-191",
+      "category": "common-word",
+      "query": "jiating",
+      "allowed": [
+        "家庭"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-192",
+      "category": "common-word",
+      "query": "fangjian",
+      "allowed": [
+        "房间"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-193",
+      "category": "common-word",
+      "query": "chufang",
+      "allowed": [
+        "厨房"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-194",
+      "category": "common-word",
+      "query": "cesuo",
+      "allowed": [
+        "厕所"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-195",
+      "category": "common-word",
+      "query": "yifu",
+      "allowed": [
+        "衣服"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-196",
+      "category": "common-word",
+      "query": "xiezi",
+      "allowed": [
+        "鞋子"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-197",
+      "category": "common-word",
+      "query": "shouji",
+      "allowed": [
+        "手机"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-198",
+      "category": "common-word",
+      "query": "diannao",
+      "allowed": [
+        "电脑"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-199",
+      "category": "common-word",
+      "query": "pingban",
+      "allowed": [
+        "平板"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-200",
+      "category": "common-word",
+      "query": "xiangji",
+      "allowed": [
+        "相机"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-201",
+      "category": "common-word",
+      "query": "erji",
+      "allowed": [
+        "耳机"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-202",
+      "category": "common-word",
+      "query": "jianpan",
+      "allowed": [
+        "键盘"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-203",
+      "category": "common-word",
+      "query": "shubiao",
+      "allowed": [
+        "鼠标"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-204",
+      "category": "common-word",
+      "query": "chongdian",
+      "allowed": [
+        "充电"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-205",
+      "category": "common-word",
+      "query": "dianchi",
+      "allowed": [
+        "电池"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-206",
+      "category": "common-word",
+      "query": "yinyue",
+      "allowed": [
+        "音乐"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-207",
+      "category": "common-word",
+      "query": "dianying",
+      "allowed": [
+        "电影"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-208",
+      "category": "common-word",
+      "query": "dianshi",
+      "allowed": [
+        "电视"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-209",
+      "category": "common-word",
+      "query": "xinwen",
+      "allowed": [
+        "新闻"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-210",
+      "category": "common-word",
+      "query": "youxi",
+      "allowed": [
+        "游戏"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-211",
+      "category": "common-word",
+      "query": "zhaopian",
+      "allowed": [
+        "照片"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-212",
+      "category": "common-word",
+      "query": "shipin",
+      "allowed": [
+        "视频"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-213",
+      "category": "common-word",
+      "query": "shengyin",
+      "allowed": [
+        "声音"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-214",
+      "category": "common-word",
+      "query": "yanse",
+      "allowed": [
+        "颜色"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-215",
+      "category": "common-word",
+      "query": "hongse",
+      "allowed": [
+        "红色"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-216",
+      "category": "common-word",
+      "query": "lanse",
+      "allowed": [
+        "蓝色"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-217",
+      "category": "common-word",
+      "query": "lvse",
+      "allowed": [
+        "绿色"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-218",
+      "category": "common-word",
+      "query": "huangse",
+      "allowed": [
+        "黄色"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-219",
+      "category": "common-word",
+      "query": "heise",
+      "allowed": [
+        "黑色"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-220",
+      "category": "common-word",
+      "query": "baise",
+      "allowed": [
+        "白色"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-221",
+      "category": "common-word",
+      "query": "tianqi",
+      "allowed": [
+        "天气"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-222",
+      "category": "common-word",
+      "query": "wendu",
+      "allowed": [
+        "温度"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-223",
+      "category": "common-word",
+      "query": "qingtian",
+      "allowed": [
+        "晴天"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-224",
+      "category": "common-word",
+      "query": "yintian",
+      "allowed": [
+        "阴天"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-225",
+      "category": "common-word",
+      "query": "xiayu",
+      "allowed": [
+        "下雨"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-226",
+      "category": "common-word",
+      "query": "xiaxue",
+      "allowed": [
+        "下雪"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-227",
+      "category": "common-word",
+      "query": "chuntian",
+      "allowed": [
+        "春天"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-228",
+      "category": "common-word",
+      "query": "xiatian",
+      "allowed": [
+        "夏天"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-229",
+      "category": "common-word",
+      "query": "qiutian",
+      "allowed": [
+        "秋天"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-230",
+      "category": "common-word",
+      "query": "dongtian",
+      "allowed": [
+        "冬天"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-231",
+      "category": "common-word",
+      "query": "zaofan",
+      "allowed": [
+        "早饭"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-232",
+      "category": "common-word",
+      "query": "wufan",
+      "allowed": [
+        "午饭"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-233",
+      "category": "common-word",
+      "query": "wanfan",
+      "allowed": [
+        "晚饭"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-234",
+      "category": "common-word",
+      "query": "shuiguo",
+      "allowed": [
+        "水果"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-235",
+      "category": "common-word",
+      "query": "pingguo",
+      "allowed": [
+        "苹果"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-236",
+      "category": "common-word",
+      "query": "xiangjiao",
+      "allowed": [
+        "香蕉"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-237",
+      "category": "common-word",
+      "query": "niunai",
+      "allowed": [
+        "牛奶"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-238",
+      "category": "common-word",
+      "query": "kafei",
+      "allowed": [
+        "咖啡"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-239",
+      "category": "common-word",
+      "query": "lvcha",
+      "allowed": [
+        "绿茶"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-240",
+      "category": "common-word",
+      "query": "miantiao",
+      "allowed": [
+        "面条"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-241",
+      "category": "common-word",
+      "query": "mifan",
+      "allowed": [
+        "米饭"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-242",
+      "category": "common-word",
+      "query": "jidan",
+      "allowed": [
+        "鸡蛋"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-243",
+      "category": "common-word",
+      "query": "shucai",
+      "allowed": [
+        "蔬菜"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-244",
+      "category": "common-word",
+      "query": "niurou",
+      "allowed": [
+        "牛肉"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-245",
+      "category": "common-word",
+      "query": "zhurou",
+      "allowed": [
+        "猪肉"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-246",
+      "category": "common-word",
+      "query": "mianbao",
+      "allowed": [
+        "面包"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-247",
+      "category": "common-word",
+      "query": "dangao",
+      "allowed": [
+        "蛋糕"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-248",
+      "category": "common-word",
+      "query": "qiaokeli",
+      "allowed": [
+        "巧克力"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-249",
+      "category": "common-word",
+      "query": "kuaile",
+      "allowed": [
+        "快乐"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "word-250",
+      "category": "common-word",
+      "query": "jiankang",
+      "allowed": [
+        "健康"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-001",
+      "category": "short-sentence",
+      "query": "nihaoma",
+      "allowed": [
+        "你好吗"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-002",
+      "category": "short-sentence",
+      "query": "wohenhao",
+      "allowed": [
+        "我很好"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-003",
+      "category": "short-sentence",
+      "query": "xiexieni",
+      "allowed": [
+        "谢谢你"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-004",
+      "category": "short-sentence",
+      "query": "qingjin",
+      "allowed": [
+        "请进"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-005",
+      "category": "short-sentence",
+      "query": "qingzuo",
+      "allowed": [
+        "请坐"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-006",
+      "category": "short-sentence",
+      "query": "qingshaodeng",
+      "allowed": [
+        "请稍等"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-007",
+      "category": "short-sentence",
+      "query": "qingmanyong",
+      "allowed": [
+        "请慢用"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-008",
+      "category": "short-sentence",
+      "query": "lushangxiaoxin",
+      "allowed": [
+        "路上小心"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-009",
+      "category": "short-sentence",
+      "query": "zhuyianquan",
+      "allowed": [
+        "注意安全"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-010",
+      "category": "short-sentence",
+      "query": "huanyinghuilai",
+      "allowed": [
+        "欢迎回来"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-011",
+      "category": "short-sentence",
+      "query": "shengrikuaile",
+      "allowed": [
+        "生日快乐"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-012",
+      "category": "short-sentence",
+      "query": "xinniankuaile",
+      "allowed": [
+        "新年快乐"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-013",
+      "category": "short-sentence",
+      "query": "zhoumoyukuai",
+      "allowed": [
+        "周末愉快"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-014",
+      "category": "short-sentence",
+      "query": "zhunihaoyun",
+      "allowed": [
+        "祝你好运"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-015",
+      "category": "short-sentence",
+      "query": "meiyouwenti",
+      "allowed": [
+        "没有问题"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-016",
+      "category": "short-sentence",
+      "query": "keyide",
+      "allowed": [
+        "可以的"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-017",
+      "category": "short-sentence",
+      "query": "bukeyi",
+      "allowed": [
+        "不可以"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-018",
+      "category": "short-sentence",
+      "query": "wozhidaole",
+      "allowed": [
+        "我知道了"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-019",
+      "category": "short-sentence",
+      "query": "womingbaile",
+      "allowed": [
+        "我明白了"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-020",
+      "category": "short-sentence",
+      "query": "wobuqingchu",
+      "allowed": [
+        "我不清楚"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-021",
+      "category": "short-sentence",
+      "query": "wozaikankan",
+      "allowed": [
+        "我再看看"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-022",
+      "category": "short-sentence",
+      "query": "womashanglai",
+      "allowed": [
+        "我马上来"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-023",
+      "category": "short-sentence",
+      "query": "womashangdao",
+      "allowed": [
+        "我马上到"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-024",
+      "category": "short-sentence",
+      "query": "woyijingdaole",
+      "allowed": [
+        "我已经到了"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-025",
+      "category": "short-sentence",
+      "query": "wohaizailushang",
+      "allowed": [
+        "我还在路上"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-026",
+      "category": "short-sentence",
+      "query": "nizainali",
+      "allowed": [
+        "你在哪里"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-027",
+      "category": "short-sentence",
+      "query": "wozaizheli",
+      "allowed": [
+        "我在这里"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-028",
+      "category": "short-sentence",
+      "query": "xianzaichufa",
+      "allowed": [
+        "现在出发"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-029",
+      "category": "short-sentence",
+      "query": "shaohouhuifu",
+      "allowed": [
+        "稍后回复"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-030",
+      "category": "short-sentence",
+      "query": "shoudaoxiexie",
+      "allowed": [
+        "收到谢谢"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-031",
+      "category": "short-sentence",
+      "query": "haodexiexie",
+      "allowed": [
+        "好的谢谢"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-032",
+      "category": "short-sentence",
+      "query": "xinkule",
+      "allowed": [
+        "辛苦了"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-033",
+      "category": "short-sentence",
+      "query": "mafannile",
+      "allowed": [
+        "麻烦你了"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-034",
+      "category": "short-sentence",
+      "query": "daraoyixia",
+      "allowed": [
+        "打扰一下"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-035",
+      "category": "short-sentence",
+      "query": "qingwenyixia",
+      "allowed": [
+        "请问一下"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-036",
+      "category": "short-sentence",
+      "query": "fangbianma",
+      "allowed": [
+        "方便吗"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-037",
+      "category": "short-sentence",
+      "query": "youshijianma",
+      "allowed": [
+        "有时间吗"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-038",
+      "category": "short-sentence",
+      "query": "niyoukongma",
+      "allowed": [
+        "你有空吗"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-039",
+      "category": "short-sentence",
+      "query": "xianzaikeyima",
+      "allowed": [
+        "现在可以吗"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-040",
+      "category": "short-sentence",
+      "query": "shenmeshihoukaishi",
+      "allowed": [
+        "什么时候开始"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-041",
+      "category": "short-sentence",
+      "query": "shenmeshihoujieshu",
+      "allowed": [
+        "什么时候结束"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-042",
+      "category": "short-sentence",
+      "query": "jintianshifoukeyi",
+      "allowed": [
+        "今天是否可以"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-043",
+      "category": "short-sentence",
+      "query": "mingtianshifoukeyi",
+      "allowed": [
+        "明天是否可以"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-044",
+      "category": "short-sentence",
+      "query": "xiazhoushifoukeyi",
+      "allowed": [
+        "下周是否可以"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-045",
+      "category": "short-sentence",
+      "query": "wotongyi",
+      "allowed": [
+        "我同意"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-046",
+      "category": "short-sentence",
+      "query": "wobutongyi",
+      "allowed": [
+        "我不同意"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-047",
+      "category": "short-sentence",
+      "query": "womeiyijian",
+      "allowed": [
+        "我没意见"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-048",
+      "category": "short-sentence",
+      "query": "zhegebucuo",
+      "allowed": [
+        "这个不错"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-049",
+      "category": "short-sentence",
+      "query": "zhegekeyi",
+      "allowed": [
+        "这个可以"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-050",
+      "category": "short-sentence",
+      "query": "zheyangkeyi",
+      "allowed": [
+        "这样可以"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-051",
+      "category": "short-sentence",
+      "query": "zheyangbuxing",
+      "allowed": [
+        "这样不行"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-052",
+      "category": "short-sentence",
+      "query": "xuyaoxiugai",
+      "allowed": [
+        "需要修改"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-053",
+      "category": "short-sentence",
+      "query": "buyongxiugai",
+      "allowed": [
+        "不用修改"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-054",
+      "category": "short-sentence",
+      "query": "qingzaiqueren",
+      "allowed": [
+        "请再确认"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-055",
+      "category": "short-sentence",
+      "query": "yijingqueren",
+      "allowed": [
+        "已经确认"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-056",
+      "category": "short-sentence",
+      "query": "yijingwancheng",
+      "allowed": [
+        "已经完成"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-057",
+      "category": "short-sentence",
+      "query": "haimeiwancheng",
+      "allowed": [
+        "还没完成"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-058",
+      "category": "short-sentence",
+      "query": "zhengzaichuli",
+      "allowed": [
+        "正在处理"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-059",
+      "category": "short-sentence",
+      "query": "chulihaole",
+      "allowed": [
+        "处理好了"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-060",
+      "category": "short-sentence",
+      "query": "fasongchenggong",
+      "allowed": [
+        "发送成功"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-061",
+      "category": "short-sentence",
+      "query": "baocunchenggong",
+      "allowed": [
+        "保存成功"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-062",
+      "category": "short-sentence",
+      "query": "dengluchenggong",
+      "allowed": [
+        "登录成功"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-063",
+      "category": "short-sentence",
+      "query": "caozuoshibai",
+      "allowed": [
+        "操作失败"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-064",
+      "category": "short-sentence",
+      "query": "wangluoyichang",
+      "allowed": [
+        "网络异常"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-065",
+      "category": "short-sentence",
+      "query": "qingchongshi",
+      "allowed": [
+        "请重试"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-066",
+      "category": "short-sentence",
+      "query": "zaishiyici",
+      "allowed": [
+        "再试一次"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-067",
+      "category": "short-sentence",
+      "query": "dakaiwenjian",
+      "allowed": [
+        "打开文件"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-068",
+      "category": "short-sentence",
+      "query": "guanbichuangkou",
+      "allowed": [
+        "关闭窗口"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-069",
+      "category": "short-sentence",
+      "query": "fuzhilianjie",
+      "allowed": [
+        "复制链接"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-070",
+      "category": "short-sentence",
+      "query": "zhantieneirong",
+      "allowed": [
+        "粘贴内容"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-071",
+      "category": "short-sentence",
+      "query": "shanchujilu",
+      "allowed": [
+        "删除记录"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-072",
+      "category": "short-sentence",
+      "query": "qingkonglishi",
+      "allowed": [
+        "清空历史"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-073",
+      "category": "short-sentence",
+      "query": "kaishixiazai",
+      "allowed": [
+        "开始下载"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-074",
+      "category": "short-sentence",
+      "query": "xiazaiwancheng",
+      "allowed": [
+        "下载完成"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-075",
+      "category": "short-sentence",
+      "query": "anzhuangwancheng",
+      "allowed": [
+        "安装完成"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-076",
+      "category": "short-sentence",
+      "query": "gengxinwancheng",
+      "allowed": [
+        "更新完成"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-077",
+      "category": "short-sentence",
+      "query": "chongxinqidong",
+      "allowed": [
+        "重新启动"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-078",
+      "category": "short-sentence",
+      "query": "shaodengyixia",
+      "allowed": [
+        "稍等一下"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-079",
+      "category": "short-sentence",
+      "query": "woxianzoule",
+      "allowed": [
+        "我先走了"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-080",
+      "category": "short-sentence",
+      "query": "huitouzailiao",
+      "allowed": [
+        "回头再聊"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-081",
+      "category": "short-sentence",
+      "query": "baochilianxi",
+      "allowed": [
+        "保持联系"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-082",
+      "category": "short-sentence",
+      "query": "daojialema",
+      "allowed": [
+        "到家了吗"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-083",
+      "category": "short-sentence",
+      "query": "wodaojiale",
+      "allowed": [
+        "我到家了"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-084",
+      "category": "short-sentence",
+      "query": "chifanlema",
+      "allowed": [
+        "吃饭了吗"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-085",
+      "category": "short-sentence",
+      "query": "wochiguole",
+      "allowed": [
+        "我吃过了"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-086",
+      "category": "short-sentence",
+      "query": "zaodianxiuxi",
+      "allowed": [
+        "早点休息"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-087",
+      "category": "short-sentence",
+      "query": "jintiantianqibucuo",
+      "allowed": [
+        "今天天气不错"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-088",
+      "category": "short-sentence",
+      "query": "waimianxiayule",
+      "allowed": [
+        "外面下雨了"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-089",
+      "category": "short-sentence",
+      "query": "jidedaisan",
+      "allowed": [
+        "记得带伞"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-090",
+      "category": "short-sentence",
+      "query": "zhuyibaonuan",
+      "allowed": [
+        "注意保暖"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-091",
+      "category": "short-sentence",
+      "query": "yilushunfeng",
+      "allowed": [
+        "一路顺风"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-092",
+      "category": "short-sentence",
+      "query": "lvtuyukuai",
+      "allowed": [
+        "旅途愉快"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-093",
+      "category": "short-sentence",
+      "query": "gongzuoshunli",
+      "allowed": [
+        "工作顺利"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-094",
+      "category": "short-sentence",
+      "query": "xuexijinbu",
+      "allowed": [
+        "学习进步"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-095",
+      "category": "short-sentence",
+      "query": "shentijiankang",
+      "allowed": [
+        "身体健康"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-096",
+      "category": "short-sentence",
+      "query": "wanshiruyi",
+      "allowed": [
+        "万事如意"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-097",
+      "category": "short-sentence",
+      "query": "qingbaochianjing",
+      "allowed": [
+        "请保持安静"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-098",
+      "category": "short-sentence",
+      "query": "qingpaiduidenghou",
+      "allowed": [
+        "请排队等候"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-099",
+      "category": "short-sentence",
+      "query": "huanyingguanglin",
+      "allowed": [
+        "欢迎光临"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "sentence-100",
+      "category": "short-sentence",
+      "query": "xiacizaijian",
+      "allowed": [
+        "下次再见"
+      ],
+      "mustPassTop1": false
+    },
+    {
+      "id": "boundary-001",
+      "category": "boundary",
+      "query": "nih",
+      "allowed": [
+        "你好"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "abbreviation:nihao"
+    },
+    {
+      "id": "boundary-002",
+      "category": "boundary",
+      "query": "zhongg",
+      "allowed": [
+        "中国"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "abbreviation:zhongguo"
+    },
+    {
+      "id": "boundary-003",
+      "category": "boundary",
+      "query": "wom",
+      "allowed": [
+        "我们"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "abbreviation:women"
+    },
+    {
+      "id": "boundary-004",
+      "category": "boundary",
+      "query": "xiex",
+      "allowed": [
+        "谢谢"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "abbreviation:xiexie"
+    },
+    {
+      "id": "boundary-005",
+      "category": "boundary",
+      "query": "key",
+      "allowed": [
+        "可以"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "abbreviation:keyi"
+    },
+    {
+      "id": "boundary-006",
+      "category": "boundary",
+      "query": "meiwt",
+      "allowed": [
+        "没问题"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "abbreviation:meiwenti"
+    },
+    {
+      "id": "boundary-007",
+      "category": "boundary",
+      "query": "jint",
+      "allowed": [
+        "今天"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "abbreviation:jintian"
+    },
+    {
+      "id": "boundary-008",
+      "category": "boundary",
+      "query": "mingt",
+      "allowed": [
+        "明天"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "abbreviation:mingtian"
+    },
+    {
+      "id": "boundary-009",
+      "category": "boundary",
+      "query": "xianz",
+      "allowed": [
+        "现在"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "abbreviation:xianzai"
+    },
+    {
+      "id": "boundary-010",
+      "category": "boundary",
+      "query": "zheg",
+      "allowed": [
+        "这个"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "abbreviation:zhege"
+    },
+    {
+      "id": "boundary-011",
+      "category": "boundary",
+      "query": "nag",
+      "allowed": [
+        "那个"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "abbreviation:nage"
+    },
+    {
+      "id": "boundary-012",
+      "category": "boundary",
+      "query": "yiy",
+      "allowed": [
+        "一样"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "abbreviation:yiyang"
+    },
+    {
+      "id": "boundary-013",
+      "category": "boundary",
+      "query": "gongz",
+      "allowed": [
+        "工作"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "abbreviation:gongzuo"
+    },
+    {
+      "id": "boundary-014",
+      "category": "boundary",
+      "query": "xuex",
+      "allowed": [
+        "学习"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "abbreviation:xuexi"
+    },
+    {
+      "id": "boundary-015",
+      "category": "boundary",
+      "query": "shengh",
+      "allowed": [
+        "生活"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "abbreviation:shenghuo"
+    },
+    {
+      "id": "boundary-016",
+      "category": "boundary",
+      "query": "shij",
+      "allowed": [
+        "时间"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "abbreviation:shijian"
+    },
+    {
+      "id": "boundary-017",
+      "category": "boundary",
+      "query": "pengy",
+      "allowed": [
+        "朋友"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "abbreviation:pengyou"
+    },
+    {
+      "id": "boundary-018",
+      "category": "boundary",
+      "query": "went",
+      "allowed": [
+        "问题"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "abbreviation:wenti"
+    },
+    {
+      "id": "boundary-019",
+      "category": "boundary",
+      "query": "xit",
+      "allowed": [
+        "系统"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "abbreviation:xitong"
+    },
+    {
+      "id": "boundary-020",
+      "category": "boundary",
+      "query": "wenj",
+      "allowed": [
+        "文件"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "abbreviation:wenjian"
+    },
+    {
+      "id": "boundary-021",
+      "category": "boundary",
+      "query": "xi'an",
+      "allowed": [
+        "西安"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "segmentation:xian"
+    },
+    {
+      "id": "boundary-022",
+      "category": "boundary",
+      "query": "tian'anmen",
+      "allowed": [
+        "天安门"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "segmentation:tiananmen"
+    },
+    {
+      "id": "boundary-023",
+      "category": "boundary",
+      "query": "chang'an",
+      "allowed": [
+        "长安"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "segmentation:changan"
+    },
+    {
+      "id": "boundary-024",
+      "category": "boundary",
+      "query": "ping'an",
+      "allowed": [
+        "平安"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "segmentation:pingan"
+    },
+    {
+      "id": "boundary-025",
+      "category": "boundary",
+      "query": "hai'an",
+      "allowed": [
+        "海岸"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "segmentation:haian"
+    },
+    {
+      "id": "boundary-026",
+      "category": "boundary",
+      "query": "yan'an",
+      "allowed": [
+        "延安"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "segmentation:yanan"
+    },
+    {
+      "id": "boundary-027",
+      "category": "boundary",
+      "query": "fang'an",
+      "allowed": [
+        "方案"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "segmentation:fangan"
+    },
+    {
+      "id": "boundary-028",
+      "category": "boundary",
+      "query": "ke'ai",
+      "allowed": [
+        "可爱"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "segmentation:keai"
+    },
+    {
+      "id": "boundary-029",
+      "category": "boundary",
+      "query": "re'ai",
+      "allowed": [
+        "热爱"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "segmentation:reai"
+    },
+    {
+      "id": "boundary-030",
+      "category": "boundary",
+      "query": "zhen'ai",
+      "allowed": [
+        "真爱"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "segmentation:zhenai"
+    },
+    {
+      "id": "boundary-031",
+      "category": "boundary",
+      "query": "mu'ou",
+      "allowed": [
+        "木偶"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "segmentation:muou"
+    },
+    {
+      "id": "boundary-032",
+      "category": "boundary",
+      "query": "ou'er",
+      "allowed": [
+        "偶尔"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "segmentation:ouer"
+    },
+    {
+      "id": "boundary-033",
+      "category": "boundary",
+      "query": "fan'er",
+      "allowed": [
+        "反而"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "segmentation:faner"
+    },
+    {
+      "id": "boundary-034",
+      "category": "boundary",
+      "query": "yin'er",
+      "allowed": [
+        "因而"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "segmentation:yiner"
+    },
+    {
+      "id": "boundary-035",
+      "category": "boundary",
+      "query": "wan'an",
+      "allowed": [
+        "晚安"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "segmentation:wanan"
+    },
+    {
+      "id": "boundary-036",
+      "category": "boundary",
+      "query": "zhonghuarenmingongheguo",
+      "allowed": [
+        "中华人民共和国"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "long-pinyin:-"
+    },
+    {
+      "id": "boundary-037",
+      "category": "boundary",
+      "query": "zhongguorenminjiefangjun",
+      "allowed": [
+        "中国人民解放军"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "long-pinyin:-"
+    },
+    {
+      "id": "boundary-038",
+      "category": "boundary",
+      "query": "quanguorenmindaibiaodahui",
+      "allowed": [
+        "全国人民代表大会"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "long-pinyin:-"
+    },
+    {
+      "id": "boundary-039",
+      "category": "boundary",
+      "query": "zhongguogongchandang",
+      "allowed": [
+        "中国共产党"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "long-pinyin:-"
+    },
+    {
+      "id": "boundary-040",
+      "category": "boundary",
+      "query": "shehuizhuyihexinjiazhiguan",
+      "allowed": [
+        "社会主义核心价值观"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "long-pinyin:-"
+    },
+    {
+      "id": "boundary-041",
+      "category": "boundary",
+      "query": "qingwenxianzaijidian",
+      "allowed": [
+        "请问现在几点"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "long-pinyin:-"
+    },
+    {
+      "id": "boundary-042",
+      "category": "boundary",
+      "query": "zhuniyilushunfeng",
+      "allowed": [
+        "祝你一路顺风"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "long-pinyin:-"
+    },
+    {
+      "id": "boundary-043",
+      "category": "boundary",
+      "query": "ganxienidebangzhu",
+      "allowed": [
+        "感谢你的帮助"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "long-pinyin:-"
+    },
+    {
+      "id": "boundary-044",
+      "category": "boundary",
+      "query": "womenmingtianzaijian",
+      "allowed": [
+        "我们明天再见"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "long-pinyin:-"
+    },
+    {
+      "id": "boundary-045",
+      "category": "boundary",
+      "query": "jintianwanshangchishenme",
+      "allowed": [
+        "今天晚上吃什么"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "long-pinyin:-"
+    },
+    {
+      "id": "boundary-046",
+      "category": "boundary",
+      "query": "woxiangqubeijinglvyou",
+      "allowed": [
+        "我想去北京旅游"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "long-pinyin:-"
+    },
+    {
+      "id": "boundary-047",
+      "category": "boundary",
+      "query": "qingbangwodakaizhegewenjian",
+      "allowed": [
+        "请帮我打开这个文件"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "long-pinyin:-"
+    },
+    {
+      "id": "boundary-048",
+      "category": "boundary",
+      "query": "jintiantianqizhenbucuo",
+      "allowed": [
+        "今天天气真不错"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "long-pinyin:-"
+    },
+    {
+      "id": "boundary-049",
+      "category": "boundary",
+      "query": "zhoumowoxiangzaijiaxiuxi",
+      "allowed": [
+        "周末我想在家休息"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "long-pinyin:-"
+    },
+    {
+      "id": "boundary-050",
+      "category": "boundary",
+      "query": "qingzaifasongqianzixijiancha",
+      "allowed": [
+        "请在发送前仔细检查"
+      ],
+      "mustPassTop1": false,
+      "boundaryKind": "long-pinyin:-"
+    }
+  ]
+}

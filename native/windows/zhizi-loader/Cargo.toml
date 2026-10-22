@@ -1,0 +1,16 @@
+[package]
+name = "zhizi-loader"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+# The only DLL Windows registers for the text service. It never changes between releases: it reads `current.txt` next to it and
+# forwards to the real implementation (`<release folder>\zhizi_tsf.dll`), so an upgrade takes effect the next time an app asks for the
+# text service, without a restart. No dependencies on purpose (a file that every app loads should stay tiny and boring).
+[lib]
+crate-type = ["cdylib"]
+
+[profile.release]
+panic = "abort"
+strip = "debuginfo"
+opt-level = "s"

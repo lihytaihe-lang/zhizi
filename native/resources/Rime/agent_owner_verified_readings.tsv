@@ -1,0 +1,4 @@
+# owner-verified 具体命中串兜底，非通用解、不由 Rime schema 导入
+# 列：文本、完整拼音、可选的 owner 明确命中 raw（逗号分隔）；有 raw 时创建本地完整候选且不学习
+就可以做完	jiu ke yi zuo wan
+打开了	da kai le	dakle

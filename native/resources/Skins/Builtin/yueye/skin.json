@@ -1,0 +1,174 @@
+{
+  "id": "yueye",
+  "displayName": {
+    "zh": "月夜",
+    "en": "Moonlit Night"
+  },
+  "formatVersion": 1,
+  "author": "Agent Input Method",
+  "description": "深蓝夜空，金色弯月微微漂浮发光，星星闪烁，偶尔有流星划过；开启「减弱动态效果」时静止。",
+  "candidateFont": {
+    "family": "Songti SC",
+    "size": 17,
+    "weight": "medium"
+  },
+  "indexFont": {
+    "family": "systemMonospacedDigit",
+    "size": 10.5,
+    "weight": "medium"
+  },
+  "candidateColor": {
+    "light": "#F2EEE3",
+    "dark": "#F2EEE3"
+  },
+  "secondaryCandidateColor": {
+    "light": "#9AA3C7",
+    "dark": "#9AA3C7"
+  },
+  "indexColor": {
+    "light": "#8A93B8",
+    "dark": "#8A93B8"
+  },
+  "highlightedCandidateColor": {
+    "light": "#FFD978",
+    "dark": "#FFD978"
+  },
+  "highlightFillColor": {
+    "light": "#FFD97822",
+    "dark": "#FFD97822"
+  },
+  "highlightFillOpacity": 1,
+  "highlightBorderColor": {
+    "light": "#00000000",
+    "dark": "#00000000"
+  },
+  "highlightBorderOpacity": 1,
+  "rowHeight": 38,
+  "horizontalPadding": 11,
+  "verticalPadding": 6,
+  "indexCandidateSpacing": 6,
+  "candidateSpacing": 11,
+  "rowSpacing": 8,
+  "capsuleCornerRadius": 14,
+  "panelCornerRadius": 14,
+  "edgeInsets": {
+    "top": 11,
+    "left": 13,
+    "bottom": 11,
+    "right": 70
+  },
+  "material": "hudWindow",
+  "minimumPanelSize": {
+    "width": 120,
+    "height": 60
+  },
+  "maximumPanelWidth": 760,
+  "widthQuantization": 20,
+  "panelBackground": {
+    "light": "#0F1433",
+    "dark": "#0F1433"
+  },
+  "panelBorderColor": {
+    "light": "#3A4580",
+    "dark": "#3A4580"
+  },
+  "panelBorderWidth": 0.5,
+  "shadowEnabled": true,
+  "overflow": {
+    "top": 18,
+    "left": 0,
+    "bottom": 0,
+    "right": 6
+  },
+  "decorations": [
+    {
+      "type": "gradient",
+      "from": {
+        "light": "#0E1230",
+        "dark": "#0E1230"
+      },
+      "to": {
+        "light": "#252E63",
+        "dark": "#252E63"
+      },
+      "angle": 20,
+      "layer": "below"
+    },
+    {
+      "type": "twinkle",
+      "count": 9,
+      "size": {
+        "min": 3,
+        "max": 7
+      },
+      "color": {
+        "light": "#FFEFC2",
+        "dark": "#FFEFC2"
+      },
+      "period": {
+        "min": 1.6,
+        "max": 3.8
+      },
+      "seed": 7,
+      "layer": "below",
+      "region": {
+        "x": 0.55,
+        "y": 0.08,
+        "width": 0.43,
+        "height": 0.84
+      }
+    },
+    {
+      "type": "shootingStar",
+      "color": {
+        "light": "#FFFFFF",
+        "dark": "#FFFFFF"
+      },
+      "period": 9,
+      "length": 64,
+      "angle": 205,
+      "seed": 5,
+      "layer": "below",
+      "region": {
+        "x": 0.45,
+        "y": 0.55,
+        "width": 0.4,
+        "height": 0.4
+      }
+    },
+    {
+      "type": "sprite",
+      "sheet": "moon.png",
+      "frames": 1,
+      "size": {
+        "width": 52,
+        "height": 64
+      },
+      "anchor": {
+        "x": 1,
+        "y": 1
+      },
+      "offset": {
+        "x": -10,
+        "y": 14
+      },
+      "overflow": true,
+      "motion": [
+        {
+          "kind": "float",
+          "amplitude": 2.4,
+          "period": 6
+        },
+        {
+          "kind": "glow",
+          "color": {
+            "light": "#FFD978",
+            "dark": "#FFD978"
+          },
+          "radius": 14,
+          "period": 4.2
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>zh_CN</string>
+	<key>CFBundleDisplayName</key>
+	<string>Zhizi Input Method</string>
+	<key>CFBundleIconFile</key>
+	<string>AgentInputMethod.icns</string>
+  <key>CFBundleExecutable</key>
+  <string>AgentInputMethod</string>
+  <key>CFBundleIdentifier</key>
+  <string>com.hongye.facai.inputmethod.zhizi</string>
+  <key>CFBundleInfoDictionaryVersion</key>
+  <string>6.0</string>
+  <key>CFBundleName</key>
+  <string>Zhizi Input Method</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleSignature</key>
+  <string>????</string>
+  <key>CFBundleShortVersionString</key>
+  <string>0.1.5</string>
+  <key>CFBundleSupportedPlatforms</key>
+  <array>
+    <string>MacOSX</string>
+  </array>
+  <key>CFBundleVersion</key>
+  <string>1</string>
+  <key>LSBackgroundOnly</key>
+  <true/>
+  <key>LSMinimumSystemVersion</key>
+  <string>14.0</string>
+  <key>NSPrincipalClass</key>
+  <string>NSApplication</string>
+  <key>InputMethodConnectionName</key>
+  <string>com.hongye.facai.inputmethod.zhizi_Connection</string>
+  <key>InputMethodServerControllerClass</key>
+  <string>AgentInputController</string>
+  <key>InputMethodServerDelegateClass</key>
+  <string>AgentInputController</string>
+  <key>ComponentInputModeDict</key>
+  <dict>
+    <key>tsInputModeListKey</key>
+    <dict>
+      <key>com.hongye.facai.inputmethod.pinyin</key>
+      <dict>
+        <key>TISInputSourceID</key>
+        <string>com.hongye.facai.inputmethod.zhizi.pinyin</string>
+        <key>tsInputModeDefaultStateKey</key>
+        <true/>
+        <key>tsInputModeIsVisibleKey</key>
+        <true/>
+        <key>TISIconIsTemplate</key>
+        <true/>
+        <key>tsInputModeMenuIconFileKey</key>
+        <string>AgentInputMethodMenu.pdf</string>
+        <key>tsInputModePaletteIconFileKey</key>
+        <string>AgentInputMethodMenu.pdf</string>
+        <key>tsInputModePrimaryInScriptKey</key>
+        <true/>
+        <key>tsInputModeScriptKey</key>
+        <string>smSimpChinese</string>
+      </dict>
+    </dict>
+    <key>tsVisibleInputModeOrderedArrayKey</key>
+    <array>
+      <string>com.hongye.facai.inputmethod.pinyin</string>
+    </array>
+  </dict>
+  <key>tsInputMethodCharacterRepertoireKey</key>
+  <array>
+    <string>Hans</string>
+  </array>
+  <key>tsInputMethodIconFileKey</key>
+  <string>AgentInputMethod.icns</string>
+</dict>
+</plist>

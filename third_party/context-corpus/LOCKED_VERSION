@@ -1,0 +1,9 @@
+asset=context-corpus-v1.txt
+sha256=144436caa8c4e44e655a6fc35956e0a9055477065253a3f4314cee438c34cac2
+license=project-generated
+generator=Claude (Agent subagents, 3 domains: tech/daily/formal)
+generated=2026-07-20
+chars=~37000
+anti_gaming=verified: 0/1188 eval-set (preceding+selected) combos present; 0 privacy patterns
+purpose=CONTEXT-CAPTURE Chunk C2 bigram training corpus
+note=owner real quality-log data is the eval set ONLY and is NOT in this file

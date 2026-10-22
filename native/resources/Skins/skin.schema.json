@@ -1,0 +1,1095 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentinputmethod.local/schema/skin-package-v1.json",
+  "title": "Agent Input Method skin package",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "displayName",
+    "formatVersion",
+    "author",
+    "description"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9._-]{0,63}$"
+    },
+    "displayName": {
+      "$ref": "#/$defs/localizedName"
+    },
+    "formatVersion": {
+      "const": 1
+    },
+    "author": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 1000
+    },
+    "candidateFont": {
+      "$ref": "#/$defs/font"
+    },
+    "indexFont": {
+      "$ref": "#/$defs/font"
+    },
+    "candidateColor": {
+      "$ref": "#/$defs/color"
+    },
+    "secondaryCandidateColor": {
+      "$ref": "#/$defs/color"
+    },
+    "indexColor": {
+      "$ref": "#/$defs/color"
+    },
+    "highlightedCandidateColor": {
+      "$ref": "#/$defs/color"
+    },
+    "highlightFillColor": {
+      "$ref": "#/$defs/color"
+    },
+    "highlightFillOpacity": {
+      "$ref": "#/$defs/opacity"
+    },
+    "highlightBorderColor": {
+      "$ref": "#/$defs/color"
+    },
+    "highlightBorderOpacity": {
+      "$ref": "#/$defs/opacity"
+    },
+    "rowHeight": {
+      "$ref": "#/$defs/nonnegativeNumber"
+    },
+    "horizontalPadding": {
+      "$ref": "#/$defs/nonnegativeNumber"
+    },
+    "verticalPadding": {
+      "$ref": "#/$defs/nonnegativeNumber"
+    },
+    "indexCandidateSpacing": {
+      "$ref": "#/$defs/nonnegativeNumber"
+    },
+    "candidateSpacing": {
+      "$ref": "#/$defs/nonnegativeNumber"
+    },
+    "rowSpacing": {
+      "$ref": "#/$defs/nonnegativeNumber"
+    },
+    "capsuleCornerRadius": {
+      "$ref": "#/$defs/nonnegativeNumber"
+    },
+    "panelCornerRadius": {
+      "$ref": "#/$defs/nonnegativeNumber"
+    },
+    "edgeInsets": {
+      "$ref": "#/$defs/edgeInsets"
+    },
+    "material": {
+      "enum": [
+        "popover",
+        "hudWindow",
+        "glass",
+        "none"
+      ]
+    },
+    "minimumPanelSize": {
+      "$ref": "#/$defs/size"
+    },
+    "maximumPanelWidth": {
+      "$ref": "#/$defs/nonnegativeNumber"
+    },
+    "widthQuantization": {
+      "$ref": "#/$defs/nonnegativeNumber"
+    },
+    "panelBackground": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/color"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "panelBorderColor": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/color"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "panelBorderWidth": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/nonnegativeNumber"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "shadowEnabled": {
+      "type": "boolean"
+    },
+    "preeditRow": {
+      "type": "boolean",
+      "description": "Show the composing pinyin on a small row above the candidates."
+    },
+    "indexSuffix": {
+      "enum": [
+        "",
+        "."
+      ],
+      "description": "Appended to candidate numbers."
+    },
+    "decorations": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4,
+      "items": {
+        "oneOf": [
+          {
+            "$ref": "#/$defs/spriteDecoration"
+          },
+          {
+            "$ref": "#/$defs/twinkleDecoration"
+          },
+          {
+            "$ref": "#/$defs/petalsDecoration"
+          },
+          {
+            "$ref": "#/$defs/gradientDecoration"
+          },
+          {
+            "$ref": "#/$defs/shimmerDecoration"
+          },
+          {
+            "$ref": "#/$defs/shootingStarDecoration"
+          },
+          {
+            "$ref": "#/$defs/frameDecoration"
+          }
+        ]
+      },
+      "description": "Animated decorations: sprite sheets (PNG in the package, frames side by side) and procedurally twinkling stars. Data only, no code; reduced-motion shows a still frame."
+    },
+    "overflow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "top",
+        "left",
+        "bottom",
+        "right"
+      ],
+      "properties": {
+        "top": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 64
+        },
+        "left": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 64
+        },
+        "bottom": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 64
+        },
+        "right": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 64
+        }
+      },
+      "description": "Transparent margin around the card (points) where decorations may reach past the card edge."
+    },
+    "slotColors": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "items": {
+        "$ref": "#/$defs/color"
+      },
+      "description": "Colour of each of the five first-row candidates (and their numbers) while not highlighted."
+    }
+  },
+  "$defs": {
+    "localizedName": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "zh",
+        "en"
+      ],
+      "properties": {
+        "zh": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "en": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        }
+      }
+    },
+    "font": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "family",
+        "size",
+        "weight"
+      ],
+      "properties": {
+        "family": {
+          "enum": [
+            "PingFang SC",
+            "Kaiti SC",
+            "Songti SC",
+            "Yuanti SC",
+            "Xingkai SC",
+            "Hannotate SC",
+            "Hanzipen SC",
+            "Wawati SC",
+            "Weibei SC",
+            "Libian SC",
+            "Baoli SC",
+            "Yuppy SC",
+            "systemMonospacedDigit"
+          ]
+        },
+        "size": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 96
+        },
+        "weight": {
+          "enum": [
+            "regular",
+            "medium",
+            "semibold",
+            "bold"
+          ]
+        }
+      }
+    },
+    "semanticColor": {
+      "enum": [
+        "system:clear",
+        "system:labelColor",
+        "system:secondaryLabelColor",
+        "system:tertiaryLabelColor",
+        "system:controlAccentColor",
+        "system:systemIndigo",
+        "system:systemTeal"
+      ]
+    },
+    "lightDarkColor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "light",
+        "dark"
+      ],
+      "properties": {
+        "light": {
+          "type": "string",
+          "pattern": "^#[0-9A-F]{6}([0-9A-F]{2})?$"
+        },
+        "dark": {
+          "type": "string",
+          "pattern": "^#[0-9A-F]{6}([0-9A-F]{2})?$"
+        }
+      }
+    },
+    "color": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/semanticColor"
+        },
+        {
+          "$ref": "#/$defs/lightDarkColor"
+        }
+      ]
+    },
+    "opacity": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "nonnegativeNumber": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 4096
+    },
+    "edgeInsets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "top",
+        "left",
+        "bottom",
+        "right"
+      ],
+      "properties": {
+        "top": {
+          "$ref": "#/$defs/nonnegativeNumber"
+        },
+        "left": {
+          "$ref": "#/$defs/nonnegativeNumber"
+        },
+        "bottom": {
+          "$ref": "#/$defs/nonnegativeNumber"
+        },
+        "right": {
+          "$ref": "#/$defs/nonnegativeNumber"
+        }
+      }
+    },
+    "size": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "width",
+        "height"
+      ],
+      "properties": {
+        "width": {
+          "$ref": "#/$defs/nonnegativeNumber"
+        },
+        "height": {
+          "$ref": "#/$defs/nonnegativeNumber"
+        }
+      }
+    },
+    "spriteDecoration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "sheet",
+        "frames",
+        "size"
+      ],
+      "properties": {
+        "type": {
+          "const": "sprite"
+        },
+        "sheet": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,62}\\.png$"
+        },
+        "frames": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 24
+        },
+        "fps": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 30
+        },
+        "size": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "width",
+            "height"
+          ],
+          "properties": {
+            "width": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 256
+            },
+            "height": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 256
+            }
+          }
+        },
+        "anchor": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "x",
+            "y"
+          ],
+          "properties": {
+            "x": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "y": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          }
+        },
+        "offset": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "x",
+            "y"
+          ],
+          "properties": {
+            "x": {
+              "type": "number",
+              "minimum": -256,
+              "maximum": 256
+            },
+            "y": {
+              "type": "number",
+              "minimum": -256,
+              "maximum": 256
+            }
+          }
+        },
+        "travel": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "from",
+            "to",
+            "duration"
+          ],
+          "properties": {
+            "from": {
+              "type": "number",
+              "minimum": -1,
+              "maximum": 2
+            },
+            "to": {
+              "type": "number",
+              "minimum": -1,
+              "maximum": 2
+            },
+            "duration": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 120
+            }
+          }
+        },
+        "layer": {
+          "enum": [
+            "below",
+            "above"
+          ]
+        },
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "pixelated": {
+          "type": "boolean"
+        },
+        "staticFrame": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 23
+        },
+        "overflow": {
+          "type": "boolean"
+        },
+        "pivot": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "x",
+            "y"
+          ],
+          "properties": {
+            "x": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "y": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          }
+        },
+        "motion": {
+          "type": "array",
+          "maxItems": 4,
+          "items": {
+            "$ref": "#/$defs/motion"
+          }
+        },
+        "clips": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "description": "An action sequence: one row of the sheet per action, played in order round and round (wave, walk, sit...). `frames` is then the sheet's column count; sheet cells must have the same width:height as `size`. Not together with `travel`.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "frames",
+              "seconds"
+            ],
+            "properties": {
+              "row": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 15
+              },
+              "frames": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 24
+              },
+              "fps": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 30
+              },
+              "seconds": {
+                "type": "number",
+                "minimum": 0.2,
+                "maximum": 30
+              },
+              "move": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "from",
+                  "to"
+                ],
+                "properties": {
+                  "from": {
+                    "type": "number",
+                    "minimum": -0.5,
+                    "maximum": 1.5
+                  },
+                  "to": {
+                    "type": "number",
+                    "minimum": -0.5,
+                    "maximum": 1.5
+                  }
+                }
+              },
+              "flip": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "zone": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "width"
+          ],
+          "description": "With clips: the clips' `move` walks inside the rightmost `width` points of the card (the art zone beside the candidates).",
+          "properties": {
+            "width": {
+              "type": "number",
+              "minimum": 8,
+              "maximum": 1024
+            }
+          }
+        }
+      }
+    },
+    "twinkleDecoration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "count",
+        "size",
+        "color",
+        "period"
+      ],
+      "properties": {
+        "type": {
+          "const": "twinkle"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 24
+        },
+        "size": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "min",
+            "max"
+          ],
+          "properties": {
+            "min": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 32
+            },
+            "max": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 32
+            }
+          }
+        },
+        "color": {
+          "$ref": "#/$defs/color"
+        },
+        "period": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "min",
+            "max"
+          ],
+          "properties": {
+            "min": {
+              "type": "number",
+              "minimum": 0.4,
+              "maximum": 12
+            },
+            "max": {
+              "type": "number",
+              "minimum": 0.4,
+              "maximum": 12
+            }
+          }
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "layer": {
+          "enum": [
+            "below",
+            "above"
+          ]
+        },
+        "region": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "x",
+            "y",
+            "width",
+            "height"
+          ],
+          "properties": {
+            "x": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "y": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "width": {
+              "type": "number",
+              "minimum": 0.05,
+              "maximum": 1
+            },
+            "height": {
+              "type": "number",
+              "minimum": 0.05,
+              "maximum": 1
+            }
+          }
+        },
+        "overflow": {
+          "type": "boolean"
+        }
+      }
+    },
+    "petalsDecoration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "rate",
+        "size",
+        "color",
+        "lifetime"
+      ],
+      "properties": {
+        "type": {
+          "const": "petals"
+        },
+        "rate": {
+          "type": "number",
+          "minimum": 0.2,
+          "maximum": 12
+        },
+        "size": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "min",
+            "max"
+          ],
+          "properties": {
+            "min": {
+              "type": "number",
+              "minimum": 2,
+              "maximum": 32
+            },
+            "max": {
+              "type": "number",
+              "minimum": 2,
+              "maximum": 32
+            }
+          }
+        },
+        "color": {
+          "$ref": "#/$defs/color"
+        },
+        "lifetime": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 20
+        },
+        "fallSpeed": {
+          "type": "number",
+          "minimum": 2,
+          "maximum": 80
+        },
+        "drift": {
+          "type": "number",
+          "minimum": -40,
+          "maximum": 40
+        },
+        "layer": {
+          "enum": [
+            "below",
+            "above"
+          ]
+        },
+        "overflow": {
+          "type": "boolean"
+        },
+        "region": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "x",
+            "y",
+            "width",
+            "height"
+          ],
+          "properties": {
+            "x": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "y": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "width": {
+              "type": "number",
+              "minimum": 0.05,
+              "maximum": 1
+            },
+            "height": {
+              "type": "number",
+              "minimum": 0.05,
+              "maximum": 1
+            }
+          }
+        }
+      }
+    },
+    "motion": {
+      "type": "object",
+      "required": [
+        "kind",
+        "period"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "float",
+            "breathe",
+            "sway",
+            "glow",
+            "fade",
+            "hop"
+          ]
+        },
+        "period": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 20
+        },
+        "amplitude": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 12
+        },
+        "scale": {
+          "type": "number",
+          "minimum": 0.005,
+          "maximum": 0.12
+        },
+        "degrees": {
+          "type": "number",
+          "minimum": 0.3,
+          "maximum": 12
+        },
+        "radius": {
+          "type": "number",
+          "minimum": 2,
+          "maximum": 30
+        },
+        "minimum": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 0.95
+        },
+        "height": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 16
+        },
+        "squash": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.25
+        },
+        "color": {
+          "$ref": "#/$defs/color"
+        }
+      },
+      "additionalProperties": false
+    },
+    "gradientDecoration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "from",
+        "to"
+      ],
+      "properties": {
+        "type": {
+          "const": "gradient"
+        },
+        "from": {
+          "$ref": "#/$defs/color"
+        },
+        "to": {
+          "$ref": "#/$defs/color"
+        },
+        "angle": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 360
+        },
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "layer": {
+          "enum": [
+            "below",
+            "above"
+          ]
+        }
+      }
+    },
+    "shimmerDecoration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "color"
+      ],
+      "properties": {
+        "type": {
+          "const": "shimmer"
+        },
+        "color": {
+          "$ref": "#/$defs/color"
+        },
+        "period": {
+          "type": "number",
+          "minimum": 3,
+          "maximum": 30
+        },
+        "width": {
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 0.8
+        },
+        "angle": {
+          "type": "number",
+          "minimum": -60,
+          "maximum": 60
+        },
+        "layer": {
+          "enum": [
+            "below",
+            "above"
+          ]
+        }
+      }
+    },
+    "shootingStarDecoration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "color"
+      ],
+      "properties": {
+        "type": {
+          "const": "shootingStar"
+        },
+        "color": {
+          "$ref": "#/$defs/color"
+        },
+        "period": {
+          "type": "number",
+          "minimum": 3,
+          "maximum": 40
+        },
+        "length": {
+          "type": "number",
+          "minimum": 16,
+          "maximum": 200
+        },
+        "angle": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 360
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "layer": {
+          "enum": [
+            "below",
+            "above"
+          ]
+        },
+        "overflow": {
+          "type": "boolean"
+        },
+        "region": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "x",
+            "y",
+            "width",
+            "height"
+          ],
+          "properties": {
+            "x": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "y": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "width": {
+              "type": "number",
+              "minimum": 0.05,
+              "maximum": 1
+            },
+            "height": {
+              "type": "number",
+              "minimum": 0.05,
+              "maximum": 1
+            }
+          }
+        }
+      }
+    },
+    "frameDecoration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "sheet",
+        "slice"
+      ],
+      "description": "The card's whole look as one picture that stretches with the card (a nine-slice); sits behind the candidates over the whole window (skin `overflow` margin included). Use with material \"none\" so the panel's shape is the picture's shape.",
+      "properties": {
+        "type": {
+          "const": "frame"
+        },
+        "sheet": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,62}\\.png$"
+        },
+        "slice": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "left",
+            "right",
+            "top",
+            "bottom"
+          ],
+          "properties": {
+            "left": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 2048
+            },
+            "right": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 2048
+            },
+            "top": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 2048
+            },
+            "bottom": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 2048
+            }
+          }
+        },
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,14 @@
+# Project-authored v0.3 daily-input base correction table.
+# This is a product base-lexicon asset, not UserDB or v0.4 personal-word data.
+# Each bounded weight is the pinned upstream competing candidate multiplied by
+# 1.05 and rounded up to the next 1000. Per-entry provenance and the selection
+# rationale are frozen in quality/corpus/agent-daily-provenance.tsv.
+---
+name: agent_daily
+version: "0.3.0"
+sort: by_weight
+...
+
+大	da	114000
+关	guan	16000
+热爱	re ai	3000

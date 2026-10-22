@@ -1,0 +1,103 @@
+text	reading	weight	category	source	license	reason
+AMD	amd	500	os-hardware	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+API	api	500	development-abbreviation	INPUT-QUALITY Chunk Q2	project-authored	canonical spelling frozen by the Q2 task card
+AWS	aws	500	cloud-container	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+AirPods	airpods	500	company-product	CN-EN-MIXED-INPUT-NARROW	project-authored	owner-named canonical product spelling for deterministic mixed-input lookup
+Android	android	500	os-hardware	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Angular	angular	500	frontend	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Ansible	ansible	500	cloud-container	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Apple	apple	500	company-product	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Azure	azure	500	cloud-container	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Bitbucket	bitbucket	500	company-product	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Bun	bun	500	language-runtime	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+CD	cd	500	development-abbreviation	INPUT-QUALITY Chunk Q2	project-authored	canonical spelling frozen by the Q2 task card
+CI	ci	500	development-abbreviation	INPUT-QUALITY Chunk Q2	project-authored	canonical spelling frozen by the Q2 task card
+CLI	cli	500	development-abbreviation	INPUT-QUALITY Chunk Q2	project-authored	canonical spelling frozen by the Q2 task card
+ChatGPT	chatgpt	500	ai-llm	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Claude	claude	500	ai-llm	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+ClickHouse	clickhouse	500	database	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Cloudflare	cloudflare	500	cloud-container	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Codex	codex	500	ai-llm	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Copilot	copilot	500	ai-tool	INPUT-QUALITY Chunk Q2	project-authored	canonical spelling frozen by the Q2 task card
+Cursor	cursor	500	ai-tool	INPUT-QUALITY Chunk Q2	project-authored	canonical spelling frozen by the Q2 task card
+Deno	deno	500	language-runtime	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Docker	docker	500	cloud-container	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+DynamoDB	dynamodb	500	database	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Elasticsearch	elasticsearch	500	database	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Figma	figma	500	company-product	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Gemini	gemini	500	ai-llm	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+GPT	gpt	500	ai-llm	INPUT-QUALITY Chunk Q2	project-authored	canonical spelling frozen by the Q2 task card
+GitHub	github	500	company-product	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+GitLab	gitlab	500	company-product	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Go	go	500	language-runtime	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+GraphQL	graphql	500	protocol-format	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Grafana	grafana	500	observability	INPUT-QUALITY Q3-B2	project-authored	owner-used technical term registered by the Q3-B2 task card
+Hugging Face	huggingface	500	ai-llm	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+HTTP	http	500	protocol-format	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+HTTPS	https	500	protocol-format	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Intel	intel	500	os-hardware	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Java	java	500	language-runtime	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+JavaScript	javascript	500	language-runtime	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Jira	jira	500	company-product	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+JSON	json	500	protocol-format	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Kafka	kafka	500	messaging	INPUT-QUALITY Q3-B2	project-authored	owner-used technical term registered by the Q3-B2 task card
+Kotlin	kotlin	500	language-runtime	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Kubernetes	kubernetes	500	cloud-container	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+LangChain	langchain	500	ai-llm	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Linux	linux	500	os-hardware	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Llama	llama	500	ai-llm	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+MCP	mcp	500	ai-llm	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+MacBook	macbook	500	company-product	CN-EN-MIXED-INPUT-NARROW	project-authored	owner-named canonical product spelling for deterministic mixed-input lookup
+MacBookPro	macbookpro	500	company-product	CN-EN-MIXED-INPUT-NARROW	project-authored	owner-named canonical product spelling for deterministic mixed-input lookup
+MariaDB	mariadb	500	database	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Markdown	markdown	500	protocol-format	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+MongoDB	mongodb	500	database	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+MySQL	mysql	500	database	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+NVIDIA	nvidia	500	os-hardware	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Netlify	netlify	500	cloud-container	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Next.js	nextjs	500	frontend	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Node.js	nodejs	500	language-runtime	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Notion	notion	500	company-product	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Nuxt	nuxt	500	frontend	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+OpenAI	openai	500	ai-llm	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+PostgreSQL	postgres	500	database	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Postgres	postgres	500	database	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Python	python	500	language-runtime	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+REST	rest	500	protocol-format	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+React	react	500	frontend	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Redis	redis	500	database	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Rust	rust	500	language-runtime	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Safari	safari	500	company-product	INPUT-QUALITY Q3-B2	project-authored	owner-used technical term registered by the Q3-B2 task card
+SDK	sdk	500	development-abbreviation	INPUT-QUALITY Chunk Q2	project-authored	canonical spelling frozen by the Q2 task card
+SQLite	sqlite	500	database	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Slack	slack	500	company-product	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Supabase	supabase	500	database	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Svelte	svelte	500	frontend	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Swift	swift	500	language-runtime	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Tailwind CSS	tailwindcss	500	frontend	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Terraform	terraform	500	cloud-container	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+TypeScript	typescript	500	language-runtime	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+TypeScript	ts	500	development-abbreviation	INPUT-QUALITY Chunk Q2	project-authored	Q2 task-card abbreviation for the canonical TypeScript display spelling
+Ubuntu	ubuntu	500	os-hardware	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+VS Code	vscode	500	company-product	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Vercel	vercel	500	cloud-container	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Vite	vite	500	frontend	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Vue	vue	500	frontend	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+WebAssembly	webassembly	500	protocol-format	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+WebSocket	websocket	500	protocol-format	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Webpack	webpack	500	frontend	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Windows	windows	500	os-hardware	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+Xcode	xcode	500	company-product	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+XML	xml	500	protocol-format	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+YAML	yaml	500	protocol-format	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+gRPC	grpc	500	protocol-format	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+iCloud	icloud	500	company-product	CN-EN-MIXED-INPUT-NARROW	project-authored	owner-named canonical product spelling for deterministic mixed-input lookup
+iPad	ipad	500	company-product	CN-EN-MIXED-INPUT-NARROW	project-authored	owner-named canonical product spelling for deterministic mixed-input lookup
+iPhone	iphone	500	company-product	CN-EN-MIXED-INPUT-NARROW	project-authored	owner-named canonical product spelling for deterministic mixed-input lookup
+iOS	ios	500	os-hardware	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+macOS	macos	500	os-hardware	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+nginx	nginx	500	cloud-container	V04-DEV-PLAN Chunk 11 Part C	project-authored	canonical spelling from the named product official documentation or product website
+npm	npm	500	package-manager	INPUT-QUALITY Q3-B2	project-authored	owner-used technical term registered by the Q3-B2 task card
+embedding	embedding	500	ai-llm	INPUT-QUALITY Chunk Q2	project-authored	canonical spelling frozen by the Q2 task card
+prompt	prompt	500	ai-llm	INPUT-QUALITY Chunk Q2	project-authored	canonical spelling frozen by the Q2 task card
+token	token	500	ai-llm	INPUT-QUALITY Chunk Q2	project-authored	canonical spelling frozen by the Q2 task card

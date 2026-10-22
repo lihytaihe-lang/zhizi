@@ -1,0 +1,10 @@
+{
+  "id": "example_minimal",
+  "displayName": {
+    "zh": "最小示例",
+    "en": "Minimal example"
+  },
+  "formatVersion": 1,
+  "author": "Example",
+  "description": "Minimal skin package example."
+}

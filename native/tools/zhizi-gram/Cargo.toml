@@ -1,0 +1,13 @@
+[package]
+name = "zhizi-gram"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "Builds the open 知字 grammar data: counts of 2-6 character Chinese strings from open text, for the octagram grammar format."
+
+[[bin]]
+name = "zhizi-gram-count"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = 3

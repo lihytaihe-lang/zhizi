@@ -1,0 +1,138 @@
+{
+  "id": "youzi",
+  "displayName": {
+    "zh": "柚子水豚",
+    "en": "Yuzu Capybara"
+  },
+  "formatVersion": 1,
+  "author": "Agent Input Method",
+  "description": "淡青米色底，顶着柚子的水豚坐在右侧，轻轻呼吸；开启「减弱动态效果」时静止。",
+  "candidateFont": {
+    "family": "Yuanti SC",
+    "size": 17,
+    "weight": "medium"
+  },
+  "indexFont": {
+    "family": "systemMonospacedDigit",
+    "size": 10.5,
+    "weight": "medium"
+  },
+  "candidateColor": {
+    "light": "#34402B",
+    "dark": "#34402B"
+  },
+  "secondaryCandidateColor": {
+    "light": "#6F7C5B",
+    "dark": "#6F7C5B"
+  },
+  "indexColor": {
+    "light": "#6F7C5B",
+    "dark": "#6F7C5B"
+  },
+  "highlightedCandidateColor": {
+    "light": "#C76A10",
+    "dark": "#C76A10"
+  },
+  "highlightFillColor": {
+    "light": "#9DB87A30",
+    "dark": "#9DB87A30"
+  },
+  "highlightFillOpacity": 1,
+  "highlightBorderColor": {
+    "light": "#8C6F4E66",
+    "dark": "#8C6F4E66"
+  },
+  "highlightBorderOpacity": 1,
+  "rowHeight": 36,
+  "horizontalPadding": 10,
+  "verticalPadding": 5,
+  "indexCandidateSpacing": 5,
+  "candidateSpacing": 10,
+  "rowSpacing": 7,
+  "capsuleCornerRadius": 12,
+  "panelCornerRadius": 12,
+  "edgeInsets": {
+    "top": 11,
+    "left": 13,
+    "bottom": 11,
+    "right": 70
+  },
+  "material": "popover",
+  "minimumPanelSize": {
+    "width": 120,
+    "height": 56
+  },
+  "maximumPanelWidth": 760,
+  "widthQuantization": 20,
+  "panelBackground": {
+    "light": "#EEF2DF",
+    "dark": "#EEF2DF"
+  },
+  "panelBorderColor": {
+    "light": "#C9D6AC",
+    "dark": "#C9D6AC"
+  },
+  "panelBorderWidth": 0.5,
+  "shadowEnabled": false,
+  "overflow": {
+    "top": 22,
+    "left": 0,
+    "bottom": 0,
+    "right": 6
+  },
+  "decorations": [
+    {
+      "type": "gradient",
+      "from": {
+        "light": "#F1F5E4",
+        "dark": "#F1F5E4"
+      },
+      "to": {
+        "light": "#D9E5C1",
+        "dark": "#D9E5C1"
+      },
+      "angle": 0,
+      "layer": "below"
+    },
+    {
+      "type": "sprite",
+      "sheet": "capy-sit.png",
+      "frames": 1,
+      "size": {
+        "width": 56,
+        "height": 72
+      },
+      "anchor": {
+        "x": 1,
+        "y": 0
+      },
+      "offset": {
+        "x": 2,
+        "y": -2
+      },
+      "overflow": true,
+      "pivot": {
+        "x": 0.5,
+        "y": 0.05
+      },
+      "motion": [
+        {
+          "kind": "hop",
+          "height": 4,
+          "squash": 0.05,
+          "period": 3.4
+        },
+        {
+          "kind": "breathe",
+          "scale": 0.022,
+          "period": 4.4
+        },
+        {
+          "kind": "sway",
+          "degrees": 1.1,
+          "period": 7
+        }
+      ]
+    }
+  ]
+}

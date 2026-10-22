@@ -1,0 +1,111 @@
+# Project-authored industry terms curated for Chunk 11.
+# No external word list or third-party corpus was used. Readings are lowercase
+# ASCII lookup keys; display text preserves the product's canonical spelling.
+---
+name: agent_tech_terms
+version: "0.4.0"
+sort: by_weight
+...
+
+AMD	amd	500
+API	api	500
+AWS	aws	500
+AirPods	airpods	500
+Android	android	500
+Angular	angular	500
+Ansible	ansible	500
+Apple	apple	500
+Azure	azure	500
+Bitbucket	bitbucket	500
+Bun	bun	500
+CD	cd	500
+CI	ci	500
+CLI	cli	500
+ChatGPT	chatgpt	500
+Claude	claude	500
+ClickHouse	clickhouse	500
+Cloudflare	cloudflare	500
+Codex	codex	500
+Copilot	copilot	500
+Cursor	cursor	500
+Deno	deno	500
+Docker	docker	500
+DynamoDB	dynamodb	500
+Elasticsearch	elasticsearch	500
+Figma	figma	500
+Gemini	gemini	500
+GPT	gpt	500
+GitHub	github	500
+GitLab	gitlab	500
+Go	go	500
+GraphQL	graphql	500
+Grafana	grafana	500
+Hugging Face	huggingface	500
+HTTP	http	500
+HTTPS	https	500
+Intel	intel	500
+Java	java	500
+JavaScript	javascript	500
+Jira	jira	500
+JSON	json	500
+Kafka	kafka	500
+Kotlin	kotlin	500
+Kubernetes	kubernetes	500
+LangChain	langchain	500
+Linux	linux	500
+Llama	llama	500
+MCP	mcp	500
+MacBook	macbook	500
+MacBookPro	macbookpro	500
+MariaDB	mariadb	500
+Markdown	markdown	500
+MongoDB	mongodb	500
+MySQL	mysql	500
+NVIDIA	nvidia	500
+Netlify	netlify	500
+Next.js	nextjs	500
+Node.js	nodejs	500
+Notion	notion	500
+Nuxt	nuxt	500
+OpenAI	openai	500
+PostgreSQL	postgres	500
+Postgres	postgres	500
+Python	python	500
+REST	rest	500
+React	react	500
+Redis	redis	500
+Rust	rust	500
+Safari	safari	500
+SDK	sdk	500
+SQLite	sqlite	500
+Slack	slack	500
+Supabase	supabase	500
+Svelte	svelte	500
+Swift	swift	500
+Tailwind CSS	tailwindcss	500
+Terraform	terraform	500
+TypeScript	typescript	500
+TypeScript	ts	500
+Ubuntu	ubuntu	500
+VS Code	vscode	500
+Vercel	vercel	500
+Vite	vite	500
+Vue	vue	500
+WebAssembly	webassembly	500
+WebSocket	websocket	500
+Webpack	webpack	500
+Windows	windows	500
+Xcode	xcode	500
+XML	xml	500
+YAML	yaml	500
+gRPC	grpc	500
+iCloud	icloud	500
+iPad	ipad	500
+iPhone	iphone	500
+iOS	ios	500
+macOS	macos	500
+nginx	nginx	500
+npm	npm	500
+embedding	embedding	500
+prompt	prompt	500
+token	token	500

@@ -1,0 +1,26 @@
+{
+  "formatVersion": 1,
+  "generator": {
+    "repositoryCommit": "69dc2280420c1f52df22bd593e83f32687e76bb5",
+    "packageVersion": "0.1.0",
+    "storageSourcePath": "src-tauri/src/storage.rs",
+    "storageSourceSHA256": "8458f5e76fd8980c93668628a9e14b854d7459a30ddf0332a4f20b4e7cd6e207",
+    "migrationSourcePath": "src-tauri/migrations/001_initial.sql",
+    "migrationSourceSHA256": "4bb44c19d2bc427185def2b7595afeee37969444a90fd280d0ae623e55cb92c6",
+    "cargoManifestSourcePath": "src-tauri/Cargo.toml",
+    "cargoManifestSourceSHA256": "d07f3f2fee8511e867903c78930163480836a0a55bf59cdf8e423f5611117597",
+    "cargoLockSourcePath": "src-tauri/Cargo.lock",
+    "cargoLockSourceSHA256": "8b0e475a207d2c68c9913b58e5828b39eb1b4a6c852e4328c8502aa6d01ccb7a",
+    "generatorRustc": "rustc 1.94.1 (e408947bf 2026-03-25)",
+    "generatorCargo": "cargo 1.94.1 (29ea6fb6a 2026-03-24)",
+    "generatorOS": "macOS 26.5 (25F71)"
+  },
+  "artifact": {
+    "encoding": "base64",
+    "decodedFileName": "agent-input-layer.sqlite3",
+    "decodedBytes": 45056,
+    "decodedSHA256": "11a8ec608cffc680c1879ec8853979034d39b443cf96cbfc01a9b4ebe8d025fe"
+  },
+  "privacy": "All fixture values are synthetic. The provider host uses the reserved invalid TLD and the synthetic key is never contacted.",
+  "procedure": "git archive the generator commit, add only an in-module export test, then run cargo test --locked --offline so the original AppStorage and migration write the decoded SQLite artifact"
+}

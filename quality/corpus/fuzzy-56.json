@@ -1,0 +1,516 @@
+{
+  "formatVersion": 2,
+  "frozenAt": "2026-07-13",
+  "groundTruth": {
+    "file": "quality/corpus/fuzzy-56-ground-truth.txt",
+    "sha256": "6035e610965382301db8776be522b4bd8e2c237b034ac3ac9cf89132df7f07bc",
+    "method": "independently authored project Mandarin fuzzy-pinyin ground truth; no target dictionary or decoder output used to select queries or allowed answers",
+    "isolationContract": "allowed target absent from top-5 with mask 0 and with all seven unrelated masks; present with only the matching mask"
+  },
+  "cases": [
+    {
+      "id": "zh-z-01",
+      "group": "zh-z",
+      "canonicalQuery": "zhege",
+      "fuzzyQuery": "zege",
+      "allowed": [
+        "这个"
+      ]
+    },
+    {
+      "id": "zh-z-02",
+      "group": "zh-z",
+      "canonicalQuery": "zhong",
+      "fuzzyQuery": "zong",
+      "allowed": [
+        "中"
+      ]
+    },
+    {
+      "id": "zh-z-03",
+      "group": "zh-z",
+      "canonicalQuery": "zhe",
+      "fuzzyQuery": "ze",
+      "allowed": [
+        "这"
+      ]
+    },
+    {
+      "id": "zh-z-04",
+      "group": "zh-z",
+      "canonicalQuery": "zhidao",
+      "fuzzyQuery": "zidao",
+      "allowed": [
+        "知道"
+      ]
+    },
+    {
+      "id": "zh-z-05",
+      "group": "zh-z",
+      "canonicalQuery": "zheyang",
+      "fuzzyQuery": "zeyang",
+      "allowed": [
+        "这样"
+      ]
+    },
+    {
+      "id": "zh-z-06",
+      "group": "zh-z",
+      "canonicalQuery": "zhongguo",
+      "fuzzyQuery": "zongguo",
+      "allowed": [
+        "中国"
+      ]
+    },
+    {
+      "id": "zh-z-07",
+      "group": "zh-z",
+      "canonicalQuery": "zhao",
+      "fuzzyQuery": "zao",
+      "allowed": [
+        "找"
+      ]
+    },
+    {
+      "id": "ch-c-01",
+      "group": "ch-c",
+      "canonicalQuery": "chi",
+      "fuzzyQuery": "ci",
+      "allowed": [
+        "吃"
+      ]
+    },
+    {
+      "id": "ch-c-02",
+      "group": "ch-c",
+      "canonicalQuery": "chulai",
+      "fuzzyQuery": "culai",
+      "allowed": [
+        "出来"
+      ]
+    },
+    {
+      "id": "ch-c-03",
+      "group": "ch-c",
+      "canonicalQuery": "chu",
+      "fuzzyQuery": "cu",
+      "allowed": [
+        "出"
+      ]
+    },
+    {
+      "id": "ch-c-04",
+      "group": "ch-c",
+      "canonicalQuery": "shichang",
+      "fuzzyQuery": "shicang",
+      "allowed": [
+        "市场"
+      ]
+    },
+    {
+      "id": "ch-c-05",
+      "group": "ch-c",
+      "canonicalQuery": "chanpin",
+      "fuzzyQuery": "canpin",
+      "allowed": [
+        "产品"
+      ]
+    },
+    {
+      "id": "ch-c-06",
+      "group": "ch-c",
+      "canonicalQuery": "chuxian",
+      "fuzzyQuery": "cuxian",
+      "allowed": [
+        "出现"
+      ]
+    },
+    {
+      "id": "ch-c-07",
+      "group": "ch-c",
+      "canonicalQuery": "zhichi",
+      "fuzzyQuery": "zhici",
+      "allowed": [
+        "支持"
+      ]
+    },
+    {
+      "id": "sh-s-01",
+      "group": "sh-s",
+      "canonicalQuery": "shi",
+      "fuzzyQuery": "si",
+      "allowed": [
+        "是"
+      ]
+    },
+    {
+      "id": "sh-s-02",
+      "group": "sh-s",
+      "canonicalQuery": "shuo",
+      "fuzzyQuery": "suo",
+      "allowed": [
+        "说"
+      ]
+    },
+    {
+      "id": "sh-s-03",
+      "group": "sh-s",
+      "canonicalQuery": "shenme",
+      "fuzzyQuery": "senme",
+      "allowed": [
+        "什么"
+      ]
+    },
+    {
+      "id": "sh-s-04",
+      "group": "sh-s",
+      "canonicalQuery": "shang",
+      "fuzzyQuery": "sang",
+      "allowed": [
+        "上"
+      ]
+    },
+    {
+      "id": "sh-s-05",
+      "group": "sh-s",
+      "canonicalQuery": "jiushi",
+      "fuzzyQuery": "jiusi",
+      "allowed": [
+        "就是"
+      ]
+    },
+    {
+      "id": "sh-s-06",
+      "group": "sh-s",
+      "canonicalQuery": "bushi",
+      "fuzzyQuery": "busi",
+      "allowed": [
+        "不是"
+      ]
+    },
+    {
+      "id": "sh-s-07",
+      "group": "sh-s",
+      "canonicalQuery": "haishi",
+      "fuzzyQuery": "haisi",
+      "allowed": [
+        "还是"
+      ]
+    },
+    {
+      "id": "n-l-01",
+      "group": "n-l",
+      "canonicalQuery": "ni",
+      "fuzzyQuery": "li",
+      "allowed": [
+        "你"
+      ]
+    },
+    {
+      "id": "n-l-02",
+      "group": "n-l",
+      "canonicalQuery": "na",
+      "fuzzyQuery": "la",
+      "allowed": [
+        "那"
+      ]
+    },
+    {
+      "id": "n-l-03",
+      "group": "n-l",
+      "canonicalQuery": "ne",
+      "fuzzyQuery": "le",
+      "allowed": [
+        "呢"
+      ]
+    },
+    {
+      "id": "n-l-04",
+      "group": "n-l",
+      "canonicalQuery": "neng",
+      "fuzzyQuery": "leng",
+      "allowed": [
+        "能"
+      ]
+    },
+    {
+      "id": "n-l-05",
+      "group": "n-l",
+      "canonicalQuery": "nage",
+      "fuzzyQuery": "lage",
+      "allowed": [
+        "那个"
+      ]
+    },
+    {
+      "id": "n-l-06",
+      "group": "n-l",
+      "canonicalQuery": "nian",
+      "fuzzyQuery": "lian",
+      "allowed": [
+        "年"
+      ]
+    },
+    {
+      "id": "n-l-07",
+      "group": "n-l",
+      "canonicalQuery": "nimen",
+      "fuzzyQuery": "limen",
+      "allowed": [
+        "你们"
+      ]
+    },
+    {
+      "id": "f-h-01",
+      "group": "f-h",
+      "canonicalQuery": "fa",
+      "fuzzyQuery": "ha",
+      "allowed": [
+        "发"
+      ]
+    },
+    {
+      "id": "f-h-02",
+      "group": "f-h",
+      "canonicalQuery": "fazhan",
+      "fuzzyQuery": "hazhan",
+      "allowed": [
+        "发展"
+      ]
+    },
+    {
+      "id": "f-h-03",
+      "group": "f-h",
+      "canonicalQuery": "faxian",
+      "fuzzyQuery": "haxian",
+      "allowed": [
+        "发现"
+      ]
+    },
+    {
+      "id": "f-h-04",
+      "group": "f-h",
+      "canonicalQuery": "fangmian",
+      "fuzzyQuery": "hangmian",
+      "allowed": [
+        "方面"
+      ]
+    },
+    {
+      "id": "f-h-05",
+      "group": "f-h",
+      "canonicalQuery": "feichang",
+      "fuzzyQuery": "heichang",
+      "allowed": [
+        "非常"
+      ]
+    },
+    {
+      "id": "f-h-06",
+      "group": "f-h",
+      "canonicalQuery": "fuwu",
+      "fuzzyQuery": "huwu",
+      "allowed": [
+        "服务"
+      ]
+    },
+    {
+      "id": "f-h-07",
+      "group": "f-h",
+      "canonicalQuery": "fangshi",
+      "fuzzyQuery": "hangshi",
+      "allowed": [
+        "方式"
+      ]
+    },
+    {
+      "id": "an-ang-01",
+      "group": "an-ang",
+      "canonicalQuery": "shang",
+      "fuzzyQuery": "shan",
+      "allowed": [
+        "上"
+      ]
+    },
+    {
+      "id": "an-ang-02",
+      "group": "an-ang",
+      "canonicalQuery": "xiang",
+      "fuzzyQuery": "xian",
+      "allowed": [
+        "想"
+      ]
+    },
+    {
+      "id": "an-ang-03",
+      "group": "an-ang",
+      "canonicalQuery": "zheyang",
+      "fuzzyQuery": "zheyan",
+      "allowed": [
+        "这样"
+      ]
+    },
+    {
+      "id": "an-ang-04",
+      "group": "an-ang",
+      "canonicalQuery": "jiang",
+      "fuzzyQuery": "jian",
+      "allowed": [
+        "将"
+      ]
+    },
+    {
+      "id": "an-ang-05",
+      "group": "an-ang",
+      "canonicalQuery": "rang",
+      "fuzzyQuery": "ran",
+      "allowed": [
+        "让"
+      ]
+    },
+    {
+      "id": "an-ang-06",
+      "group": "an-ang",
+      "canonicalQuery": "yiyang",
+      "fuzzyQuery": "yiyan",
+      "allowed": [
+        "一样"
+      ]
+    },
+    {
+      "id": "an-ang-07",
+      "group": "an-ang",
+      "canonicalQuery": "shichang",
+      "fuzzyQuery": "shichan",
+      "allowed": [
+        "市场"
+      ]
+    },
+    {
+      "id": "en-eng-01",
+      "group": "en-eng",
+      "canonicalQuery": "deng",
+      "fuzzyQuery": "den",
+      "allowed": [
+        "等"
+      ]
+    },
+    {
+      "id": "en-eng-02",
+      "group": "en-eng",
+      "canonicalQuery": "neng",
+      "fuzzyQuery": "nen",
+      "allowed": [
+        "能"
+      ]
+    },
+    {
+      "id": "en-eng-03",
+      "group": "en-eng",
+      "canonicalQuery": "keneng",
+      "fuzzyQuery": "kenen",
+      "allowed": [
+        "可能"
+      ]
+    },
+    {
+      "id": "en-eng-04",
+      "group": "en-eng",
+      "canonicalQuery": "buneng",
+      "fuzzyQuery": "bunen",
+      "allowed": [
+        "不能"
+      ]
+    },
+    {
+      "id": "en-eng-05",
+      "group": "en-eng",
+      "canonicalQuery": "pengyou",
+      "fuzzyQuery": "penyou",
+      "allowed": [
+        "朋友"
+      ]
+    },
+    {
+      "id": "en-eng-06",
+      "group": "en-eng",
+      "canonicalQuery": "geng",
+      "fuzzyQuery": "gen",
+      "allowed": [
+        "更"
+      ]
+    },
+    {
+      "id": "en-eng-07",
+      "group": "en-eng",
+      "canonicalQuery": "shenghuo",
+      "fuzzyQuery": "shenhuo",
+      "allowed": [
+        "生活"
+      ]
+    },
+    {
+      "id": "in-ing-01",
+      "group": "in-ing",
+      "canonicalQuery": "yijing",
+      "fuzzyQuery": "yijin",
+      "allowed": [
+        "已经"
+      ]
+    },
+    {
+      "id": "in-ing-02",
+      "group": "in-ing",
+      "canonicalQuery": "yinggai",
+      "fuzzyQuery": "yingai",
+      "allowed": [
+        "应该"
+      ]
+    },
+    {
+      "id": "in-ing-03",
+      "group": "in-ing",
+      "canonicalQuery": "jinxing",
+      "fuzzyQuery": "jinxin",
+      "allowed": [
+        "进行"
+      ]
+    },
+    {
+      "id": "in-ing-04",
+      "group": "in-ing",
+      "canonicalQuery": "bing",
+      "fuzzyQuery": "bin",
+      "allowed": [
+        "并"
+      ]
+    },
+    {
+      "id": "in-ing-05",
+      "group": "in-ing",
+      "canonicalQuery": "mingtian",
+      "fuzzyQuery": "mintian",
+      "allowed": [
+        "明天"
+      ]
+    },
+    {
+      "id": "in-ing-06",
+      "group": "in-ing",
+      "canonicalQuery": "yiding",
+      "fuzzyQuery": "yidin",
+      "allowed": [
+        "一定"
+      ]
+    },
+    {
+      "id": "in-ing-07",
+      "group": "in-ing",
+      "canonicalQuery": "qing",
+      "fuzzyQuery": "qin",
+      "allowed": [
+        "请"
+      ]
+    }
+  ]
+}

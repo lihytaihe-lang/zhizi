@@ -1,0 +1,209 @@
+{
+  "id": "baitu",
+  "displayName": {
+    "zh": "白兔",
+    "en": "White rabbit"
+  },
+  "formatVersion": 1,
+  "author": "Agent Input Method",
+  "description": "淡粉紫底，白兔在右侧：招手、坐、走来走去、奔跑、蹦一下，一套动作循环着演；开启「减弱动态效果」时静止。",
+  "candidateFont": {
+    "family": "Yuanti SC",
+    "size": 17,
+    "weight": "medium"
+  },
+  "indexFont": {
+    "family": "systemMonospacedDigit",
+    "size": 10.5,
+    "weight": "medium"
+  },
+  "candidateColor": {
+    "light": "#4B3550",
+    "dark": "#4B3550"
+  },
+  "secondaryCandidateColor": {
+    "light": "#8C7490",
+    "dark": "#8C7490"
+  },
+  "indexColor": {
+    "light": "#8C7490",
+    "dark": "#8C7490"
+  },
+  "highlightedCandidateColor": {
+    "light": "#B0508A",
+    "dark": "#B0508A"
+  },
+  "highlightFillColor": {
+    "light": "#D88BB830",
+    "dark": "#D88BB830"
+  },
+  "highlightFillOpacity": 1,
+  "highlightBorderColor": {
+    "light": "#9A7AA066",
+    "dark": "#9A7AA066"
+  },
+  "highlightBorderOpacity": 1,
+  "rowHeight": 36,
+  "horizontalPadding": 10,
+  "verticalPadding": 5,
+  "indexCandidateSpacing": 5,
+  "candidateSpacing": 10,
+  "rowSpacing": 7,
+  "capsuleCornerRadius": 12,
+  "panelCornerRadius": 12,
+  "edgeInsets": {
+    "top": 11,
+    "left": 13,
+    "bottom": 11,
+    "right": 150
+  },
+  "material": "popover",
+  "minimumPanelSize": {
+    "width": 120,
+    "height": 56
+  },
+  "maximumPanelWidth": 760,
+  "widthQuantization": 20,
+  "panelBackground": {
+    "light": "#FAF1F7",
+    "dark": "#FAF1F7"
+  },
+  "panelBorderColor": {
+    "light": "#E6CFE0",
+    "dark": "#E6CFE0"
+  },
+  "panelBorderWidth": 0.5,
+  "shadowEnabled": false,
+  "decorations": [
+    {
+      "type": "gradient",
+      "from": {
+        "light": "#FDF6FA",
+        "dark": "#FDF6FA"
+      },
+      "to": {
+        "light": "#EED9EA",
+        "dark": "#EED9EA"
+      },
+      "angle": 0,
+      "layer": "below"
+    },
+    {
+      "type": "sprite",
+      "sheet": "rabbit-actions.png",
+      "frames": 8,
+      "size": {
+        "width": 23.5,
+        "height": 31.8
+      },
+      "anchor": {
+        "x": 1,
+        "y": 0
+      },
+      "offset": {
+        "x": -6,
+        "y": 4
+      },
+      "layer": "below",
+      "zone": {
+        "width": 140
+      },
+      "clips": [
+        {
+          "row": 1,
+          "frames": 6,
+          "fps": 7,
+          "seconds": 4.0,
+          "move": {
+            "from": 0.85,
+            "to": 0.85
+          }
+        },
+        {
+          "row": 0,
+          "frames": 4,
+          "fps": 4,
+          "seconds": 1.5,
+          "move": {
+            "from": 0.85,
+            "to": 0.85
+          }
+        },
+        {
+          "row": 5,
+          "frames": 6,
+          "fps": 4,
+          "seconds": 3.5,
+          "move": {
+            "from": 0.85,
+            "to": 0.85
+          }
+        },
+        {
+          "row": 2,
+          "frames": 8,
+          "fps": 9,
+          "seconds": 3.5,
+          "move": {
+            "from": 0.85,
+            "to": 0.45
+          },
+          "flip": true
+        },
+        {
+          "row": 6,
+          "frames": 6,
+          "fps": 7,
+          "seconds": 2.5,
+          "move": {
+            "from": 0.45,
+            "to": 0.2
+          },
+          "flip": true
+        },
+        {
+          "row": 0,
+          "frames": 4,
+          "fps": 4,
+          "seconds": 2.0,
+          "move": {
+            "from": 0.2,
+            "to": 0.2
+          },
+          "flip": true
+        },
+        {
+          "row": 3,
+          "frames": 8,
+          "fps": 13,
+          "seconds": 2.5,
+          "move": {
+            "from": 0.2,
+            "to": 0.85
+          }
+        },
+        {
+          "row": 4,
+          "frames": 8,
+          "fps": 9,
+          "seconds": 2.0,
+          "move": {
+            "from": 0.85,
+            "to": 0.85
+          }
+        }
+      ]
+    },
+    {
+      "type": "shimmer",
+      "color": {
+        "light": "#FFFFFF66",
+        "dark": "#FFFFFF66"
+      },
+      "period": 9,
+      "width": 0.18,
+      "angle": 16,
+      "layer": "above"
+    }
+  ]
+}

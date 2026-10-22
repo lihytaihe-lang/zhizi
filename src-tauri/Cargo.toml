@@ -1,0 +1,44 @@
+[package]
+name = "agent-input-layer"
+version = "0.1.5"
+description = "A task input layer for AI agents"
+authors = ["Agent Input Layer contributors"]
+edition = "2021"
+default-run = "agent-input-layer"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "agent_input_layer_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "snapshot-fixture-ctl"
+path = "src/bin/snapshot_fixture_ctl.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[features]
+# Test builds for friends upload quality records to the project's ingest server
+# (src/test_upload.rs). The open-source release is built with
+# --no-default-features and carries no upload code.
+default = ["test-upload", "personal-seed"]
+# Private owner seed/evidence files are omitted from public exports.
+personal-seed = []
+test-upload = []
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri-plugin-global-shortcut = "2.3.1"
+tauri-plugin-clipboard-manager = "2.3.2"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+sha2 = "=0.10.9"
+tauri-plugin-dialog = "2"

@@ -1,0 +1,15 @@
+{
+  "kind": "mixed-language-regression",
+  "formatVersion": 2,
+  "authoringMethod": "Project-authored Chunk 13 supersession: canonical industry spelling is Top-1 when a curated canonical form exists; the v1 corpus remains unchanged as historical evidence.",
+  "cases": [
+    { "id": "english-001", "category": "mixed-language", "query": "codex", "allowed": ["Codex"], "mustPassTop1": true },
+    { "id": "english-002", "category": "mixed-language", "query": "claude", "allowed": ["Claude"], "mustPassTop1": true },
+    { "id": "english-003", "category": "mixed-language", "query": "github", "allowed": ["GitHub"], "mustPassTop1": true },
+    { "id": "english-004", "category": "mixed-language", "query": "api", "allowed": ["API"], "mustPassTop1": true },
+    { "id": "english-005", "category": "mixed-language", "query": "token", "allowed": ["token"], "mustPassTop1": true },
+    { "id": "english-006", "category": "mixed-language", "query": "python", "allowed": ["Python"], "mustPassTop1": true },
+    { "id": "pinyin-001", "category": "normal-pinyin-control", "query": "nihao", "allowed": ["你好"], "mustPassTop1": true },
+    { "id": "pinyin-002", "category": "normal-pinyin-control", "query": "zhongguo", "allowed": ["中国"], "mustPassTop1": true }
+  ]
+}

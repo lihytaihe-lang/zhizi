@@ -1,0 +1,87 @@
+{
+  "id": "system",
+  "displayName": {
+    "zh": "简洁",
+    "en": "Clean"
+  },
+  "formatVersion": 1,
+  "author": "Agent Input Method",
+  "description": "默认皮肤：液态玻璃卡片，顶行显示拼音，右侧带知字水印；浅色下首选是亮珊瑚橙字衬一层很淡的粉底，深色下是青玉绿字（和玄墨一致）；跟随系统明暗。",
+  "candidateFont": {
+    "family": "PingFang SC",
+    "size": 16,
+    "weight": "regular"
+  },
+  "indexFont": {
+    "family": "systemMonospacedDigit",
+    "size": 10,
+    "weight": "regular"
+  },
+  "candidateColor": "system:labelColor",
+  "secondaryCandidateColor": {
+    "light": "#6B7280",
+    "dark": "#9CA3AF"
+  },
+  "indexColor": "system:tertiaryLabelColor",
+  "highlightedCandidateColor": {
+    "light": "#FF7A3D",
+    "dark": "#3DDBB0"
+  },
+  "highlightFillColor": {
+    "light": "#FFC2CF26",
+    "dark": "#00000000"
+  },
+  "highlightFillOpacity": 1,
+  "highlightBorderColor": {
+    "light": "#00000000",
+    "dark": "#00000000"
+  },
+  "highlightBorderOpacity": 0,
+  "rowHeight": 28,
+  "horizontalPadding": 4,
+  "verticalPadding": 3,
+  "indexCandidateSpacing": 2,
+  "candidateSpacing": 12,
+  "rowSpacing": 6,
+  "capsuleCornerRadius": 6,
+  "panelCornerRadius": 12,
+  "edgeInsets": {
+    "top": 8,
+    "left": 12,
+    "bottom": 8,
+    "right": 46
+  },
+  "material": "glass",
+  "minimumPanelSize": {
+    "width": 160,
+    "height": 48
+  },
+  "maximumPanelWidth": 760,
+  "widthQuantization": 20,
+  "panelBackground": null,
+  "panelBorderColor": null,
+  "panelBorderWidth": null,
+  "shadowEnabled": true,
+  "preeditRow": true,
+  "indexSuffix": ".",
+  "decorations": [
+    {
+      "type": "sprite",
+      "sheet": "mark.png",
+      "frames": 1,
+      "size": {
+        "width": 36,
+        "height": 36
+      },
+      "anchor": {
+        "x": 1,
+        "y": 0.5
+      },
+      "offset": {
+        "x": -6,
+        "y": 0
+      },
+      "layer": "below"
+    }
+  ]
+}

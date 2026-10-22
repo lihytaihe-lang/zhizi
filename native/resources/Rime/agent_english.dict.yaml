@@ -1,0 +1,15 @@
+# Project-authored mixed-language technical terms for Part 0.7.
+# No external word list or third-party corpus was used. These six terms are
+# frozen directly from the executable work order and its required regression.
+---
+name: agent_english
+version: "0.4.0"
+sort: by_weight
+...
+
+api	api	100000
+claude	claude	100000
+codex	codex	100000
+github	github	100000
+python	python	100000
+token	token	100000

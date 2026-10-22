@@ -1,0 +1,171 @@
+{
+  "id": "denglong",
+  "displayName": {
+    "zh": "红灯笼",
+    "en": "Red Lantern"
+  },
+  "formatVersion": 1,
+  "author": "Agent Input Method",
+  "description": "朱红底、金色细边，红灯笼在右上角轻轻摆动、发出暖光，金粉闪烁；开启「减弱动态效果」时静止。",
+  "candidateFont": {
+    "family": "Weibei SC",
+    "size": 17,
+    "weight": "medium"
+  },
+  "indexFont": {
+    "family": "systemMonospacedDigit",
+    "size": 10.5,
+    "weight": "medium"
+  },
+  "candidateColor": {
+    "light": "#FFF1DA",
+    "dark": "#FFF1DA"
+  },
+  "secondaryCandidateColor": {
+    "light": "#E8C28F",
+    "dark": "#E8C28F"
+  },
+  "indexColor": {
+    "light": "#E0B67E",
+    "dark": "#E0B67E"
+  },
+  "highlightedCandidateColor": {
+    "light": "#FFD36B",
+    "dark": "#FFD36B"
+  },
+  "highlightFillColor": {
+    "light": "#FFD36B22",
+    "dark": "#FFD36B22"
+  },
+  "highlightFillOpacity": 1,
+  "highlightBorderColor": {
+    "light": "#00000000",
+    "dark": "#00000000"
+  },
+  "highlightBorderOpacity": 1,
+  "rowHeight": 38,
+  "horizontalPadding": 11,
+  "verticalPadding": 6,
+  "indexCandidateSpacing": 6,
+  "candidateSpacing": 11,
+  "rowSpacing": 8,
+  "capsuleCornerRadius": 14,
+  "panelCornerRadius": 14,
+  "edgeInsets": {
+    "top": 11,
+    "left": 13,
+    "bottom": 11,
+    "right": 58
+  },
+  "material": "hudWindow",
+  "minimumPanelSize": {
+    "width": 120,
+    "height": 60
+  },
+  "maximumPanelWidth": 760,
+  "widthQuantization": 20,
+  "panelBackground": {
+    "light": "#4A0E12",
+    "dark": "#4A0E12"
+  },
+  "panelBorderColor": {
+    "light": "#E0B35A",
+    "dark": "#E0B35A"
+  },
+  "panelBorderWidth": 1,
+  "shadowEnabled": true,
+  "overflow": {
+    "top": 28,
+    "left": 0,
+    "bottom": 0,
+    "right": 8
+  },
+  "decorations": [
+    {
+      "type": "gradient",
+      "from": {
+        "light": "#450C10",
+        "dark": "#450C10"
+      },
+      "to": {
+        "light": "#7F1E22",
+        "dark": "#7F1E22"
+      },
+      "angle": 20,
+      "layer": "below"
+    },
+    {
+      "type": "twinkle",
+      "count": 7,
+      "size": {
+        "min": 3,
+        "max": 6
+      },
+      "color": {
+        "light": "#FFE29A",
+        "dark": "#FFE29A"
+      },
+      "period": {
+        "min": 1.4,
+        "max": 3.2
+      },
+      "seed": 13,
+      "layer": "below",
+      "region": {
+        "x": 0.7,
+        "y": 0.1,
+        "width": 0.28,
+        "height": 0.8
+      }
+    },
+    {
+      "type": "shimmer",
+      "color": {
+        "light": "#FFD98A66",
+        "dark": "#FFD98A66"
+      },
+      "period": 8,
+      "width": 0.14,
+      "angle": 16,
+      "layer": "above"
+    },
+    {
+      "type": "sprite",
+      "sheet": "lantern.png",
+      "frames": 1,
+      "size": {
+        "width": 34,
+        "height": 84
+      },
+      "anchor": {
+        "x": 1,
+        "y": 1
+      },
+      "offset": {
+        "x": -12,
+        "y": 24
+      },
+      "overflow": true,
+      "pivot": {
+        "x": 0.5,
+        "y": 1
+      },
+      "motion": [
+        {
+          "kind": "sway",
+          "degrees": 4.5,
+          "period": 5
+        },
+        {
+          "kind": "glow",
+          "color": {
+            "light": "#FF6A3D",
+            "dark": "#FF6A3D"
+          },
+          "radius": 12,
+          "period": 3.6
+        }
+      ]
+    }
+  ]
+}

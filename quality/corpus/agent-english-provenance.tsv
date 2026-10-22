@@ -1,0 +1,7 @@
+text	reading	weight	source	license	reason
+api	api	100000	V04-DEV-PLAN Part 0.7	project-authored	owner-required mixed-language regression term
+claude	claude	100000	V04-DEV-PLAN Part 0.7	project-authored	owner daily mixed-language term
+codex	codex	100000	V04-DEV-PLAN Part 0.7	project-authored	owner daily mixed-language term
+github	github	100000	V04-DEV-PLAN Part 0.7	project-authored	owner-required technical regression term
+python	python	100000	V04-DEV-PLAN Part 0.7	project-authored	owner-required technical regression term
+token	token	100000	V04-DEV-PLAN Part 0.7	project-authored	owner-required technical regression term

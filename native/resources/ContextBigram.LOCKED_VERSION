@@ -1,0 +1,14 @@
+schema_version=1
+training_input=third_party/context-corpus/context-corpus-v1.txt
+training_input_sha256=144436caa8c4e44e655a6fc35956e0a9055477065253a3f4314cee438c34cac2
+provenance=third_party/context-corpus/provenance.tsv
+provenance_sha256=02c06790e43f3e2de74d78dfaedd05c6d0e03f13c232bf1b0c8a1b877558889a
+segmenter=Intl.Segmenter:zh-CN:word
+segmenter_icu=78.3
+builder=scripts/build_context_bigrams.mjs
+derived_model=native/resources/ContextBigram.bin
+derived_model_sha256=58a7f0fafcbb1cab9297a4893886859e1aeb431c58aded1a6d560a15ccdb0022
+derived_model_entries=16020
+derived_model_bytes=278698
+ci_corpus_regeneration=forbidden
+evaluation_input=forbidden

@@ -1,0 +1,4 @@
+pypinyin 0.55.0 is used only while generating the agent THUOCL dictionaries.
+Source: https://github.com/mozillazg/python-pinyin
+License: MIT
+It is not copied into, imported by, or linked into the input-method bundle.

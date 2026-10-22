@@ -1,0 +1,66 @@
+# Project-authored Rime schema. The aggregate dictionary imports the unmodified
+# Apache-2.0 rime-pinyin-simp asset plus the two-entry project-owned
+# agent_daily correction table recorded in DEPENDENCY_REGISTRY.md.
+schema:
+  schema_id: agent_pinyin
+  name: Agent 简体全拼
+  version: "0.3.0"
+  author:
+    - Agent Input Method contributors
+
+switches:
+  - name: ascii_mode
+    reset: 0
+    states: [中文, 英文]
+
+engine:
+  processors:
+    - speller
+    - selector
+    - navigator
+    - express_editor
+  segmentors:
+    - abc_segmentor
+    - fallback_segmentor
+  translators:
+    - script_translator
+  filters:
+    - uniquifier
+
+speller:
+  alphabet: "abcdefghijklmnopqrstuvwxyz'"
+  delimiter: " '"
+  algebra:
+    # Degenerate single-consonant syllables (呒 m、嗯 n/ng、噷 hm、哼 hng)
+    # otherwise outrank common abbreviated matches: an exact syllable match
+    # on "m" beats every abbrev-derived candidate, so typing "zhem" yields
+    # 这呒 instead of 这么. The affected characters stay reachable through
+    # their ordinary full-pinyin readings.
+    - erase/^hm$/
+    - erase/^hng$/
+    - erase/^m$/
+    - erase/^n$/
+    - erase/^ng$/
+    - abbrev/^([a-z]).+$/$1/
+    - abbrev/^([zcs]h).+$/$1/
+    - derive/^([nl])ue$/$1ve/
+    - derive/^([jqxy])u/$1v/
+    - derive/un$/uen/
+    - derive/ui$/uei/
+    - derive/iu$/iou/
+
+translator:
+  dictionary: agent_pinyin
+  enable_completion: true
+  enable_sentence: true
+  enable_user_dict: true
+  # Keep the v0.3 UserDB name stable across the aggregate-dictionary upgrade.
+  user_dict: pinyin_simp
+  enable_encoder: true
+  encode_commit_history: true
+  max_phrase_length: 8
+  spelling_hints: 0
+  preedit_format:
+    - xform/([nl])v/$1ü/
+    - xform/([nl])ue/$1üe/
+    - xform/([jqxy])v/$1u/

@@ -1,0 +1,3 @@
+[workspace]
+members = ["agent-ime-core"]
+resolver = "2"

@@ -1,0 +1,72 @@
+{
+  "include": [
+    "native/", "script/", "scripts/", "src/", "src-tauri/", "third_party/",
+    "package.json", "tsconfig.json", "tsconfig.node.json", "index.html", "vite.config.ts",
+    "quality/corpus/*provenance*.tsv", "quality/corpus/base-500.json", "quality/corpus/agent-modern-source.tsv", "quality/corpus/mixed-language-regression-v2.json", "quality/corpus/base-500-ground-truth.txt",
+    "quality/corpus/fuzzy-56.json", "quality/corpus/fuzzy-56-ground-truth.txt", "quality/corpus/generalization-smoke-20.json",
+    "docs/current/licenses/DEPENDENCY_REGISTRY.md",
+    "docs/current/licenses/LOCKED_DEPENDENCIES.json",
+    "docs/current/licenses/NATIVE_LICENSE_ASSETS.json",
+    "docs/current/VERSIONING.md", "README.md", "CHANGELOG.md", "VERSION",
+    "SECURITY.md", "CODE_OF_CONDUCT.md", ".github/ISSUE_TEMPLATE/",
+    "quality/corpus/mixer-hr-replay-v1.json",
+    "quality/corpus/typo-correction-v1.json",
+    "quality/corpus/punctuation-context-v1.json",
+    "quality/golden/behavior-v0.3.tsv",
+    "docs/public/README.md",
+    "docs/public/README.zh-CN.md",
+    "docs/public/CONTRIBUTING.md",
+    "docs/public/SKIN-AUTHORING.md",
+    "docs/public/SKIN-AUTHORING.zh-CN.md",
+    "docs/public/MODEL.md",
+    "docs/public/MODEL.zh-CN.md",
+    "docs/public/TESTING.md",
+    "docs/public/TESTING.zh-CN.md",
+    "docs/public/gitignore.public", "docs/public/PUBLIC_BUILD",
+    "docs/public/skin-example/",
+    "THIRD_PARTY_NOTICES.md", "LICENSE*", "package.json", "package-lock.json", "Cargo.*"
+  ],
+  "exclude": [
+    "src-tauri/src/test_upload.rs", "native/host/src/bin/zhizi-upload.rs",
+    "server/zhizi-ingest/", "scripts/delegate/",
+    "releases/", "tmp/", "ime_context_model/", "eval-runs/", "build/",
+    ".build-deps/", "node_modules/", "target/", "*.dmg", "*.exe", ".workbuddy/",
+    "docs/current/decisions/", "docs/current/evidence/", "docs/current/feedback/",
+    "docs/current/tasks/delegation/", "quality/golden/!(behavior-v0.3.tsv)",
+    "docs/current/licenses/LEXICON-LAYER-AUDIT*",
+    "quality/corpus/agent-ai-terms-provenance.tsv", "quality/corpus/agent-ai-names-provenance.tsv",
+    "quality/corpus/agent-pack-*-provenance.tsv",
+    "scripts/lexicon/curate_packs.py", "scripts/lexicon/export_packs.py", "scripts/lexicon/export_ai_terms.py",
+    "docs/current/licenses/TRAINING-DATA-TERMS*",
+    "quality/mined/", "quality/corpus/learning-cleanup-evidence*.json",
+    "scripts/context_model/zhizi/gpu/", "docs/public/PROMOTION*", "docs/public/PROMOTION*/",
+    "native/resources/Skins/Builtin/!(baitu|chaiquan|denglong|fenghong|juzimao|luoying|nihong|shuitun|songxue|system|xuanmo|youzi|yueye)/",
+    "native/resources/Skins/!(Builtin)/**/*"
+  ],
+  "stub_dicts": [
+    "native/resources/Rime/agent_ai_names.dict.yaml", "native/resources/Rime/agent_ai_terms.dict.yaml",
+    "native/resources/Rime/agent_pack_terms.dict.yaml", "native/resources/Rime/agent_pack_poetry.dict.yaml",
+    "native/resources/Rime/agent_pack_cad.dict.yaml", "native/resources/Rime/agent_pack_industry.dict.yaml"
+  ],
+  "rename": {"docs/public/README.md": "README.md", "docs/public/README.zh-CN.md": "README.zh-CN.md",
+             "docs/public/gitignore.public": ".gitignore", "docs/public/PUBLIC_BUILD": "PUBLIC_BUILD"},
+  "_skins_note": "Whitelist lists only the fixed free skins shipped with the input method; skins added later, free or paid, are provided by a separate skin module and must not enter this repository or this whitelist. 白名单仅列随输入法分发的固定免费皮肤；以后新增的皮肤（免费或付费）由独立皮肤模块提供，不进本仓库，不得加入此白名单。",
+  "scan": {
+    "blocker": [
+      {"name": "private_invite_path", "pattern": "tmp[/]zhizi-invite"},
+      {"name": "invite_file_reference", "pattern": "invite[.]txt"},
+      {"name": "openai_token", "pattern": "sk-[A-Za-z0-9]{16,}", "allow": ["sk-abcdefghijklmnop"]},
+      {"name": "github_token", "pattern": "ghp_[A-Za-z0-9]{20,}"},
+      {"name": "huggingface_token", "pattern": "hf_[A-Za-z0-9]{20,}"},
+      {"name": "aws_access_key", "pattern": "AKIA[0-9A-Z]{12,}", "allow": ["AKIA1234567890ABCD"]},
+      {"name": "owner_home_path", "pattern": "/Users[/]taihe"},
+      {"name": "owner_volume_path", "pattern": "/Volumes[/]GF/"},
+      {"name": "environment_filename", "target": "filename", "pattern": "^\\.env(?:\\..*)?$"}
+    ],
+    "warning": [
+      {"name": "private_test_host", "pattern": "zhizi[.]ihongui[.]com"},
+      {"name": "email_address", "pattern": "[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\\.[A-Za-z]{2,}", "allow": ["owner@example.com"]},
+      {"name": "test_invite_variable", "pattern": "ZHIZI_TEST_INVITE"}
+    ]
+  }
+}

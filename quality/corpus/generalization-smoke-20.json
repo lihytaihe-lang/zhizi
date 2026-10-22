@@ -1,0 +1,27 @@
+{
+  "formatVersion": 1,
+  "kind": "generalization-smoke",
+  "authoringMethod": "Project-authored common utterances selected before decoder replay; no query or allowed answer appears in base-500 or agent_daily.",
+  "cases": [
+    { "id": "holdout-001", "category": "holdout", "query": "jintianhenleng", "allowed": ["今天很冷"], "mustPassTop1": false },
+    { "id": "holdout-002", "category": "holdout", "query": "mingtianjian", "allowed": ["明天见"], "mustPassTop1": false },
+    { "id": "holdout-003", "category": "holdout", "query": "yihuilianxi", "allowed": ["一会联系"], "mustPassTop1": false },
+    { "id": "holdout-004", "category": "holdout", "query": "zhoumohaohaoxiuxi", "allowed": ["周末好好休息"], "mustPassTop1": false },
+    { "id": "holdout-005", "category": "holdout", "query": "wanfanchilema", "allowed": ["晚饭吃了吗"], "mustPassTop1": false },
+    { "id": "holdout-006", "category": "holdout", "query": "wozaigongsi", "allowed": ["我在公司"], "mustPassTop1": false },
+    { "id": "holdout-007", "category": "holdout", "query": "daolegaosuwo", "allowed": ["到了告诉我"], "mustPassTop1": false },
+    { "id": "holdout-008", "category": "holdout", "query": "lushangzhuyianquan", "allowed": ["路上注意安全"], "mustPassTop1": false },
+    { "id": "holdout-009", "category": "holdout", "query": "qingbaochilianxi", "allowed": ["请保持联系"], "mustPassTop1": false },
+    { "id": "holdout-010", "category": "holdout", "query": "xiacizaishuo", "allowed": ["下次再说"], "mustPassTop1": false },
+    { "id": "holdout-011", "category": "holdout", "query": "womenyihuierjian", "allowed": ["我们一会儿见"], "mustPassTop1": false },
+    { "id": "holdout-012", "category": "holdout", "query": "jideguanhaomenchuang", "allowed": ["记得关好门窗"], "mustPassTop1": false },
+    { "id": "holdout-013", "category": "holdout", "query": "huijialushangmanmanzou", "allowed": ["回家路上慢慢走"], "mustPassTop1": false },
+    { "id": "holdout-014", "category": "holdout", "query": "xiawuyouhuiyi", "allowed": ["下午有会议"], "mustPassTop1": false },
+    { "id": "holdout-015", "category": "holdout", "query": "wenjianyijingbaocun", "allowed": ["文件已经保存"], "mustPassTop1": false },
+    { "id": "holdout-016", "category": "holdout", "query": "diannaoxuyaochongqi", "allowed": ["电脑需要重启"], "mustPassTop1": false },
+    { "id": "holdout-017", "category": "holdout", "query": "qingjianchawangluolianjie", "allowed": ["请检查网络连接"], "mustPassTop1": false },
+    { "id": "holdout-018", "category": "holdout", "query": "shoujidianliangbuzu", "allowed": ["手机电量不足"], "mustPassTop1": false },
+    { "id": "holdout-019", "category": "holdout", "query": "dengyixiamashanghao", "allowed": ["等一下马上好"], "mustPassTop1": false },
+    { "id": "holdout-020", "category": "holdout", "query": "jintiankongqibucuo", "allowed": ["今天空气不错"], "mustPassTop1": false }
+  ]
+}

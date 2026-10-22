@@ -1,0 +1,160 @@
+{
+  "id": "songxue",
+  "displayName": {
+    "zh": "雪松",
+    "en": "Snowy Pine"
+  },
+  "formatVersion": 1,
+  "author": "Agent Input Method",
+  "description": "深青蓝夜色，覆雪的松枝从右上角垂下轻摆，雪花飘落；开启「减弱动态效果」时静止。",
+  "candidateFont": {
+    "family": "Kaiti SC",
+    "size": 17,
+    "weight": "medium"
+  },
+  "indexFont": {
+    "family": "systemMonospacedDigit",
+    "size": 10.5,
+    "weight": "medium"
+  },
+  "candidateColor": {
+    "light": "#EEF5F6",
+    "dark": "#EEF5F6"
+  },
+  "secondaryCandidateColor": {
+    "light": "#9DB7BD",
+    "dark": "#9DB7BD"
+  },
+  "indexColor": {
+    "light": "#8FAAB0",
+    "dark": "#8FAAB0"
+  },
+  "highlightedCandidateColor": {
+    "light": "#8FE3F0",
+    "dark": "#8FE3F0"
+  },
+  "highlightFillColor": {
+    "light": "#8FE3F022",
+    "dark": "#8FE3F022"
+  },
+  "highlightFillOpacity": 1,
+  "highlightBorderColor": {
+    "light": "#00000000",
+    "dark": "#00000000"
+  },
+  "highlightBorderOpacity": 1,
+  "rowHeight": 38,
+  "horizontalPadding": 11,
+  "verticalPadding": 6,
+  "indexCandidateSpacing": 6,
+  "candidateSpacing": 11,
+  "rowSpacing": 8,
+  "capsuleCornerRadius": 14,
+  "panelCornerRadius": 14,
+  "edgeInsets": {
+    "top": 11,
+    "left": 13,
+    "bottom": 11,
+    "right": 88
+  },
+  "material": "hudWindow",
+  "minimumPanelSize": {
+    "width": 120,
+    "height": 60
+  },
+  "maximumPanelWidth": 760,
+  "widthQuantization": 20,
+  "panelBackground": {
+    "light": "#0E2229",
+    "dark": "#0E2229"
+  },
+  "panelBorderColor": {
+    "light": "#5E8E99",
+    "dark": "#5E8E99"
+  },
+  "panelBorderWidth": 0.5,
+  "shadowEnabled": true,
+  "overflow": {
+    "top": 22,
+    "left": 0,
+    "bottom": 0,
+    "right": 8
+  },
+  "decorations": [
+    {
+      "type": "gradient",
+      "from": {
+        "light": "#0D2027",
+        "dark": "#0D2027"
+      },
+      "to": {
+        "light": "#21444E",
+        "dark": "#21444E"
+      },
+      "angle": 18,
+      "layer": "below"
+    },
+    {
+      "type": "petals",
+      "rate": 4.2,
+      "size": {
+        "min": 3,
+        "max": 6
+      },
+      "color": {
+        "light": "#FFFFFF",
+        "dark": "#FFFFFF"
+      },
+      "lifetime": 5.5,
+      "fallSpeed": 13,
+      "drift": -5,
+      "layer": "above",
+      "region": {
+        "x": 0.52,
+        "y": 0.8,
+        "width": 0.46,
+        "height": 0.2
+      }
+    },
+    {
+      "type": "shimmer",
+      "color": {
+        "light": "#BFEFFF55",
+        "dark": "#BFEFFF55"
+      },
+      "period": 12,
+      "width": 0.16,
+      "angle": 18,
+      "layer": "above"
+    },
+    {
+      "type": "sprite",
+      "sheet": "pine.png",
+      "frames": 1,
+      "size": {
+        "width": 92,
+        "height": 78
+      },
+      "anchor": {
+        "x": 1,
+        "y": 1
+      },
+      "offset": {
+        "x": 8,
+        "y": 22
+      },
+      "overflow": true,
+      "pivot": {
+        "x": 1,
+        "y": 1
+      },
+      "motion": [
+        {
+          "kind": "sway",
+          "degrees": 1.2,
+          "period": 7.5
+        }
+      ]
+    }
+  ]
+}
