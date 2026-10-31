@@ -1,25 +1,41 @@
-param([string]$Root='H:\zhizi',[switch]$Package,[string]$StageDir='')
+param([string]$Root='H:\zhizi',[switch]$Package,[switch]$Public,[string]$StageDir='')
 if(!$StageDir){$StageDir=Join-Path $Root ('stage-'+(Get-Date -Format 'yyyyMMdd-HHmmss'))}
 $ErrorActionPreference='Stop'
 [Console]::OutputEncoding=[Text.Encoding]::UTF8
+# public-check: invite guard begin (rejects environment input; never packaged)
+if($Public -and (Test-Path Env:ZHIZI_TEST_INVITE)){throw 'Public build rejects the test invite environment variable'}
+# public-check: invite guard end
+if($Public -and (Test-Path $StageDir) -and (Get-ChildItem $StageDir -Force | Select-Object -First 1)){throw 'Public build requires an empty stage directory'}
 $env:CARGO_TARGET_DIR="$Root\target"
 $env:CARGO_HOME="$Root\cargo"
 $env:TEMP="$Root\temp"; $env:TMP=$env:TEMP
 $env:RIME_ROOT="$Root\deps\librime-1.16.1\dist"
 New-Item -ItemType Directory -Force $env:TEMP,$env:CARGO_HOME,"$StageDir","$Root\output" | Out-Null
 $manifest="$Root\src\native\windows\zhizi-tsf\Cargo.toml"
-cargo build --release --locked --manifest-path $manifest
-if($LASTEXITCODE -ne 0){throw 'TSF build failed'}
+# TSF recording is a compile-time capability; public builds ignore any inherited flag.
+Remove-Item Env:ZHIZI_TEST_RECORDING -ErrorAction SilentlyContinue
+if(!$Public){ # public-check: friend begin
+ $env:ZHIZI_TEST_RECORDING='1'
+} # public-check: friend end
+try {
+ cargo build --release --locked --manifest-path $manifest
+ if($LASTEXITCODE -ne 0){throw 'TSF build failed'}
+} finally {Remove-Item Env:ZHIZI_TEST_RECORDING -ErrorAction SilentlyContinue}
 cargo build --release --manifest-path "$Root\src\native\windows\zhizi-loader\Cargo.toml"
 if($LASTEXITCODE -ne 0){throw 'Loader build failed'}
+if(!$Public){ # public-check: friend begin
 if([string]::IsNullOrWhiteSpace($env:ZHIZI_TEST_INVITE)){throw 'Missing ZHIZI_TEST_INVITE (never put it in source)'}
 try {
  cargo build --release --features upload --bin zhizi-upload --manifest-path "$Root\src\native\host\Cargo.toml"
  if($LASTEXITCODE -ne 0){throw 'Uploader build failed'}
 } finally {Remove-Item Env:ZHIZI_TEST_INVITE -ErrorAction SilentlyContinue}
+} # public-check: friend end
 cargo build --release --bin zhizi-settings --manifest-path "$Root\src\native\host\Cargo.toml"
 if($LASTEXITCODE -ne 0){throw 'Settings tool build failed'}
-Copy-Item "$Root\target\release\zhizi_tsf.dll","$Root\target\release\zhizi-upload.exe","$Root\target\release\zhizi-settings.exe","$env:RIME_ROOT\lib\rime.dll" "$StageDir" -Force
+Copy-Item "$Root\target\release\zhizi_tsf.dll","$Root\target\release\zhizi-settings.exe","$env:RIME_ROOT\lib\rime.dll" "$StageDir" -Force
+if(!$Public){ # public-check: friend begin
+ Copy-Item "$Root\target\release\zhizi-upload.exe" "$StageDir" -Force
+} # public-check: friend end
 Copy-Item "$Root\deps\onnxruntime\onnxruntime.dll" "$StageDir" -Force
 # the loader is installed beside the release folders (not in one): it is the DLL Windows registers and it never changes
 $loaderDir="$StageDir.loader"; New-Item -ItemType Directory -Force $loaderDir | Out-Null
@@ -34,13 +50,14 @@ $rimeFiles='default.yaml','agent_pinyin.schema.yaml','agent_pinyin.dict.yaml','a
  'agent_english.dict.yaml','agent_project_terms.dict.yaml','agent_tech_terms.dict.yaml','agent_ai_terms.dict.yaml','agent_pack_terms.dict.yaml',
  'agent_idioms.dict.yaml','agent_thuocl_it.dict.yaml','agent_thuocl_caijing.dict.yaml','agent_modern.dict.yaml','agent_general.dict.yaml',
  'agent_newwords.dict.yaml','agent_spoken.dict.yaml','agent_ai_names.dict.yaml','agent_pack_poetry.dict.yaml','agent_pack_cad.dict.yaml',
- 'agent_pack_industry.dict.yaml','agent_exact_readings.tsv'
+ 'agent_pack_industry.dict.yaml','agent_owner_words.dict.yaml','agent_exact_readings.tsv'
 foreach($f in $rimeFiles){Copy-Item "$Root\src\native\resources\Rime\$f" "$StageDir\Rime\$f" -Force}
 Copy-Item "$Root\shared\Rime\pinyin_simp.dict.yaml" "$StageDir\Rime\pinyin_simp.dict.yaml" -Force
 $missing=Get-ChildItem "$Root\src\native\resources\Rime" -Filter '*.dict.yaml' | Where-Object {$rimeFiles -notcontains $_.Name}
 if($missing){throw ('Rime files not staged: '+($missing.Name -join ', '))}
 New-Item -ItemType Directory -Force "$StageDir\Licenses" | Out-Null
 Copy-Item "$Root\src\native\windows\licenses\*" "$StageDir\Licenses" -Force
+if($Public){ & "$PSScriptRoot\check_windows_public_package.ps1" -Path $StageDir }
 $manifestFiles=Get-ChildItem "$StageDir" -Recurse -File | Where-Object {$_.Name -ne 'SHA256SUMS.txt'} | ForEach-Object {
  $hash=Get-FileHash $_.FullName -Algorithm SHA256
  "$($hash.Hash.ToLower())  $($_.FullName.Substring(($StageDir+'\').Length))"
@@ -55,6 +72,8 @@ if($Package){
  $tag='b'+(Get-Date -Format 'yyyyMMddHHmmss')
  $ver=(Get-Content -Raw "$Root\src\VERSION").Trim()
  if($ver -notmatch '^\d+\.\d+\.\d+$'){throw "bad VERSION: $ver"}
- & "$Root\tools\InnoSetup\ISCC.exe" "/DTag=$tag" "/DVersion=$ver" "/DStage=$StageDir" "/DOutput=$Root\output" "/DRuntime=$runtime" "/DLoaderDir=$loaderDir" "$Root\src\native\windows\installer\zhizi.iss"
+ $variantArgs=@()
+ if($Public){$variantArgs+='/DPUBLIC'}
+ & "$Root\tools\InnoSetup\ISCC.exe" @variantArgs "/DTag=$tag" "/DVersion=$ver" "/DStage=$StageDir" "/DOutput=$Root\output" "/DRuntime=$runtime" "/DLoaderDir=$loaderDir" "$Root\src\native\windows\installer\zhizi.iss"
  if($LASTEXITCODE -ne 0){throw 'Installer build failed'}
 }

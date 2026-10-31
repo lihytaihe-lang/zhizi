@@ -1560,6 +1560,7 @@
 不大可能	bu da ke neng
 不大喜欢	bu da xi huan
 不大好	bu da hao
+不大靠谱	bu da kao pu
 不太习惯	bu tai xi guan
 不太会	bu tai hui
 不太值	bu tai zhi
@@ -1927,6 +1928,7 @@
 专业训练	zhuan ye xun lian
 专业词典	zhuan ye ci dian
 专业词库	zhuan ye ci ku
+专业词汇	zhuan ye ci hui
 专任	zhuan ren
 专八	zhuan ba
 专卖局	zhuan mai ju
@@ -3819,6 +3821,7 @@
 云计算应用	yun ji suan ying yong
 云计算开发	yun ji suan kai fa
 云计算服务	yun ji suan fu wu
+云词库	yun ci ku
 云课堂	yun ke tang
 云豹	yun bao
 云赛事	yun sai shi
@@ -4413,6 +4416,7 @@
 人岗匹配	ren gang pi pei
 人工呢	ren gong ne
 人工呼吸	ren gong hu xi
+人工审核	ren gong shen he
 人工客服	ren gong ke fu
 人工岛	ren gong dao
 人工干预	ren gong gan yu
@@ -4759,6 +4763,7 @@
 付诸实施	fu zhu shi shi
 付费墙	fu fei qiang
 付费电视	fu fei dian shi
+付费皮肤	fu fei pi fu
 付费短剧	fu fei duan ju
 付费解锁	fu fei jie suo
 付钱的时候	fu qian de shi hou
@@ -6731,6 +6736,7 @@
 候车进站	hou che jin zhan
 候选人体验	hou xuan ren ti yan
 候选国	hou xuan guo
+候选字	hou xuan zi
 候选排序	hou xuan pai xu
 候选栏	hou xuan lan
 候选框	hou xuan kuang
@@ -7175,6 +7181,7 @@
 像我这样	xiang wo zhe yang
 像现在	xiang xian zai
 像真人	xiang zhen ren
+像素块	xiang su kuai
 像素大灯	xiang su da deng
 像素点	xiang su dian
 像素风	xiang su feng
@@ -13283,6 +13290,7 @@
 占坑位	zhan keng wei
 占多数	zhan duo shu
 占座位	zhan zuo wei
+占比	zhan bi
 占满	zhan man
 占满了	zhan man le
 占用一下	zhan yong yi xia
@@ -13432,6 +13440,7 @@
 危地马拉	wei di ma la
 危地马拉城	wei di ma la cheng
 危殆	wei dai
+危险告警	wei xian gao jing
 危险废物	wei xian fei wu
 即买即退	ji mai ji tui
 即今	ji jin
@@ -13462,6 +13471,7 @@
 即时配送	ji shi pei song
 即时零售	ji shi ling shou
 即期	ji qi
+即梦	ji meng
 即申即享	ji shen ji xiang
 即食	ji shi
 却没能	que mei neng
@@ -16597,6 +16607,7 @@
 咋弄的	za nong de
 咋换乘啊	za huan cheng a
 咋搞的	za gao de
+咋整	za zheng
 咋整啊	za zheng a
 咋样了	za yang le
 咋样嘛	za yang ma
@@ -16927,6 +16938,7 @@
 商工	shang gong
 商战剧	shang zhan ju
 商朝	shang chao
+商汤	shang tang
 商汤日日新	shang tang ri ri xin
 商河	shang he
 商用授权	shang yong shou quan
@@ -18301,6 +18313,7 @@
 在线私教	zai xian si jiao
 在线笔试	zai xian bi shi
 在线等	zai xian deng
+在线简历	zai xian jian li
 在线算法	zai xian suan fa
 在线编程	zai xian bian cheng
 在线编辑器	zai xian bian ji qi
@@ -21168,6 +21181,7 @@
 子房	zi fang
 子数组	zi shu zu
 子方法	zi fang fa
+子智能体	zi zhi neng ti
 子查询	zi cha xun
 子树	zi shu
 子模式	zi mo shi
@@ -22249,8 +22263,10 @@
 宣传图	xuan chuan tu
 宣传委员	xuan chuan wei yuan
 宣传材料	xuan chuan cai liao
+宣传语	xuan chuan yu
 宣传队	xuan chuan dui
 宣化	xuan hua
+宣发	xuan fa
 宣导	xuan dao
 宣慰	xuan wei
 宣纸	xuan zhi
@@ -23940,6 +23956,7 @@
 工信局	gong xin ju
 工信部	gong xin bu
 工兵营	gong bing ying
+工具书	gong ju shu
 工具人	gong ju ren
 工具介绍	gong ju jie shao
 工具优化	gong ju you hua
@@ -24953,6 +24970,7 @@
 平移变换	ping yi bian huan
 平等待遇	ping deng dai yu
 平等权利	ping deng quan li
+平级	ping ji
 平绒	ping rong
 平胸龟	ping xiong gui
 平菇	ping gu
@@ -25873,12 +25891,14 @@
 开源框架	kai yuan kuang jia
 开源模型	kai yuan mo xing
 开源潮	kai yuan chao
+开源版本	kai yuan ban ben
 开源生态	kai yuan sheng tai
 开源硬件	kai yuan ying jian
 开源社区	kai yuan she qu
 开源类库	kai yuan lei ku
 开源系统	kai yuan xi tong
 开源组件	kai yuan zu jian
+开源许可	kai yuan xu ke
 开源资讯	kai yuan zi xun
 开源轮子	kai yuan lun zi
 开源镜像站	kai yuan jing xiang zhan
@@ -26572,6 +26592,7 @@
 待会再说	dai hui zai shuo
 待会聊	dai hui liao
 待修改	dai xiu gai
+待做	dai zuo
 待分类	dai fen lei
 待办	dai ban
 待办事项	dai ban shi xiang
@@ -30041,6 +30062,7 @@
 抖音	dou yin
 抖音极速版	dou yin ji su ban
 抖音火山版	dou yin huo shan ban
+抖音视频	dou yin shi pin
 抖音豆包	dou yin dou bao
 抗告	kang gao
 抗敌	kang di
@@ -32173,6 +32195,7 @@
 提拉米苏	ti la mi su
 提振消费	ti zhen xiao fei
 提提神	ti ti shen
+提效	ti xiao
 提早到	ti zao dao
 提案人	ti an ren
 提档	ti dang
@@ -39729,6 +39752,7 @@
 水袋	shui dai
 水谷	shui gu
 水豆腐	shui dou fu
+水豚	shui tun
 水貂	shui diao
 水车	shui che
 水轮发电机	shui lun fa dian ji
@@ -39981,6 +40005,7 @@
 沙瓤	sha rang
 沙田柚	sha tian you
 沙画	sha hua
+沙盒	sha he
 沙盒机制	sha he ji zhi
 沙盒游戏	sha he you xi
 沙盒监管	sha he jian guan
@@ -41568,6 +41593,7 @@
 混响	hun xiang
 混成	hun cheng
 混成旅	hun cheng lv
+混拼	hun pin
 混排	hun pai
 混放	hun fang
 混氧跑	hun yang pao
@@ -42530,6 +42556,7 @@
 炙烤	zhi kao
 炝个锅	qiang ge guo
 炝炒圆白菜	qiang chao yuan bai cai
+炫酷	xuan ku
 炫酷效果	xuan ku xiao guo
 炫饭	xuan fan
 炬力	ju li
@@ -43326,6 +43353,7 @@
 爬出来	pa chu lai
 爬升	pa sheng
 爬华山	pa hua shan
+爬取	pa qu
 爬坡	pa po
 爬宠	pa chong
 爬山法	pa shan fa
@@ -45606,6 +45634,7 @@
 皮筋	pi jin
 皮肤检测	pi fu jian ce
 皮肤痒	pi fu yang
+皮肤管理	pi fu guan li
 皮肤衣	pi fu yi
 皮艇	pi ting
 皮薄馅多	pi bao xian duo
@@ -47266,6 +47295,7 @@
 碳金融	tan jin rong
 碾碎	nian sui
 磁力	ci li
+磁吸	ci xi
 磁吸充电	ci xi chong dian
 磁吸生态	ci xi sheng tai
 磁器	ci qi
@@ -47778,6 +47808,7 @@
 租屋	zu wu
 租房合同	zu fang he tong
 租方	zu fang
+租显卡	zu xian ka
 租期	zu qi
 租用线路	zu yong xian lu
 租税	zu shui
@@ -48622,6 +48653,7 @@
 第一栏	di yi lan
 第一格	di yi ge
 第一桌	di yi zhuo
+第一梯队	di yi ti dui
 第一次去	di yi ci qu
 第一次去吃	di yi ci qu chi
 第一次参加	di yi ci can jia
@@ -49361,6 +49393,7 @@
 管理之道	guan li zhi dao
 管理例程	guan li li cheng
 管理信息系统	guan li xin xi xi tong
+管理后台	guan li hou tai
 管理员帐号	guan li yuan zhang hao
 管理员权限	guan li yuan quan xian
 管理员登陆	guan li yuan deng lu
@@ -52448,6 +52481,7 @@
 肌醇	ji chun
 肌钙蛋白	ji gai dan bai
 肌骨超声	ji gu chao sheng
+肖像权	xiao xiang quan
 肖像画	xiao xiang hua
 肘子	zhou zi
 肘部	zhou bu
@@ -52876,6 +52910,7 @@
 脏数据检查	zang shu ju jian cha
 脐橙	qi cheng
 脐钉	qi ding
+脑图	nao tu
 脑壳疼	nao ke teng
 脑外科	nao wai ke
 脑子疼	nao zi teng
@@ -53814,6 +53849,7 @@
 苞片	bao pian
 苞米	bao mi
 苞谷	bao gu
+苟住	gou zhu
 苟在妖武乱世修仙	gou zai yao wu luan shi xiu xian
 若以	ruo yi
 若干个	ruo gan ge
@@ -54232,6 +54268,7 @@
 萱草	xuan cao
 萼片	e pian
 落下了	la xia le
+落不了地	luo bu liao di
 落到	luo dao
 落单	luo dan
 落叶林	luo ye lin
@@ -55228,6 +55265,7 @@
 被罩	bei zhao
 被老板	bei lao ban
 被芯	bei xin
+被裁	bei cai
 被覆盖	bei fu gai
 被视为	bei shi wei
 被誉为	bei yu wei
@@ -55696,6 +55734,7 @@
 视觉大模型	shi jue da mo xing
 视觉模型	shi jue mo xing
 视觉算法	shi jue suan fa
+视觉能力	shi jue neng li
 视觉艺术	shi jue yi shu
 视觉记忆	shi jue ji yi
 视觉设计	shi jue she ji
@@ -56323,6 +56362,7 @@
 记忆体	ji yi ti
 记忆化	ji yi hua
 记忆化搜索	ji yi hua sou suo
+记忆宫殿	ji yi gong dian
 记忆库	ji yi ku
 记忆机制	ji yi ji zhi
 记忆棉	ji yi mian
@@ -56709,6 +56749,7 @@
 诛杀	zhu sha
 话剧团	hua ju tuan
 话又说回来	hua you shuo hui lai
+话术	hua shu
 话梅	hua mei
 话说回来	hua shuo hui lai
 话费余额	hua fei yu e
@@ -56750,6 +56791,7 @@
 该集	gai ji
 该馆	gai guan
 该驱虫了	gai qu chong le
+详情卡片	xiang qing ka pian
 详情页	xiang qing ye
 详细分析	xiang xi fen xi
 详细描述	xiang xi miao shu
@@ -57584,6 +57626,7 @@
 贬为	bian wei
 购买区	gou mai qu
 购买美国	gou mai mei guo
+购买记录	gou mai ji lu
 购回	gou hui
 购房资格	gou fang zi ge
 购汇	gou hui
@@ -57630,6 +57673,7 @@
 贴片面膜	tie pian mian mo
 贴现率	tie xian lv
 贴瓷砖	tie ci zhuan
+贴画	tie hua
 贴砖	tie zhuan
 贴福字	tie fu zi
 贴紧	tie jin
@@ -59084,6 +59128,7 @@
 轮到你	lun dao ni
 轮到我	lun dao wo
 轮到我们	lun dao wo men
+轮动	lun dong
 轮圈	lun quan
 轮岗	lun gang
 轮廓提取	lun kuo ti qu
@@ -61073,6 +61118,7 @@
 透个气	tou ge qi
 透光	tou guang
 透心凉	tou xin liang
+透明代理	tou ming dai li
 透明传送	tou ming chuan song
 透明化	tou ming hua
 透明底盘	tou ming di pan
@@ -61551,6 +61597,7 @@
 避风港	bi feng gang
 邀会	yao hui
 邀请我	yao qing wo
+邀请码	yao qing ma
 邓氏鱼	deng shi yu
 邓白氏编码	deng bai shi bian ma
 那一家	na yi jia
@@ -63580,6 +63627,7 @@
 阿胶	e jiao
 阿莫西林	a mo xi lin
 阿部	a bu
+阿里云	a li yun
 阿里云服务器	a li yun fu wu qi
 阿里云百炼	a li yun bai lian
 阿里云盘	a li yun pan
@@ -63666,6 +63714,7 @@
 降息交易	jiang xi jiao yi
 降息周期	jiang xi zhou qi
 降房租	jiang fang zu
+降智	jiang zhi
 降本	jiang ben
 降本减负	jiang ben jian fu
 降本增效	jiang ben zeng xiao
@@ -63993,6 +64042,7 @@
 雀舌	que she
 雀舌黄杨	que she huang yang
 雁荡山	yan dang shan
+雄安	xiong an
 雄蕊	xiong rui
 雄蜂	xiong feng
 雄辩	xiong bian
@@ -65836,6 +65886,7 @@
 马拉松旅游	ma la song lv you
 马拉松经济	ma la song jing ji
 马拉维	ma la wei
+马斯克	ma si ke
 马斯喀特	ma si ka te
 马普托	ma pu tuo
 马朱罗	ma zhu luo

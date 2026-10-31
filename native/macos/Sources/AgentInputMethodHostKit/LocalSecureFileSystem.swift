@@ -543,6 +543,41 @@ internal final class LocalSecureDirectory: @unchecked Sendable {
         return (data, LocalSecureIdentity(after))
     }
 
+    /// The last `maximumBytes` of a regular file that is appended to while it is read (an
+    /// append-only log): the file must stay the same file and must not shrink; bytes appended
+    /// meanwhile are left for the next read. `truncated` when the file holds more than that.
+    func readRegularTail(
+        _ name: String,
+        maximumBytes: Int
+    ) throws -> (data: Data, truncated: Bool) {
+        guard maximumBytes >= 0 else { throw LocalSecureFileError.tooLarge }
+        try verifyImmediateBinding()
+        let (fileDescriptor, before) = try openRegular(name, expected: nil)
+        defer { close(fileDescriptor) }
+        guard before.st_size >= 0 else { throw LocalSecureFileError.changed }
+        let start = max(0, before.st_size - off_t(maximumBytes))
+        var data = Data(count: Int(before.st_size - start))
+        try data.withUnsafeMutableBytes { bytes in
+            var offset = 0
+            while offset < bytes.count {
+                let count = pread(fileDescriptor, bytes.baseAddress!.advanced(by: offset),
+                                  bytes.count - offset, start + off_t(offset))
+                if count < 0, errno == EINTR { continue }
+                guard count > 0 else { throw LocalSecureFileError.changed }
+                offset += count
+            }
+        }
+        var after = stat()
+        guard fstat(fileDescriptor, &after) == 0,
+              LocalSecureIdentity(before).matchesIdentity(after),
+              after.st_size >= before.st_size,
+              let current = try entryStatus(name),
+              LocalSecureIdentity(after).matchesIdentity(current) else {
+            throw LocalSecureFileError.changed
+        }
+        return (data, start > 0)
+    }
+
     @discardableResult
     func createExclusiveRegular(
         _ name: String,

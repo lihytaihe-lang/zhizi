@@ -37,6 +37,7 @@ const factoryPriorityInputPaths = [
     "native/resources/Rime/agent_pack_poetry.dict.yaml",
     "native/resources/Rime/agent_pack_cad.dict.yaml",
     "native/resources/Rime/agent_pack_industry.dict.yaml",
+    "native/resources/Rime/agent_owner_words.dict.yaml",
   ].map((relative) => path.join(root, relative)),
 ];
 

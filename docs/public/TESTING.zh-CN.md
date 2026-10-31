@@ -16,39 +16,48 @@ CARGO_TARGET_DIR=/tmp/zhizi-public-manager cargo test --offline --locked --no-de
 CARGO_TARGET_DIR=/tmp/zhizi-public-manager cargo test --offline --locked --no-default-features --manifest-path src-tauri/Cargo.toml --bins
 CARGO_TARGET_DIR=/tmp/zhizi-public-host cargo build --offline --locked --manifest-path native/host/Cargo.toml
 node scripts/run-frontend-tests.mjs
-(cd scripts/tools && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v test_public_export test_build_sprite_sheet test_full_regression_cycle)
+(cd scripts/tools && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v test_public_export test_make_public_repo test_sync_version test_full_regression_cycle)
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v scripts.tools.test_build_sprite_sheet scripts.lexicon.test_build_catalog scripts.lexicon.test_build_release_pack scripts.lexicon.test_check_contribution
 (cd scripts/eval && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v test_build_friends_set)
-(cd scripts/context_model && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v test_copy_bundle_model test_copy_bundle_model_tiers test_quality_metadata_compatibility)
+(cd scripts/context_model && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v test_copy_bundle_model test_copy_bundle_model_tiers test_quality_metadata_compatibility test_fetch_public_model)
 (cd scripts/context_model/zhizi && PYTHONDONTWRITEBYTECODE=1 python3.11 -m unittest -v test_check_host_alignment_batching)
 ```
 
-## 已记录的测试结果
+## 测试结果
 
-现有结果记录没有版本与日期，不保证当前检出版本得到相同结果。全新机器的 bootstrap 尚未核实。
+2026-10-23 在 0.1.5 的全新导出树（628 个文件）上，用上面的命令实测，macOS（Apple silicon）。系统 `python3` 是 3.9.6；alignment batching 用 Python 3.11 运行。数字只描述这一份检出，不代表之后的版本。
 
-| 测试或构建 | 已记录结果 |
+| 测试或构建 | 结果 |
 | --- | --- |
-| Core | 212 passed / 0 failed / 6 ignored（2026-10-22 在导出树上实测） |
-| 管理台主库 | 127 passed / 0 failed / 1 ignored（2026-10-22 在导出树上实测，`cargo test --lib --no-default-features`） |
+| Core | 218 passed / 0 failed / 6 ignored |
+| 管理台主库（`--no-default-features`） | 135 passed / 0 failed / 1 ignored |
 | 管理台二进制 | 31 passed |
 | Host 构建 | 退出 0 |
-| 前端（Node） | 43 passed |
-| Sprite sheet | 10 passed |
-| 公开导出器 | 19 passed |
-| 回归 runner 自测 | 17 passed |
+| 前端（Node） | 48 passed |
+| 公开导出器（`test_public_export`） | 25 passed |
+| 公开仓库生成器（`test_make_public_repo`） | 12 passed |
+| 版本同步（`test_sync_version`） | 5 passed |
+| 回归 runner 自测（`test_full_regression_cycle`） | 17 passed（约 200 秒） |
+| Sprite sheet（须从仓库根目录运行） | 10 passed |
+| 词库工具（须从仓库根目录运行） | 42 passed |
 | Friends-set | 7 passed |
-| 原模型拷贝 | 2 passed |
-| 模型三档 | 11 passed |
+| 模型拷贝 | 2 passed |
+| 模型三档 | 12 passed |
 | Metadata compatibility | 1 passed |
+| 公开模型下载 | 13 passed |
 | Alignment batching（Python 3.11） | 7 passed |
 
-回归 runner 自测使用合成 stub 命令，不执行真实回归或产品构建。`test_fetch_public_model` 共运行 13 项，现有记录为 12 项通过、1 项错误；测试不下载模型。Python 3.9 下的 alignment batching 记录包含 5 个错误。core/host 编译记录显示，包含四份合成夹具后没有再发现缺失的编译期嵌入源；管理台记录还包含缺少运行期测试输入的情况。
+导出树里未测：Swift 测试（开发检出里执行 246 项、跳过 16 项、0 失败；那里准备好了完整的 macOS 构建）和下一节的回归门。
+
+回归 runner 自测使用合成 stub 命令，不执行真实回归或产品构建。公开模型下载的测试不下载模型。
 
 ### 已知失败的测试
 
-- 管理台主库：按公开构建的配置（`--no-default-features`）运行时没有失败。带默认特性时测试在公开树里编译不过，因为测试上传模块和 owner 的种子文件不在公开树里。
-- `test_fetch_public_model`：13 项中有 1 项错误；未记录具体测试名称，未核实。
-- Python 3.9 下的 alignment batching：5 项错误；未记录具体测试名称，未核实。
+下列测试只在运行方式不对时失败，各有通过的运行方式。
+
+- 在自己目录里运行的 sprite sheet 和词库工具：`test_build_sprite_sheet` 有 2 项错误（`test_keying_soft_edges_and_despill`、`test_existing_alpha_and_euclidean_tolerance`），`test_check_contribution` 有 1 项（`test_inventory`），都是 `ModuleNotFoundError: No module named 'scripts'`。它们导入 `scripts.…`，须像上面的命令那样从仓库根目录运行。
+- Python 3.9 下的 alignment batching：7 项中 5 项出错，`TypeError: zip() takes no keyword arguments`（`zip(strict=True)` 需要 Python 3.10+）；Python 3.11 下全部通过。
+- 带默认特性的管理台主库：测试在公开树里编译不过，因为测试上传模块和维护者的种子文件不在公开树里。请用 `--no-default-features`。
 
 ## 回归门与可用性
 
@@ -75,14 +84,14 @@ node scripts/run-frontend-tests.mjs
 | `native_license_assets_check` | 1 | `script/test_all.sh:55; scripts/validate_native_license_assets.mjs:13-14,49-50,75` — 许可清单指向未导出的 third_party/licenses；需缓存/工具链。 |
 | `locked_dependency_registry_check` | 1 | `script/test_all.sh:56; scripts/generate_locked_dependency_registry.mjs:8-11,58,73` — 离线读取 package-lock、Cargo 锁文件及 metadata；需要依赖缓存。 |
 | `v010_upgrade_fixture` | 2 | `script/test_all.sh:57; script/test_v010_upgrade_fixture.sh:5-7,28,44-55` — 合成 sqlite 夹具；macOS base64 -D；需要历史 Git commit，纯导出目录没有历史。 |
-| `frontend_tests` | 1 | `script/test_all.sh:58; scripts/run-frontend-tests.mjs:60-78; scripts/typescript-test-loader.mjs:4` — 合成测试 43 项通过，需预装 TypeScript。 |
+| `frontend_tests` | 1 | `script/test_all.sh:58; scripts/run-frontend-tests.mjs:60-78; scripts/typescript-test-loader.mjs:4` — 合成测试 48 项通过，需预装 TypeScript。 |
 | `unittest` | 2 | `script/test_all.sh:63; scripts/tools/test_full_regression_cycle.py:1-10` — tools/eval 包含使用 macOS 工具的合成 shell runner 自测；不是执行真实整轮。 |
 | `dogfood_checkpoint` | 1 | `script/test_all.sh:64; scripts/test_dogfood_checkpoint.mjs:137-179,219-220` — 在临时目录创建合成事件。 |
 | `rc_gate_support` | 2 | `script/test_all.sh:65; script/test_rc_gate_support.sh:6-14,83-132` — 合成 Git 夹具；需要 BSD stat -f。 |
 | `freeze_joint_rc_contract` | 2 | `script/test_all.sh:66; script/test_freeze_joint_rc_contract.sh:11-20,227-228` — 合成夹具；需要 BSD stat 和 xcrun Swift。 |
 | `replay_gate_contract` | 1 | `script/test_all.sh:67; script/check_replay_gate_contract.sh:17-23` — 只检查静态源码契约，不需要语料或构建后的 bundle。 |
 | `frontend_build` | 1 | `script/test_all.sh:68; package.json:9; scripts/typescript-test-loader.mjs:4` — 需预装 npm 依赖及未导出的根 TypeScript/Vite/index 配置；未验收。 |
-| `cargo_test_core` | 1 | `script/test_all.sh:73; native/core/agent-ime-core/src/state.rs:1638,2254` — 包含合成嵌入夹具；167 项通过、6 项忽略。 |
+| `cargo_test_core` | 1 | `script/test_all.sh:73; native/core/agent-ime-core/src/state.rs:1638,2254` — 包含合成嵌入夹具；218 项通过、6 项忽略。 |
 | `cargo_test_core_latency` | 1 | `script/test_all.sh:74; ` — 合成数据的 release 延迟门，取样敏感；未运行。 |
 | `cargo_test_ipc` | 1 | `script/test_all.sh:75; native/ipc/Cargo.toml:1` — Rust IPC crate 测试；需 Cargo 依赖缓存，没有单独运行记录。 |
 | `cargo_build_core_release` | 1 | `script/test_all.sh:76; native/core/agent-ime-core/src/rime.rs:1` — 需准备 librime 缓存和工具链；没有 release 构建记录。 |

@@ -1,0 +1,11 @@
+# 空状态：编辑、翻页、导航和原样上屏均不应构造幽灵输入。
+clear
+backspace
+left
+right
+pagedown
+pageup
+next
+prev
+commit_raw
+clear

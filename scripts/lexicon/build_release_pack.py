@@ -16,6 +16,14 @@ The audit path is relative to this script, independent of the working directory.
 Existing release directories/archives are refused. Tar metadata, member order,
 and gzip metadata are fixed; identical inputs produce identical archive bytes
 with the same Python/zlib implementation.
+
+The packs/ directory serves the six downloadable packs that are among the built
+layers: packs.json (an index sorted by id, with name/description/rows from
+native/resources/Lexicon/lexicon_catalog.json when the pack is listed there),
+a byte copy of each pack dictionary, and a per-pack membership TSV
+("word<TAB>pack id") holding the pack's words that appear in no core layer.
+Membership reuses build_catalog's layer scan; the pinyin_simp base is
+discovered the same way build_catalog does and skipped when absent.
 """
 import argparse
 import gzip
@@ -24,12 +32,23 @@ import io
 import json
 from pathlib import Path
 import re
+import sys
 import tarfile
 import tempfile
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import build_catalog  # noqa: E402
 
 
 AUDIT_PATH = (Path(__file__).resolve().parents[2] / "docs/current/licenses" /
               "LEXICON-LAYER-AUDIT-2026-10-16.md")
+CATALOG_PATH = (Path(__file__).resolve().parents[2] /
+                "native/resources/Lexicon/lexicon_catalog.json")
+
+# Packs the manager may download; each release only ships the ones whose
+# dictionary is among the built layers.
+DOWNLOADABLE_PACKS = ("agent_ai_names", "agent_ai_terms", "agent_pack_cad",
+                      "agent_pack_industry", "agent_pack_poetry", "agent_pack_terms")
 
 
 # Layers whose per-row provenance file does not carry the layer's own name (the THUOCL tables are tracked by their upstream names).
@@ -115,6 +134,53 @@ def readme(version, layers):
     return "\n".join(lines) + "\n"
 
 
+def catalog_entries(catalog_path):
+    """Return {layer id: (name, description, rows)} from the lexicon manager catalog."""
+    if not catalog_path.is_file():
+        return {}
+    catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
+    return {layer["id"]: (layer["name"], layer["description"], layer["rows"])
+            for layer in catalog["layers"]}
+
+
+def pack_files(files, rime, layers, row_counts, catalog_path, base):
+    """Add packs/ (dictionary copies, per-pack membership, files only) to files
+    and return the packs.json entries.
+
+    Only the downloadable packs among the built layers are shipped. A pack's
+    membership lists its own words that appear in no core layer, reusing
+    build_catalog's scan (a None base skips pinyin_simp); a word shared by
+    several packs is listed in each pack's file under that pack's id.
+    """
+    present = sorted(set(DOWNLOADABLE_PACKS) & set(layers))
+    if not present:
+        return []
+    if base is None:
+        try:
+            base = build_catalog.find_default_base()
+        except FileNotFoundError:
+            base = None
+    _, _, core_words, _ = build_catalog.scan_layers(rime, base)
+    entries = catalog_entries(catalog_path)
+    packs = []
+    for pack_id in present:
+        dict_data = files[f"layers/{pack_id}.dict.yaml"]
+        files[f"packs/{pack_id}.dict.yaml"] = dict_data
+        _, words = build_catalog.read_layer(rime / (pack_id + ".dict.yaml"))
+        membership = ("".join(f"{word}\t{pack_id}\n" for word in sorted(words - core_words))
+                      ).encode("utf-8")
+        files[f"packs/{pack_id}.membership.tsv"] = membership
+        name, description, rows = entries.get(pack_id, (pack_id, "", row_counts[pack_id]))
+        packs.append({
+            "id": pack_id, "name": name, "description": description, "rows": rows,
+            "dict": {"file": f"{pack_id}.dict.yaml", "sha256": sha256(dict_data),
+                     "bytes": len(dict_data)},
+            "membership": {"file": f"{pack_id}.membership.tsv", "sha256": sha256(membership),
+                           "bytes": len(membership)},
+        })
+    return packs
+
+
 def write_archive(directory, archive):
     """Write sorted tar members with normalized tar and gzip metadata."""
     with archive.open("wb") as raw:
@@ -133,8 +199,11 @@ def write_archive(directory, archive):
                         tar.addfile(info, io.BytesIO(data))
 
 
-def build_release_pack(rime, provenance, version, out, layers=None, audit_path=AUDIT_PATH):
-    """Build a release and return its directory; audit_path supports fixture audits."""
+def build_release_pack(rime, provenance, version, out, layers=None, audit_path=AUDIT_PATH,
+                       catalog_path=CATALOG_PATH, base=None):
+    """Build a release and return its directory; audit_path/catalog_path/base
+    support fixtures (base None discovers the pinned pinyin_simp like
+    build_catalog and proceeds without it when absent)."""
     rime, provenance, out, audit_path = map(Path, (rime, provenance, out, audit_path))
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", version):
         raise ValueError("version must contain only letters, digits, dots, underscores or hyphens")
@@ -171,6 +240,11 @@ def build_release_pack(rime, provenance, version, out, layers=None, audit_path=A
     files["MANIFEST.json"] = (json.dumps({"version": version, "layers": manifest},
                                          ensure_ascii=False, indent=2) + "\n").encode("utf-8")
     files["README.md"] = readme(version, manifest).encode("utf-8")
+    row_counts = {entry["name"]: entry["rows"] for entry in manifest}
+    packs = pack_files(files, rime, layers, row_counts, catalog_path, base)
+    files["packs/packs.json"] = (json.dumps(
+        {"formatVersion": 1, "lexiconVersion": version, "packs": packs},
+        sort_keys=True, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
     files["SHA256SUMS"] = "".join(f"{sha256(data)}  {name}\n"
                                    for name, data in sorted(files.items())).encode("utf-8")
     out.mkdir(parents=True, exist_ok=True)

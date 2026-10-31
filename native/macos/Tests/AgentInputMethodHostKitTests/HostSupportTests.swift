@@ -1783,6 +1783,43 @@ final class HostSupportTests: XCTestCase {
         XCTAssertEqual(session.activeAppIdentifierForTesting, "com.apple.TextEdit")
     }
 
+    func testDiagnosticsRecordKeyStagesOnlyWhenGiven() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("agent-ime-diagnostics-\(UUID().uuidString)", isDirectory: true)
+        let recorder = DiagnosticsRecorder(directory: directory)
+        func result(_ id: UInt64) -> IMEViewModel {
+            IMEViewModel(
+                status: 0, consumed: true, directEnglish: false, secureDegraded: false,
+                markedText: "ni", markedCursorUTF8: 2, commitText: "",
+                candidates: [IMECandidate(text: "你", comment: "")],
+                highlightedIndex: 0, pageNumber: 0, isLastPage: true,
+                selectionEventID: id, coreElapsedNanoseconds: 100
+            )
+        }
+        var stages = KeyStageTimings()
+        stages.process = 7_000
+        stages.model = 4_000
+        stages.panel = 9_000
+        recorder.record(eventKind: "text", result: result(1), totalElapsedNanoseconds: 20_000,
+                        clientIdentifier: "app", stages: stages)
+        recorder.record(eventKind: "text", result: result(2), totalElapsedNanoseconds: 300, clientIdentifier: "app")
+        recorder.flush()
+        let lines = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "jsonl" }
+            .flatMap { try String(contentsOf: $0, encoding: .utf8).split(separator: "\n") }
+        let events = try lines.map { try JSONSerialization.jsonObject(with: Data($0.utf8)) as! [String: Any] }
+        XCTAssertEqual(events.count, 2)
+        let timed = try XCTUnwrap(events.first { ($0["selectionEventID"] as? Int) == 1 })
+        let recorded = try XCTUnwrap(timed["stages"] as? [String: Int])
+        XCTAssertEqual(recorded["process"], 7_000)
+        XCTAssertEqual(recorded["model"], 4_000)
+        XCTAssertEqual(recorded["panel"], 9_000)
+        XCTAssertEqual(recorded.count, 9)
+        let untimed = try XCTUnwrap(events.first { ($0["selectionEventID"] as? Int) == 2 })
+        XCTAssertNil(untimed["stages"])
+        try? FileManager.default.removeItem(at: directory)
+    }
+
     func testDiagnosticsContainNoInputCandidateOrSecretText() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("agent-ime-diagnostics-\(UUID().uuidString)", isDirectory: true)

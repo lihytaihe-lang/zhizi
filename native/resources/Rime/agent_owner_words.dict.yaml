@@ -1,0 +1,6 @@
+# 真正的词在用户目录，由 build_owner_words.py 生成；共享目录只登记空壳层。
+---
+name: agent_owner_words
+version: "0.2.0"
+sort: by_weight
+...

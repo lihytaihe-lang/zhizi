@@ -46,7 +46,7 @@ The full `pypinyin-MIT.txt` and `jieba-MIT.txt` notices are bundled and locked b
 
 ## Project-owned Rime tables
 
-`agent_pinyin.dict.yaml` (SHA-256 `7536fbce2da80eeead390c596f8fd32480fefba88cbcc6d97ba5983032cf7472`), `agent_project_terms.dict.yaml` (SHA-256 `4fb4ed762100d69e10c8d0581502a8c2b10f91414f99c99114b450a6418e20b7`), `agent_modern.dict.yaml` (SHA-256 `d1e6a40abca03593a85c38da0e5da9cf8d04404fa1ccb0039027268bd7b54682`), and the three-entry `agent_daily.dict.yaml` are project-owned assets, not third-party dictionaries. The modern table is generated from a 287-row human-readable repository curation, emits 151 unique terms after existing-table deduplication and one non-pinyin skip, and records project-authored provenance. Project-term extraction is capped at 300 repository-owned terms and records project-authored provenance; no external corpus or license is introduced.
+`agent_pinyin.dict.yaml` (SHA-256 `7536fbce2da80eeead390c596f8fd32480fefba88cbcc6d97ba5983032cf7472`), `agent_project_terms.dict.yaml` (SHA-256 `23d62f5e6f32604a7acf78a15a7d7833fd47f7bf1cc6fde6fd27f7cf8e87c46d`), `agent_modern.dict.yaml` (SHA-256 `d1e6a40abca03593a85c38da0e5da9cf8d04404fa1ccb0039027268bd7b54682`), and the three-entry `agent_daily.dict.yaml` are project-owned assets, not third-party dictionaries. The modern table is generated from a 287-row human-readable repository curation, emits 151 unique terms after existing-table deduplication and one non-pinyin skip, and records project-authored provenance. Project-term extraction is capped at 300 repository-owned terms and records project-authored provenance; no external corpus or license is introduced.
 
 ## librime transitive components
 

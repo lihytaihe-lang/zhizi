@@ -1,4 +1,4 @@
-# Generated from pinned pinyin_simp (weight >= 500) and the agent everyday layers; sources_sha256=27f0cddf0527dbc0c89feefae9440bc136249e362b8c912f35cc9590ae356dfa
+# Generated from pinned pinyin_simp (weight >= 500) and the agent everyday layers; sources_sha256=a690990f8738ced193323beba8918736b8e1893aff448b9b8f689a02fe405f85
 # maximum_characters=7
 扒	ba	523
 坝	ba	701
@@ -43736,6 +43736,7 @@
 阿克拉	a ke la	250
 阿里山	a li shan	250
 阿里山茶	a li shan cha	250
+阿里云	a li yun	400
 阿里云百炼	a li yun bai lian	250
 阿里云盘	a li yun pan	250
 阿莫西林	a mo xi lin	250
@@ -44250,6 +44251,7 @@
 背包客	bei bao ke	250
 北碚	bei bei	250
 备菜	bei cai	400
+被裁	bei cai	250
 被带飞	bei dai fei	250
 背带裤	bei dai ku	250
 背带裙	bei dai qun	250
@@ -44547,6 +44549,7 @@
 补充材料	bu chong cai liao	400
 不错哈	bu cuo ha	400
 不错哦	bu cuo o	250
+不大靠谱	bu da kao pu	250
 布达佩斯	bu da pei si	250
 不丹	bu dan	250
 补档	bu dang	400
@@ -45299,6 +45302,7 @@
 慈善总会	ci shan zong hui	250
 刺豚	ci tun	250
 次卧	ci wo	400
+磁吸	ci xi	254
 磁吸充电	ci xi chong dian	250
 磁吸生态	ci xi sheng tai	250
 次中音号	ci zhong yin hao	250
@@ -45668,6 +45672,7 @@
 带鱼屏	dai yu ping	250
 带状疱疹	dai zhuang pao zhen	250
 带走吃	dai zou chi	400
+待做	dai zuo	400
 蛋白棒	dan bai bang	250
 蛋白粉	dan bai fen	400
 淡斑	dan ban	141
@@ -45931,6 +45936,7 @@
 底线球	di xian qiu	250
 低血压	di xue ya	250
 滴眼液	di yan ye	250
+第一梯队	di yi ti dui	250
 第一性原理	di yi xing yuan li	400
 第一学历	di yi xue li	250
 第一志愿	di yi zhi yuan	250
@@ -46257,6 +46263,7 @@
 抖音豆包	dou yin dou bao	250
 抖音火山版	dou yin huo shan ban	250
 抖音极速版	dou yin ji su ban	250
+抖音视频	dou yin shi pin	250
 斗鱼	dou yu	174
 堵半天	du ban tian	250
 杜宾	du bin	250
@@ -46924,6 +46931,7 @@
 复方甘草片	fu fang gan cao pian	250
 付费短剧	fu fei duan ju	250
 付费解锁	fu fei jie suo	400
+付费皮肤	fu fei pi fu	400
 付费墙	fu fei qiang	400
 浮粉	fu fen	250
 负分割	fu fen ge	250
@@ -47288,6 +47296,7 @@
 工具车	gong ju che	250
 工具调用	gong ju diao yong	400
 工具人	gong ju ren	400
+工具书	gong ju shu	400
 公开水域	gong kai shui yu	250
 贡梨	gong li	250
 公路车	gong lu che	400
@@ -47371,6 +47380,7 @@
 狗獾	gou huan	250
 狗粮碗	gou liang wan	250
 狗笼	gou long	250
+购买记录	gou mai ji lu	250
 狗奴	gou nu	250
 狗牌	gou pai	250
 购票软件	gou piao ruan jian	400
@@ -47391,6 +47401,7 @@
 狗证	gou zheng	250
 购置税	gou zhi shui	250
 购置税减免	gou zhi shui jian mian	250
+苟住	gou zhu	250
 谷氨酰胺	gu an xian an	250
 古城旅拍	gu cheng lv pai	250
 古城游	gu cheng you	250
@@ -47512,6 +47523,7 @@
 关空调	guan kong tiao	400
 管理闭环	guan li bi huan	250
 管理费下调	guan li fei xia tiao	400
+管理后台	guan li hou tai	250
 关流量	guan liu liang	400
 关麦	guan mai	400
 关你啥事	guan ni sha shi	250
@@ -48046,6 +48058,7 @@
 猴头菌	hou tou jun	250
 后腿肉	hou tui rou	250
 候选人体验	hou xuan ren ti yan	250
+候选字	hou xuan zi	250
 后训练	hou xun lian	400
 喉炎	hou yan	250
 虎斑猫	hu ban mao	250
@@ -48176,6 +48189,7 @@
 花生仁	hua sheng ren	250
 滑石	hua shi	250
 桦树	hua shu	250
+话术	hua shu	250
 滑水	hua shui	146
 话题度	hua ti du	400
 花童	hua tong	250
@@ -48408,6 +48422,7 @@
 混合专家	hun he zhuan jia	400
 混剪	hun jian	163
 婚戒	hun jie	154
+混拼	hun pin	250
 婚前财产	hun qian cai chan	250
 混血猫	hun xue mao	250
 混氧跑	hun yang pao	250
@@ -48525,6 +48540,7 @@
 纪律委员	ji lv wei yuan	250
 蓟马	ji ma	250
 即买即退	ji mai ji tui	250
+即梦	ji meng	250
 稷米	ji mi	250
 机密计算	ji mi ji suan	250
 即墨老酒	ji mo lao jiu	250
@@ -48605,6 +48621,7 @@
 济阳	ji yang	203
 吉野家	ji ye jia	250
 记忆泊车	ji yi bo che	250
+记忆宫殿	ji yi gong dian	250
 记忆机制	ji yi ji zhi	400
 记忆库	ji yi ku	400
 记忆棉	ji yi mian	250
@@ -48887,6 +48904,7 @@
 降噪耳机	jiang zao er ji	250
 讲真	jiang zhen	456
 讲真的	jiang zhen de	120
+降智	jiang zhi	400
 降准	jiang zhun	250
 降准降息	jiang zhun jiang xi	400
 姜子牙	jiang zi ya	250
@@ -49443,12 +49461,14 @@
 开学了	kai xue le	400
 开演唱会	kai yan chang hui	400
 开雨刷	kai yu shua	250
+开源版本	kai yuan ban ben	250
 开源潮	kai yuan chao	250
 开源大模型	kai yuan da mo xing	400
 开远光	kai yuan guang	250
 开源模型	kai yuan mo xing	400
 开源权重	kai yuan quan zhong	400
 开源生态	kai yuan sheng tai	400
+开源许可	kai yuan xu ke	250
 开早会	kai zao hui	400
 开斋节	kai zhai jie	250
 开震动	kai zhen dong	250
@@ -50496,6 +50516,7 @@
 路转黑	lu zhuan hei	250
 卵磷脂	luan lin zhi	250
 轮边电机	lun bian dian ji	400
+轮动	lun dong	400
 伦敦塔桥	lun dun ta qiao	250
 轮毂电机	lun gu dian ji	250
 轮滑鞋	lun hua xie	250
@@ -50509,6 +50530,7 @@
 萝卜快跑	luo bo kuai pao	400
 萝卜排骨汤	luo bo pai gu tang	250
 萝卜腿	luo bo tui	250
+落不了地	luo bu liao di	250
 裸辞	luo ci	400
 落地签	luo di qian	250
 落地情况	luo di qing kuang	400
@@ -50653,6 +50675,7 @@
 马绍尔群岛	ma shao er qun dao	250
 麻绳	ma sheng	196
 马斯喀特	ma si ka te	250
+马斯克	ma si ke	250
 马蹄莲	ma ti lian	250
 马天尼	ma tian ni	250
 马桶垫	ma tong dian	250
@@ -51298,6 +51321,7 @@
 脑梗	nao geng	400
 瑙鲁	nao lu	250
 闹呢	nao ne	120
+脑图	nao tu	400
 脑外科	nao wai ke	250
 哪吒汽车	ne zha qi che	250
 内比都	nei bi du	250
@@ -51551,6 +51575,7 @@
 帕利基尔	pa li ji er	250
 帕罗西汀	pa luo xi ting	250
 耙耙柑	pa pa gan	250
+爬取	pa qu	250
 爬泰山	pa tai shan	250
 爬香山	pa xiang shan	400
 爬行垫	pa xing dian	250
@@ -51712,6 +51737,7 @@
 皮尺	pi chi	250
 蜱虫	pi chong	250
 郫都	pi du	250
+皮肤管理	pi fu guan li	250
 皮肤痒	pi fu yang	250
 皮肤衣	pi fu yi	250
 披哥	pi ge	250
@@ -51794,6 +51820,7 @@
 平衡木	ping heng mu	250
 平衡训练	ping heng xun lian	250
 平话	ping hua	250
+平级	ping ji	400
 平急两用	ping ji liang yong	250
 平角裤	ping jiao ku	250
 评剧	ping ju	250
@@ -52501,6 +52528,7 @@
 认房不认贷	ren fang bu ren dai	250
 人岗匹配	ren gang pi pei	250
 人工客服	ren gong ke fu	400
+人工审核	ren gong shen he	250
 人工通道	ren gong tong dao	400
 人工智能安全	ren gong zhi neng an quan	400
 人工智能变现	ren gong zhi neng bian xian	250
@@ -52847,6 +52875,7 @@
 沙发套	sha fa tao	250
 杀疯了	sha feng le	400
 砂锅米线	sha guo mi xian	250
+沙盒	sha he	206
 沙盒监管	sha he jian guan	250
 沙盒游戏	sha he you xi	250
 沙壶球	sha hu qiu	250
@@ -52973,6 +53002,7 @@
 上四休三	shang si xiu san	250
 上台汇报	shang tai hui bao	250
 上台讲	shang tai jiang	400
+商汤	shang tang	235
 上汤菠菜	shang tang bo cai	250
 商汤日日新	shang tang ri ri xin	250
 上汤娃娃菜	shang tang wa wa cai	250
@@ -53280,6 +53310,7 @@
 实景演出	shi jing yan chu	400
 视觉大模型	shi jue da mo xing	250
 石决明	shi jue ming	250
+视觉能力	shi jue neng li	250
 屎壳郎	shi ke lang	250
 实况窗	shi kuang chuang	250
 史莱姆	shi lai mu	250
@@ -53719,6 +53750,7 @@
 水杉	shui shan	250
 水獭	shui ta	250
 水桶包	shui tong bao	250
+水豚	shui tun	250
 水温计	shui wen ji	250
 税务稽查	shui wu ji cha	250
 税务师	shui wu shi	250
@@ -54231,6 +54263,7 @@
 体温枪	ti wen qiang	250
 提鲜	ti xian	250
 提现手续费	ti xian shou xu fei	250
+提效	ti xiao	121
 剃须	ti xu	118
 剃须泡	ti xu pao	250
 提需求	ti xu qiu	400
@@ -54372,6 +54405,7 @@
 贴个膜	tie ge mo	400
 贴梗海棠	tie geng hai tang	250
 铁拐李	tie guai li	250
+贴画	tie hua	250
 铁环	tie huan	250
 贴剂	tie ji	250
 铁剂	tie ji	250
@@ -54493,6 +54527,7 @@
 投顾试点	tou gu shi dian	250
 投流	tou liu	400
 头颅核磁	tou lu he ci	250
+透明代理	tou ming dai li	400
 透明底盘	tou ming di pan	250
 透明机盖	tou ming ji gai	250
 透明质酸	tou ming zhi suan	250
@@ -54871,6 +54906,7 @@
 违停	wei ting	250
 维吾尔语	wei wu er yu	250
 维吾尔族	wei wu er zu	250
+危险告警	wei xian gao jing	250
 蔚小理	wei xiao li	250
 微信豆	wei xin dou	250
 微信读书	wei xin du shu	250
@@ -55503,6 +55539,7 @@
 橡皮艇	xiang pi ting	250
 橡皮章	xiang pi zhang	250
 香芹	xiang qin	250
+详情卡片	xiang qing ka pian	250
 香砂	xiang sha	250
 向上管理	xiang shang guan li	400
 向上汇报	xiang shang hui bao	400
@@ -55510,6 +55547,7 @@
 香水柠檬	xiang shui ning meng	250
 香水瓶	xiang shui ping	400
 像素大灯	xiang su da deng	250
+像素块	xiang su kuai	250
 箱体震荡	xiang ti zhen dang	400
 向往的生活	xiang wang de sheng huo	400
 香薰	xiang xun	250
@@ -55670,6 +55708,7 @@
 小鲜肉	xiao xian rou	400
 小象	xiao xiang	250
 小香风	xiao xiang feng	250
+肖像权	xiao xiang quan	250
 小巷人家	xiao xiang ren jia	400
 销项税	xiao xiang shui	250
 销项税额	xiao xiang shui e	250
@@ -55952,6 +55991,7 @@
 行政审批局	xing zheng shen pi ju	250
 行政庭	xing zheng ting	250
 星座配对	xing zuo pei dui	250
+雄安	xiong an	250
 胸包	xiong bao	250
 胸背带	xiong bei dai	250
 熊蜂	xiong feng	171
@@ -56017,9 +56057,11 @@
 萱草	xuan cao	250
 旋齿鲨	xuan chi sha	250
 宣传委员	xuan chuan wei yuan	250
+宣传语	xuan chuan yu	400
 选导师	xuan dao shi	250
 选地址	xuan di zhi	400
 选调生	xuan diao sheng	400
+宣发	xuan fa	400
 炫饭	xuan fan	250
 玄凤	xuan feng	250
 玄凤鹦鹉	xuan feng ying wu	250
@@ -56036,6 +56078,7 @@
 选科走班	xuan ke zou ban	250
 悬空寺	xuan kong si	250
 选口味	xuan kou wei	250
+炫酷	xuan ku	400
 选楼层	xuan lou ceng	250
 玄猫	xuan mao	250
 玄派	xuan pai	266
@@ -56373,6 +56416,7 @@
 药品监管	yao pin jian guan	400
 腰旗橄榄	yao qi gan lan	400
 腰旗橄榄球	yao qi gan lan qiu	400
+邀请码	yao qing ma	400
 药球	yao qiu	400
 钥匙包	yao shi bao	250
 钥匙扣	yao shi kou	250
@@ -57115,6 +57159,7 @@
 云仓	yun cang	330
 云侧智能	yun ce zhi neng	250
 晕车药	yun che yao	250
+云词库	yun ci ku	400
 云打卡	yun da ka	250
 云代驾	yun dai jia	250
 运单	yun dan	400
@@ -57191,6 +57236,7 @@
 咋说	za shuo	120
 扎头发	za tou fa	250
 咋样嘛	za yang ma	250
+咋整	za zheng	400
 在岸人民币	zai an ren min bi	400
 在暴雪时分	zai bao xue shi fen	250
 在不在嘛	zai bu zai ma	250
@@ -57228,6 +57274,7 @@
 在线白板	zai xian bai ban	250
 在线点餐	zai xian dian can	250
 在线会议	zai xian hui yi	400
+在线简历	zai xian jian li	400
 在线教育	zai xian jiao yu	400
 在线审批	zai xian shen pi	400
 在线私教	zai xian si jiao	250
@@ -57340,6 +57387,7 @@
 摘项链	zhai xiang lian	250
 摘眼镜	zhai yan jing	250
 债转股	zhai zhuan gu	400
+占比	zhan bi	250
 站不稳	zhan bu wen	250
 站队	zhan dui	400
 战斧牛排	zhan fu niu pai	250
@@ -58050,6 +58098,7 @@
 专项再贷款	zhuan xiang zai dai kuan	400
 专项债	zhuan xiang zhai	400
 转型金融	zhuan xing jin rong	250
+专业词汇	zhuan ye ci hui	250
 专业岗	zhuan ye gang	400
 专业组	zhuan ye zu	400
 转移登记	zhuan yi deng ji	250
@@ -58215,6 +58264,7 @@
 资源税	zi yuan shui	250
 紫珍珠	zi zhen zhu	250
 紫芝	zi zhi	250
+子智能体	zi zhi neng ti	400
 自重训练	zi zhong xun lian	250
 自助点餐	zi zhu dian can	400
 自主规划	zi zhu gui hua	400
@@ -58270,6 +58320,7 @@
 阻力带	zu li dai	250
 足膜	zu mo	250
 祖母绿	zu mu lv	250
+租显卡	zu xian ka	250
 足浴盆	zu yu pen	250
 组织盘点	zu zhi pan dian	250
 组织瘦身	zu zhi shou shen	250

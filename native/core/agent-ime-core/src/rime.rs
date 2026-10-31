@@ -10,6 +10,11 @@ use std::slice;
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex, OnceLock};
 
+#[cfg(test)]
+thread_local! {
+    pub(crate) static RIME_ALL_TIMING: std::cell::Cell<(u128, u128)> = const { std::cell::Cell::new((0, 0)) };
+}
+
 #[repr(C)]
 struct AimRimeString {
     data: *mut c_char,
@@ -90,6 +95,7 @@ unsafe extern "C" {
         maximum_candidates: usize,
         snapshot: *mut AimRimeSnapshot,
     ) -> c_int;
+    fn aim_rime_has_raw_echo(session: usize) -> c_int;
     fn aim_rime_string_free(string: *mut AimRimeString);
     fn aim_rime_snapshot_free(snapshot: *mut AimRimeSnapshot);
     fn aim_rime_redeploy() -> c_int;
@@ -175,6 +181,7 @@ impl RimeDecoder {
         if session == 0 {
             return Err(-102);
         }
+        crate::zhixu::loader::attach(&shared_path, &user_path);
         Ok(Self {
             session,
             selection_ledger: SelectionDeliveryLedger::new(&user_path),
@@ -242,7 +249,17 @@ impl RimeDecoder {
             page_no: 0,
             is_last_page: 1,
         };
-        if unsafe { aim_rime_snapshot(self.session, maximum_candidates, &mut snapshot) } == 0 {
+        #[cfg(test)]
+        let ffi_start = (maximum_candidates != 0).then(std::time::Instant::now);
+        let status = unsafe { aim_rime_snapshot(self.session, maximum_candidates, &mut snapshot) };
+        #[cfg(test)]
+        if let Some(start) = ffi_start {
+            RIME_ALL_TIMING.with(|timing| {
+                let (ffi, reading) = timing.get();
+                timing.set((ffi + start.elapsed().as_nanos(), reading));
+            });
+        }
+        if status == 0 {
             return DecoderSnapshot::default();
         }
         let raw_input = Self::convert_string(&snapshot.raw_input);
@@ -257,8 +274,18 @@ impl RimeDecoder {
             .enumerate()
             .map(|(index, candidate)| {
                 let text = Self::convert_string(&candidate.text);
+                #[cfg(test)]
+                let reading_start = (maximum_candidates != 0).then(std::time::Instant::now);
+                let reading_key = self.candidate_reading(&text, &raw_input);
+                #[cfg(test)]
+                if let Some(start) = reading_start {
+                    RIME_ALL_TIMING.with(|timing| {
+                        let (ffi, reading) = timing.get();
+                        timing.set((ffi, reading + start.elapsed().as_nanos()));
+                    });
+                }
                 Candidate {
-                    reading_key: self.candidate_reading(&text, &raw_input),
+                    reading_key,
                     text,
                     comment: Self::convert_string(&candidate.comment),
                     source_index: (maximum_candidates != 0).then_some(index),
@@ -299,6 +326,27 @@ impl Decoder for RimeDecoder {
     fn snapshot_all_candidates(&self) -> Option<DecoderSnapshot> {
         let snapshot = self.snapshot_with_maximum(usize::MAX);
         snapshot.is_last_page.then_some(snapshot)
+    }
+
+    fn snapshot_candidate_prefix(&self, maximum: usize) -> Option<DecoderSnapshot> {
+        // Zero selects the native page in the C shim, so query one candidate
+        // first to distinguish an empty sequence from an empty prefix.
+        let mut snapshot = self.snapshot_with_maximum(maximum.max(1));
+        snapshot.is_last_page &= snapshot.candidates.len() <= maximum;
+        snapshot.candidates.truncate(maximum);
+        Some(snapshot)
+    }
+
+    fn whole_prefix_has_raw_echo(&self) -> bool {
+        #[cfg(test)]
+        let start = std::time::Instant::now();
+        let result = unsafe { aim_rime_has_raw_echo(self.session) } != 0;
+        #[cfg(test)]
+        RIME_ALL_TIMING.with(|timing| {
+            let (ffi, reading) = timing.get();
+            timing.set((ffi + start.elapsed().as_nanos(), reading));
+        });
+        result
     }
 
     fn input(&mut self, text: &str) -> Result<String, i32> {
@@ -454,6 +502,19 @@ impl Decoder for RimeDecoder {
 
     fn clear(&mut self) {
         unsafe { aim_rime_clear(self.session) };
+    }
+
+    fn reload_dictionaries(&mut self) -> Result<(), i32> {
+        // The deployed schema is process-global and sessions belong to individual decoders: drop this one, deploy, make a new one.
+        unsafe { aim_rime_session_destroy(self.session) };
+        self.session = 0;
+        let deployed = unsafe { aim_rime_redeploy() } != 0;
+        self.session = unsafe { aim_rime_session_create() };
+        if self.session == 0 {
+            return Err(-109);
+        }
+        // The deployed schema keeps the managed fuzzy configuration (it lives in the user directory), so the mask stays.
+        if deployed { Ok(()) } else { Err(-108) }
     }
 
     fn configure_fuzzy(&mut self, mask: u32) -> Result<(), i32> {

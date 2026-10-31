@@ -16,39 +16,48 @@ CARGO_TARGET_DIR=/tmp/zhizi-public-manager cargo test --offline --locked --no-de
 CARGO_TARGET_DIR=/tmp/zhizi-public-manager cargo test --offline --locked --no-default-features --manifest-path src-tauri/Cargo.toml --bins
 CARGO_TARGET_DIR=/tmp/zhizi-public-host cargo build --offline --locked --manifest-path native/host/Cargo.toml
 node scripts/run-frontend-tests.mjs
-(cd scripts/tools && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v test_public_export test_build_sprite_sheet test_full_regression_cycle)
+(cd scripts/tools && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v test_public_export test_make_public_repo test_sync_version test_full_regression_cycle)
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v scripts.tools.test_build_sprite_sheet scripts.lexicon.test_build_catalog scripts.lexicon.test_build_release_pack scripts.lexicon.test_check_contribution
 (cd scripts/eval && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v test_build_friends_set)
-(cd scripts/context_model && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v test_copy_bundle_model test_copy_bundle_model_tiers test_quality_metadata_compatibility)
+(cd scripts/context_model && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v test_copy_bundle_model test_copy_bundle_model_tiers test_quality_metadata_compatibility test_fetch_public_model)
 (cd scripts/context_model/zhizi && PYTHONDONTWRITEBYTECODE=1 python3.11 -m unittest -v test_check_host_alignment_batching)
 ```
 
-## Recorded test results
+## Test results
 
-The existing result record has no version or date and is not a guarantee for the current checkout. A fresh-machine bootstrap has not been verified.
+Measured on 2026-10-23 on a fresh export of version 0.1.5 (628 files), macOS on Apple silicon, with the commands above. Python 3.9.6 is the system `python3`; the alignment-batching suite was run with Python 3.11. The numbers describe that checkout, not later ones.
 
-| Test or build | Recorded result |
+| Test or build | Result |
 | --- | --- |
-| Core | 212 passed / 0 failed / 6 ignored (measured 2026-10-22 on the exported tree) |
-| Manager library | 127 passed / 0 failed / 1 ignored (measured 2026-10-22 on the exported tree, `cargo test --lib --no-default-features`) |
+| Core | 218 passed / 0 failed / 6 ignored |
+| Manager library (`--no-default-features`) | 135 passed / 0 failed / 1 ignored |
 | Manager binaries | 31 passed |
 | Host build | Exit 0 |
-| Frontend (Node) | 43 passed |
-| Sprite sheet | 10 passed |
-| Public exporter | 19 passed |
-| Regression runner self-tests | 17 passed |
+| Frontend (Node) | 48 passed |
+| Public exporter (`test_public_export`) | 25 passed |
+| Public repository builder (`test_make_public_repo`) | 12 passed |
+| Version sync (`test_sync_version`) | 5 passed |
+| Regression runner self-tests (`test_full_regression_cycle`) | 17 passed (about 200 s) |
+| Sprite sheet (run from the repository root) | 10 passed |
+| Lexicon tools (run from the repository root) | 42 passed |
 | Friends-set | 7 passed |
-| Original model copy | 2 passed |
-| Model tiers | 11 passed |
+| Model copy | 2 passed |
+| Model tiers | 12 passed |
 | Metadata compatibility | 1 passed |
+| Public model fetch | 13 passed |
 | Alignment batching (Python 3.11) | 7 passed |
 
-The regression runner self-tests use synthetic stub commands and do not run real regression or product builds. `test_fetch_public_model` runs 13 tests, with 12 passed and 1 error in the existing record; it does not download models during testing. The Python 3.9 alignment-batching record contains 5 errors. The core/host compilation record reports no further missing embedded source inputs with four synthetic fixtures included; the manager record also contains a missing runtime test input.
+Not measured in the exported tree: the Swift tests (246 executed, 16 skipped, 0 failures in the development checkout, which has the full macOS build prepared) and the regression gates in the next section.
+
+The regression runner self-tests use synthetic stub commands and do not run real regression or product builds. The public model fetch tests do not download the model.
 
 ### Known failing tests
 
-- Manager library: none when run the way the public build is configured (`--no-default-features`). With the default features the tests do not compile in the public tree, because the test-upload module and the owner's seed files are not part of it.
-- `test_fetch_public_model`: 1 error out of 13 tests; the individual test name was not recorded and is unverified.
-- Alignment batching under Python 3.9: 5 errors; individual test names were not recorded and are unverified.
+These fail only when run the wrong way; each has a passing way.
+
+- Sprite sheet and lexicon tools run from inside their own directory: `test_build_sprite_sheet` has 2 errors (`test_keying_soft_edges_and_despill`, `test_existing_alpha_and_euclidean_tolerance`) and `test_check_contribution` has 1 (`test_inventory`), all `ModuleNotFoundError: No module named 'scripts'`. They import `scripts.…` and must run from the repository root as in the command above.
+- Alignment batching under Python 3.9: 5 of 7 tests error with `TypeError: zip() takes no keyword arguments` (`zip(strict=True)` needs Python 3.10+). They pass under Python 3.11.
+- Manager library with the default features: the tests do not compile in the public tree, because the test-upload module and the maintainer's seed file are not part of it. Use `--no-default-features`.
 
 ## Regression gates and availability
 
@@ -75,14 +84,14 @@ Known limits: sparse cold-start performance samples can occasionally exceed the 
 | `native_license_assets_check` | 1 | `script/test_all.sh:55; scripts/validate_native_license_assets.mjs:13-14,49-50,75` — Reads license manifest and repositoryPath assets, including omitted third_party/licenses; cache/toolchain required. |
 | `locked_dependency_registry_check` | 1 | `script/test_all.sh:56; scripts/generate_locked_dependency_registry.mjs:8-11,58,73` — Reads package-lock and Cargo locks/metadata offline; cached dependencies required. |
 | `v010_upgrade_fixture` | 2 | `script/test_all.sh:57; script/test_v010_upgrade_fixture.sh:5-7,28,44-55` — Synthetic sqlite fixture, macOS base64 -D, historical git commit required; pure export lacks history. |
-| `frontend_tests` | 1 | `script/test_all.sh:58; scripts/run-frontend-tests.mjs:60-78; scripts/typescript-test-loader.mjs:4` — Synthetic src tests; installed TypeScript required. Installed TypeScript required; recorded result: 43 passed. |
+| `frontend_tests` | 1 | `script/test_all.sh:58; scripts/run-frontend-tests.mjs:60-78; scripts/typescript-test-loader.mjs:4` — Synthetic src tests; installed TypeScript required; 48 passed. |
 | `unittest` | 2 | `script/test_all.sh:63; scripts/tools/test_full_regression_cycle.py:1-10` — tools/eval tests include synthetic shell runner tests using macOS utilities; no real suite is run. Individual portable tests listed below. |
 | `dogfood_checkpoint` | 1 | `script/test_all.sh:64; scripts/test_dogfood_checkpoint.mjs:137-179,219-220` — Creates synthetic events in temporary directory; synthetic input. |
 | `rc_gate_support` | 2 | `script/test_all.sh:65; script/test_rc_gate_support.sh:6-14,83-132` — Synthetic git fixture, BSD stat -f; synthetic input. |
 | `freeze_joint_rc_contract` | 2 | `script/test_all.sh:66; script/test_freeze_joint_rc_contract.sh:11-20,227-228` — Synthetic fixture, BSD stat and xcrun Swift. |
 | `replay_gate_contract` | 1 | `script/test_all.sh:67; script/check_replay_gate_contract.sh:17-23` — Static source contract only, no corpus or built bundle required. |
 | `frontend_build` | 1 | `script/test_all.sh:68; package.json:9; scripts/typescript-test-loader.mjs:4` — Requires installed npm dependencies and root TypeScript/Vite/index configuration omitted by export; not verified. |
-| `cargo_test_core` | 1 | `script/test_all.sh:73; native/core/agent-ime-core/src/state.rs:1638,2254` — Synthetic embedded corpus included; 167 passed, 6 ignored. |
+| `cargo_test_core` | 1 | `script/test_all.sh:73; native/core/agent-ime-core/src/state.rs:1638,2254` — Synthetic embedded corpus included; 218 passed, 6 ignored. |
 | `cargo_test_core_latency` | 1 | `script/test_all.sh:74; ` — Same synthetic core data, release latency benchmark; timing sensitive, no recorded run. |
 | `cargo_test_ipc` | 1 | `script/test_all.sh:75; native/ipc/Cargo.toml:1` — Rust IPC crate tests; cached Cargo dependencies required, not separately run. |
 | `cargo_build_core_release` | 1 | `script/test_all.sh:76; native/core/agent-ime-core/src/rime.rs:1` — Requires prepared librime cache/toolchain; synthetic input. Release build no recorded run. |

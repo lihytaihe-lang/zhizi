@@ -1,0 +1,22 @@
+# linear 默认实现是否与普通上下相同。
+clear
+type n
+type i
+prev_linear
+next_linear
+next_linear
+next_linear
+next_linear
+next_linear
+next_linear
+next_linear
+next_linear
+prev_linear
+prev_linear
+prev_linear
+prev_linear
+prev_linear
+prev_linear
+prev_linear
+prev_linear
+clear

@@ -1,4 +1,4 @@
-ABI	abi	486
+ABI	abi	515
 ACCEPTED	accepted	520
 ADR	adr	520
 AIMIPC	aimipc	433
@@ -9,21 +9,22 @@ ASCII	ascii	520
 AWS	aws	500
 AgentAction	agentaction	355
 AgentIMEProductCommit	agentimeproductcommit	460
-AgentInputController	agentinputcontroller	480
+AgentInputController	agentinputcontroller	502
 AgentInputMethod	agentinputmethod	520
 AgentProbe	agentprobe	335
 AirPods	airpods	500
 Android	android	500
 Angular	angular	500
 Ansible	ansible	500
-AppKit	appkit	504
+AppKit	appkit	508
 Apple	apple	500
 Azure	azure	500
+BAD	bad	477
 BASELINE	baseline	520
-BSD	bsd	501
+BSD	bsd	504
 Bitbucket	bitbucket	500
 Bun	bun	500
-CAPTURE	capture	486
+CAPTURE	capture	494
 CD	cd	500
 CFBundleShortVersionString	cfbundleshortversionstring	443
 CFBundleVersion	cfbundleversion	470
@@ -53,11 +54,11 @@ Elasticsearch	elasticsearch	500
 EvidenceCommit	evidencecommit	443
 FAIL	fail	520
 FAULT	fault	520
-FFI	ffi	482
-FREEZE	freeze	501
+FFI	ffi	509
+FREEZE	freeze	504
 FTS	fts	449
 Figma	figma	500
-Fresh	fresh	506
+Fresh	fresh	520
 GPL	gpl	451
 GPT	gpt	500
 Gemini	gemini	500
@@ -75,12 +76,12 @@ Hugging Face	huggingface	500
 IBus	ibus	405
 IDE	ide	355
 IME	ime	520
-IMK	imk	421
+IMK	imk	430
 IMKInputController	imkinputcontroller	433
-IMKServer	imkserver	398
+IMKServer	imkserver	405
 IPC	ipc	520
 IncompatibleUserDB	incompatibleuserdb	335
-InputMethodKit	inputmethodkit	484
+InputMethodKit	inputmethodkit	486
 Intel	intel	500
 JSON	json	520
 Java	java	500
@@ -92,10 +93,11 @@ Key	key	520
 KiB	kib	497
 Kotlin	kotlin	500
 Kubernetes	kubernetes	500
+LABEL	label	520
 LGPL	lgpl	465
 LangChain	langchain	500
-LaunchServices	launchservices	433
-LevelDB	leveldb	472
+LaunchServices	launchservices	443
+LevelDB	leveldb	482
 Linux	linux	500
 Llama	llama	500
 LocalFallback	localfallback	335
@@ -108,11 +110,11 @@ MacBook	macbook	500
 MacBookPro	macbookpro	500
 MariaDB	mariadb	500
 Markdown	markdown	500
-MiB	mib	490
+MiB	mib	520
 MixerDecoder	mixerdecoder	520
 MongoDB	mongodb	500
 MySQL	mysql	500
-NFKC	nfkc	425
+NFKC	nfkc	440
 NOT	not	520
 NSRange	nsrange	381
 NSSecureTextField	nssecuretextfield	370
@@ -126,12 +128,12 @@ Node.js	nodejs	500
 Notion	notion	500
 Nuxt	nuxt	500
 OpenAI	openai	500
-OpenCC	opencc	465
+OpenCC	opencc	470
 OpenWorkspace	openworkspace	335
 PASS	pass	520
 PENDING	pending	520
-PageDown	pagedown	470
-PageUp	pageup	446
+PageDown	pagedown	492
+PageUp	pageup	466
 PassThrough	passthrough	335
 PostgreSQL	postgres	500
 Postgres	postgres	500
@@ -139,11 +141,11 @@ ProductCommit	productcommit	520
 ProductInputs	productinputs	520
 Python	python	500
 README	readme	520
-READY	ready	472
+READY	ready	507
 REG	reg	425
 REST	rest	500
-RSS	rss	504
-RapidJSON	rapidjson	454
+RSS	rss	520
+RapidJSON	rapidjson	460
 React	react	500
 Redis	redis	500
 RenderCandidates	rendercandidates	335
@@ -151,35 +153,35 @@ RuntimeRecovery	runtimerecovery	335
 Rust	rust	500
 SDK	sdk	500
 SHA	sha	520
-SIGKILL	sigkill	398
+SIGKILL	sigkill	411
 SIGSTOP	sigstop	370
 SQLite	sqlite	520
 STATUS	status	520
 Safari	safari	500
-SecurityState	securitystate	492
+SecurityState	securitystate	509
 Slack	slack	500
-SnapshotReader	snapshotreader	411
+SnapshotReader	snapshotreader	421
 Supabase	supabase	500
 Svelte	svelte	500
 Swift	swift	500
 SwiftKey	swiftkey	335
-SwiftPM	swiftpm	449
+SwiftPM	swiftpm	468
 TCP	tcp	370
-TIS	tis	508
+TIS	tis	510
 TISRegisterInputSource	tisregisterinputsource	335
-TSF	tsf	505
+TSF	tsf	520
 Tailwind CSS	tailwindcss	500
 Terraform	terraform	500
 TextEdit	textedit	481
 TypeScript	ts	500
 TypeScript	typescript	500
-UID	uid	482
-URL	url	508
-UTF	utf	519
+UID	uid	494
+URL	url	520
+UTF	utf	520
 Ubuntu	ubuntu	500
 UserConfirm	userconfirm	335
 UserDB	userdb	520
-UserDBManager	userdbmanager	390
+UserDBManager	userdbmanager	398
 VS Code	vscode	500
 Vercel	vercel	500
 ViewModel	viewmodel	416
@@ -194,22 +196,26 @@ WebView	webview	425
 Webpack	webpack	500
 WhatsApp	whatsapp	398
 Windows	windows	500
+XIAN	xian	509
 XML	xml	500
-XPC	xpc	430
+XPC	xpc	433
 Xcode	xcode	500
 XcodeGen	xcodegen	335
 YAML	yaml	500
-YES	yes	433
-allowed	allowed	493
+YIJIAN	yijian	520
+acquire	acquire	463
+allowed	allowed	509
 api	api	100000
 appIdentifier	appidentifier	355
-attach	attach	440
+attach	attach	510
 attributesForCharacterIndex	attributesforcharacterindex	335
 browser	browser	480
 bundleIdentifier	bundleidentifier	390
+choices	choices	520
 claude	claude	100000
 code	code	520
 codex	codex	100000
+commit	commit	520
 contains	contains	520
 delete	delete	520
 deliveryID	deliveryid	390
@@ -217,56 +223,68 @@ directory	directory	520
 embedding	embedding	500
 entities	entities	370
 entitlement	entitlement	494
-facts	facts	416
+entries	entries	520
+facts	facts	446
+fallback	fallback	520
 file	file	520
-flock	flock	433
-forget	forget	425
-fsync	fsync	425
+finish	finish	508
+flock	flock	449
+forget	forget	481
+fsync	fsync	443
 gRPC	grpc	500
+generation	generation	520
 getpeereid	getpeereid	370
 github	github	100000
 health	health	456
-hello	hello	433
+hello	hello	458
 iCloud	icloud	500
 iOS	ios	500
 iPad	ipad	500
 iPhone	iphone	500
 iTerm	iterm	381
+initial	initial	520
 insert	insert	520
 insertText	inserttext	390
 letter	letter	520
 libSystem	libsystem	355
 librime	librime	520
-lipo	lipo	405
+lipo	lipo	416
 localStorage	localstorage	416
-lookup	lookup	458
+lookup	lookup	477
 macOS	macos	520
 nginx	nginx	500
 npm	npm	500
+overlay	overlay	514
 process	process	520
 prompt	prompt	500
 proposed	proposed	411
 prose	prose	488
 provisional	provisional	473
 python	python	100000
+record	record	520
 relations	relations	381
-remove	remove	500
-replace	replace	506
-reqwest	reqwest	485
+remove	remove	518
+replace	replace	520
+reqwest	reqwest	497
 restore	restore	520
-rlib	rlib	335
+revision	revision	515
+rlib	rlib	355
 rusqlite	rusqlite	443
-scratch	scratch	463
+scratch	scratch	520
 secure	secure	520
 secureDegraded	securedegraded	355
 selectedRange	selectedrange	381
 selectionEventID	selectioneventid	355
+settings	settings	520
 shared	shared	520
-snapshots	snapshots	473
+snapshot	snapshot	520
+snapshots	snapshots	478
 stableCases	stablecases	475
 staticlib	staticlib	381
 superseded	superseded	355
 tauri	tauri	520
+terminal	terminal	510
+terminals	terminals	470
 token	token	100000
 unknown	unknown	520
 〇	ling	248
@@ -3726,6 +3744,7 @@ unknown	unknown	520
 不大可能	bu da ke neng	267
 不大喜欢	bu da xi huan	361
 不大好	bu da hao	403
+不大靠谱	bu da kao pu	250
 不太	bu tai	8729
 不太习惯	bu tai xi guan	545
 不太会	bu tai hui	520
@@ -4742,6 +4761,7 @@ unknown	unknown	520
 专业训练	zhuan ye xun lian	239
 专业词典	zhuan ye ci dian	104
 专业词库	zhuan ye ci ku	104
+专业词汇	zhuan ye ci hui	250
 专业课	zhuan ye ke	435
 专为	zhuan wei	559
 专人	zhuan ren	729
@@ -8776,6 +8796,7 @@ unknown	unknown	520
 云计算应用	yun ji suan ying yong	104
 云计算开发	yun ji suan kai fa	104
 云计算服务	yun ji suan fu wu	131
+云词库	yun ci ku	400
 云课堂	yun ke tang	104
 云谲波诡	yun jue bo gui	104
 云豹	yun bao	250
@@ -9969,6 +9990,7 @@ unknown	unknown	520
 人工	ren gong	2532
 人工呢	ren gong ne	250
 人工呼吸	ren gong hu xi	224
+人工审核	ren gong shen he	250
 人工客服	ren gong ke fu	400
 人工岛	ren gong dao	242
 人工干预	ren gong gan yu	154
@@ -10794,6 +10816,7 @@ unknown	unknown	520
 付费	fu fei	1331
 付费墙	fu fei qiang	400
 付费电视	fu fei dian shi	104
+付费皮肤	fu fei pi fu	400
 付费短剧	fu fei duan ju	250
 付费解锁	fu fei jie suo	400
 付钱	fu qian	984
@@ -14667,6 +14690,7 @@ unknown	unknown	520
 候选人	hou xuan ren	1176
 候选人体验	hou xuan ren ti yan	250
 候选国	hou xuan guo	288
+候选字	hou xuan zi	250
 候选排序	hou xuan pai xu	664
 候选栏	hou xuan lan	1437
 候选框	hou xuan kuang	1360
@@ -15634,6 +15658,7 @@ unknown	unknown	520
 像现在	xiang xian zai	233
 像真人	xiang zhen ren	508
 像素	xiang su	1986
+像素块	xiang su kuai	250
 像素大灯	xiang su da deng	250
 像素点	xiang su dian	217
 像素风	xiang su feng	699
@@ -26655,6 +26680,7 @@ unknown	unknown	520
 占星	zhan xing	171
 占有	zhan you	1854
 占有率	zhan you lv	263
+占比	zhan bi	250
 占满	zhan man	197
 占满了	zhan man le	250
 占用	zhan yong	2172
@@ -26933,6 +26959,7 @@ unknown	unknown	520
 危殆	wei dai	225
 危言耸听	wei yan song ting	118
 危险	wei xian	6173
+危险告警	wei xian gao jing	250
 危险品	wei xian pin	123
 危险因素	wei xian yin su	144
 危险废物	wei xian fei wu	355
@@ -26993,6 +27020,7 @@ unknown	unknown	520
 即是	ji shi	839
 即有	ji you	158
 即期	ji qi	107
+即梦	ji meng	250
 即用	ji yong	261
 即申即享	ji shen ji xiang	250
 即表明	ji biao ming	170
@@ -32963,6 +32991,7 @@ unknown	unknown	520
 咋弄的	za nong de	250
 咋换乘啊	za huan cheng a	250
 咋搞的	za gao de	250
+咋整	za zheng	400
 咋整啊	za zheng a	250
 咋样	za yang	1710
 咋样了	za yang le	250
@@ -33859,6 +33888,7 @@ unknown	unknown	520
 商标注册	shang biao zhu ce	140
 商检	shang jian	186
 商榷	shang que	254
+商汤	shang tang	235
 商汤日日新	shang tang ri ri xin	250
 商河	shang he	250
 商用	shang yong	879
@@ -36571,6 +36601,7 @@ unknown	unknown	520
 在线私教	zai xian si jiao	250
 在线笔试	zai xian bi shi	114
 在线等	zai xian deng	250
+在线简历	zai xian jian li	400
 在线算法	zai xian suan fa	130
 在线编程	zai xian bian cheng	122
 在线编辑器	zai xian bian ji qi	132
@@ -43407,6 +43438,7 @@ unknown	unknown	520
 子房	zi fang	240
 子数组	zi shu zu	173
 子方法	zi fang fa	122
+子智能体	zi zhi neng ti	400
 子曰诗云	zi yue shi yun	104
 子查询	zi cha xun	207
 子树	zi shu	240
@@ -45347,12 +45379,14 @@ unknown	unknown	520
 宣传材料	xuan chuan cai liao	265
 宣传活动	xuan chuan huo dong	339
 宣传片	xuan chuan pian	280
+宣传语	xuan chuan yu	400
 宣传资料	xuan chuan zi liao	167
 宣传部	xuan chuan bu	489
 宣传部长	xuan chuan bu zhang	140
 宣传队	xuan chuan dui	231
 宣判	xuan pan	408
 宣化	xuan hua	255
+宣发	xuan fa	400
 宣告	xuan gao	778
 宣导	xuan dao	346
 宣布	xuan bu	6376
@@ -49225,6 +49259,7 @@ unknown	unknown	520
 工兵	gong bing	152
 工兵营	gong bing ying	242
 工具	gong ju	11860
+工具书	gong ju shu	400
 工具人	gong ju ren	400
 工具介绍	gong ju jie shao	140
 工具优化	gong ju you hua	105
@@ -51024,6 +51059,7 @@ unknown	unknown	520
 平等待遇	ping deng dai yu	326
 平等权利	ping deng quan li	398
 平米	ping mi	1323
+平级	ping ji	400
 平绒	ping rong	250
 平缓	ping huan	190
 平胸龟	ping xiong gui	250
@@ -52792,6 +52828,7 @@ unknown	unknown	520
 开源框架	kai yuan kuang jia	206
 开源模型	kai yuan mo xing	400
 开源潮	kai yuan chao	250
+开源版本	kai yuan ban ben	250
 开源生态	kai yuan sheng tai	400
 开源硬件	kai yuan ying jian	107
 开源社区	kai yuan she qu	185
@@ -52799,6 +52836,7 @@ unknown	unknown	520
 开源系统	kai yuan xi tong	137
 开源组件	kai yuan zu jian	148
 开源节流	kai yuan jie liu	142
+开源许可	kai yuan xu ke	250
 开源资讯	kai yuan zi xun	104
 开源轮子	kai yuan lun zi	104
 开源软件	kai yuan ruan jian	164
@@ -54269,6 +54307,7 @@ unknown	unknown	520
 待会再说	dai hui zai shuo	120
 待会聊	dai hui liao	120
 待修改	dai xiu gai	119
+待做	dai zuo	400
 待分类	dai fen lei	140
 待到	dai dao	260
 待办	dai ban	523
@@ -61470,6 +61509,7 @@ unknown	unknown	520
 抖音	dou yin	520
 抖音极速版	dou yin ji su ban	250
 抖音火山版	dou yin huo shan ban	250
+抖音视频	dou yin shi pin	250
 抖音豆包	dou yin dou bao	250
 抗	kang	3971
 抗争	kang zheng	492
@@ -65181,6 +65221,7 @@ unknown	unknown	520
 提提	ti ti	181
 提提神	ti ti shen	307
 提携	ti xie	137
+提效	ti xiao	121
 提早	ti zao	578
 提早到	ti zao dao	230
 提案	ti an	1071
@@ -80647,6 +80688,7 @@ unknown	unknown	520
 水调歌头	shui diao ge tou	116
 水谷	shui gu	228
 水豆腐	shui dou fu	391
+水豚	shui tun	250
 水貂	shui diao	250
 水货	shui huo	1470
 水质	shui zhi	949
@@ -81302,6 +81344,7 @@ unknown	unknown	520
 沙田柚	sha tian you	250
 沙画	sha hua	250
 沙皇	sha huang	106
+沙盒	sha he	206
 沙盒机制	sha he ji zhi	129
 沙盒游戏	sha he you xi	250
 沙盒监管	sha he jian guan	250
@@ -84470,6 +84513,7 @@ unknown	unknown	520
 混成	hun cheng	362
 混成旅	hun cheng lv	288
 混战	hun zhan	271
+混拼	hun pin	250
 混排	hun pai	353
 混搭	hun da	106
 混放	hun fang	261
@@ -86794,6 +86838,7 @@ unknown	unknown	520
 炫	xuan	617
 炫目	xuan mu	147
 炫耀	xuan yao	1046
+炫酷	xuan ku	400
 炫酷效果	xuan ku xiao guo	106
 炫饭	xuan fan	250
 炬	ju	118
@@ -88267,6 +88312,7 @@ unknown	unknown	520
 爬到	pa dao	449
 爬升	pa sheng	430
 爬华山	pa hua shan	250
+爬取	pa qu	250
 爬坡	pa po	300
 爬宠	pa chong	138
 爬山	pa shan	845
@@ -93765,6 +93811,7 @@ unknown	unknown	520
 皮肤病	pi fu bing	299
 皮肤痒	pi fu yang	250
 皮肤科	pi fu ke	175
+皮肤管理	pi fu guan li	250
 皮肤衣	pi fu yi	250
 皮肤过敏	pi fu guo min	253
 皮脂	pi zhi	161
@@ -97048,6 +97095,7 @@ unknown	unknown	520
 磁	ci	544
 磁力	ci li	233
 磁卡	ci ka	111
+磁吸	ci xi	254
 磁吸充电	ci xi chong dian	250
 磁吸生态	ci xi sheng tai	250
 磁器	ci qi	291
@@ -98328,6 +98376,7 @@ unknown	unknown	520
 租房合同	zu fang he tong	400
 租房子	zu fang zi	349
 租方	zu fang	104
+租显卡	zu xian ka	250
 租期	zu qi	103
 租用	zu yong	774
 租用线路	zu yong xian lu	104
@@ -100052,6 +100101,7 @@ unknown	unknown	520
 第一格	di yi ge	250
 第一桌	di yi zhuo	405
 第一桶金	di yi tong jin	134
+第一梯队	di yi ti dui	250
 第一次	di yi ci	16075
 第一次去	di yi ci qu	981
 第一次去吃	di yi ci qu chi	554
@@ -101214,6 +101264,7 @@ unknown	unknown	520
 管理办法	guan li ban fa	967
 管理功能	guan li gong neng	150
 管理区	guan li qu	106
+管理后台	guan li hou tai	250
 管理员	guan li yuan	4841
 管理员帐号	guan li yuan zhang hao	127
 管理员权限	guan li yuan quan xian	190
@@ -107638,6 +107689,7 @@ unknown	unknown	520
 肕	ren	1
 肖	xiao	2577
 肖像	xiao xiang	249
+肖像权	xiao xiang quan	250
 肖像画	xiao xiang hua	301
 肖邦	xiao bang	162
 肘	zhou	263
@@ -108539,6 +108591,7 @@ unknown	unknown	520
 脑出血	nao chu xue	133
 脑力	nao li	203
 脑后	nao hou	277
+脑图	nao tu	400
 脑壳	nao ke	324
 脑壳疼	nao ke teng	250
 脑外科	nao wai ke	250
@@ -110734,6 +110787,7 @@ unknown	unknown	520
 苟	gou	290
 苟且偷安	gou qie tou an	104
 苟且偷生	gou qie tou sheng	104
+苟住	gou zhu	250
 苟同	gou tong	177
 苟在妖武乱世修仙	gou zai yao wu luan shi xiu xian	250
 苟延残喘	gou yan can chuan	124
@@ -111909,6 +111963,7 @@ unknown	unknown	520
 落下	la xia	583
 落下	luo xia	627
 落下了	la xia le	250
+落不了地	luo bu liao di	250
 落了	luo le	282
 落于	luo yu	138
 落井下石	luo jing xia shi	120
@@ -114616,6 +114671,7 @@ unknown	unknown	520
 被罩	bei zhao	268
 被老板	bei lao ban	376
 被芯	bei xin	250
+被裁	bei cai	250
 被褥	bei ru	162
 被覆盖	bei fu gai	655
 被视为	bei shi wei	1038
@@ -115753,6 +115809,7 @@ unknown	unknown	520
 视觉效果	shi jue xiao guo	304
 视觉模型	shi jue mo xing	104
 视觉算法	shi jue suan fa	107
+视觉能力	shi jue neng li	250
 视觉艺术	shi jue yi shu	352
 视觉记忆	shi jue ji yi	365
 视觉设计	shi jue she ji	137
@@ -117111,6 +117168,7 @@ unknown	unknown	520
 记忆化	ji yi hua	155
 记忆化搜索	ji yi hua sou suo	179
 记忆卡	ji yi ka	121
+记忆宫殿	ji yi gong dian	250
 记忆库	ji yi ku	400
 记忆机制	ji yi ji zhi	400
 记忆棉	ji yi mian	250
@@ -117852,6 +117910,7 @@ unknown	unknown	520
 话务	hua wu	177
 话单	hua dan	326
 话又说回来	hua you shuo hui lai	250
+话术	hua shu	250
 话机	hua ji	159
 话来	hua lai	445
 话梅	hua mei	295
@@ -117974,6 +118033,7 @@ unknown	unknown	520
 详	xiang	405
 详尽	xiang jin	675
 详情	xiang qing	1156
+详情卡片	xiang qing ka pian	250
 详情请	xiang qing qing	282
 详情页	xiang qing ye	277
 详细	xiang xi	8503
@@ -119902,6 +119962,7 @@ unknown	unknown	520
 购买区	gou mai qu	104
 购买美国	gou mai mei guo	104
 购买者	gou mai zhe	267
+购买记录	gou mai ji lu	250
 购入	gou ru	397
 购回	gou hui	142
 购并	gou bing	114
@@ -119998,6 +120059,7 @@ unknown	unknown	520
 贴现	tie xian	139
 贴现率	tie xian lv	104
 贴瓷砖	tie ci zhuan	250
+贴画	tie hua	250
 贴着	tie zhe	466
 贴砖	tie zhuan	400
 贴福字	tie fu zi	250
@@ -122949,6 +123011,7 @@ unknown	unknown	520
 轮到你	lun dao ni	407
 轮到我	lun dao wo	533
 轮到我们	lun dao wo men	527
+轮动	lun dong	400
 轮回	lun hui	916
 轮圈	lun quan	318
 轮奸	lun jian	250
@@ -126477,6 +126540,7 @@ unknown	unknown	520
 透心凉	tou xin liang	262
 透支	tou zhi	696
 透明	tou ming	3137
+透明代理	tou ming dai li	400
 透明传送	tou ming chuan song	104
 透明化	tou ming hua	292
 透明底盘	tou ming di pan	250
@@ -127369,6 +127433,7 @@ unknown	unknown	520
 邀请	yao qing	5829
 邀请函	yao qing han	397
 邀请我	yao qing wo	303
+邀请码	yao qing ma	400
 邀请赛	yao qing sai	165
 邁	mai	5
 邂	xie	17
@@ -132353,6 +132418,7 @@ unknown	unknown	520
 阿迪达斯	a di da si	181
 阿部	a bu	399
 阿里	a li	1664
+阿里云	a li yun	400
 阿里云服务器	a li yun fu wu qi	131
 阿里云百炼	a li yun bai lian	250
 阿里云盘	a li yun pan	250
@@ -132563,6 +132629,7 @@ unknown	unknown	520
 降息交易	jiang xi jiao yi	250
 降息周期	jiang xi zhou qi	400
 降房租	jiang fang zu	250
+降智	jiang zhi	400
 降本	jiang ben	400
 降本减负	jiang ben jian fu	250
 降本增效	jiang ben zeng xiao	400
@@ -133264,6 +133331,7 @@ unknown	unknown	520
 雄厚	xiong hou	639
 雄壮	xiong zhuang	133
 雄姿英发	xiong zi ying fa	104
+雄安	xiong an	250
 雄心	xiong xin	221
 雄心勃勃	xiong xin bo bo	126
 雄心壮志	xiong xin zhuang zhi	160
@@ -137227,6 +137295,7 @@ unknown	unknown	520
 马拉维	ma la wei	250
 马放南山	ma fang nan shan	104
 马斯	ma si	129
+马斯克	ma si ke	250
 马斯喀特	ma si ka te	250
 马晓旭	ma xiao xu	120
 马普托	ma pu tuo	250

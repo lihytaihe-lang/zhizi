@@ -97,6 +97,10 @@ impl Store {
         self.path.as_ref()?.parent().map(Path::to_path_buf)
     }
 
+    pub(crate) fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
     pub(crate) fn contains(&self, reading: &str, text: &str) -> bool {
         self.entries.contains(&BlacklistEntry {
             reading: reading.to_string(),
@@ -213,6 +217,17 @@ mod tests {
         fs::create_dir(&path).unwrap();
         fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
         path
+    }
+
+    #[test]
+    fn empty_store_fast_path_tracks_insert() {
+        let mut store = Store::default();
+        assert!(store.is_empty());
+        store.insert("yijian", "意见").unwrap();
+        assert!(!store.is_empty());
+        assert!(store.contains("yijian", "意见"));
+        assert!(!store.insert("yijian", "意见").unwrap());
+        assert!(!store.is_empty());
     }
 
     #[test]

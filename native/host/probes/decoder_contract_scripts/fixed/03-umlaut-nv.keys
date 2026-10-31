@@ -1,0 +1,12 @@
+# 原始 v 与预编辑 ü 的 UTF-8 字节光标。
+clear
+type n
+type v
+type h
+type a
+type o
+left
+left
+right
+commit_raw
+clear

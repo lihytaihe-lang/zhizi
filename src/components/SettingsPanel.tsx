@@ -244,7 +244,14 @@ export function SettingsPanel({
           />
           <span>启用本地 MCP server（默认关闭）</span>
         </label>
-        <p className="settings-message">{mcpStatus.enabled ? `已开启：${mcpStatus.endpoint}` : "当前关闭；无监听端口。"}</p>
+        {mcpStatus.enabled ? (
+          <>
+            <p className="settings-message">已开启：{mcpStatus.endpoint}</p>
+            <p className="settings-message">地址里含访问令牌，只给你信任的本机程序。</p>
+          </>
+        ) : (
+          <p className="settings-message">当前关闭；无监听端口。</p>
+        )}
       </div>
 
       <div className="settings-section">

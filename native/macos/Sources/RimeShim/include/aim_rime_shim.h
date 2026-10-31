@@ -50,6 +50,7 @@ int aim_rime_delete_candidate_global(uintptr_t session, size_t index);
 void aim_rime_clear(uintptr_t session);
 int aim_rime_snapshot(uintptr_t session, size_t maximum_candidates,
                       AimRimeSnapshot *snapshot);
+int aim_rime_has_raw_echo(uintptr_t session);
 void aim_rime_string_free(AimRimeString *string);
 void aim_rime_snapshot_free(AimRimeSnapshot *snapshot);
 int aim_rime_redeploy(void);

@@ -117,8 +117,9 @@ const runtimeTwo = Object.freeze({
   launchedAt: "2026-07-15T00:31:00.000Z",
 });
 
-function event({ timestamp, eventKind, clientHash, processInstanceID, sequence, committed = false }) {
+function event({ timestamp, eventKind, clientHash, processInstanceID, sequence, committed = false, stages }) {
   return {
+    ...(stages ? { stages } : {}),
     timestamp,
     eventKind,
     status: 0,
@@ -172,6 +173,11 @@ for (let index = 0; index < 750; index += 1) {
     processInstanceID: generation,
     sequence: nextSequence(generation),
     committed: index < 150,
+    // Keys from builds with per-key stage timings carry them; older ones do not.
+    stages: index % 2 === 0 ? {
+      setup: 1_000, preceding: 0, process: 90_000, model: 40_000, quality: 2_000,
+      insert: 0, marked: 3_000, caret: 4_000, panel: 5_000,
+    } : undefined,
   }));
 }
 

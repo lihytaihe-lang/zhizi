@@ -12,6 +12,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 阿克拉	a ke la	250	地方	世界各国和首都	167	0	deepseek-flash generation, 3-pass review	project-authored
 阿里山	a li shan	250	地方	中国的著名景点和山水	734	0	deepseek-flash generation, 3-pass review	project-authored
 阿里山茶	a li shan cha	250	食物	茶叶品种	2	0	deepseek-flash generation, 3-pass review	project-authored
+阿里云	a li yun	400	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 阿里云百炼	a li yun bai lian	250	2024	人工智能产品、大模型与 AI 公司的中文名（如文心一言、通义千问、智谱、月之暗面、豆包、元宝）	0	0	deepseek-flash generation, 3-pass review	project-authored
 阿里云盘	a li yun pan	250	常见事物、物品、地点和机构的名称	软件开发、AI 与互联网产品	0	0	deepseek-flash generation, 3-pass review	project-authored
 阿莫西林	a mo xi lin	250	物品	医疗器械和药品剂型	21	5	deepseek-flash generation, 3-pass review	project-authored
@@ -526,6 +527,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 背包客	bei bao ke	250	人	各种爱好者和某某党某某族的叫法	83	0	deepseek-flash generation, 3-pass review	project-authored
 北碚	bei bei	250	地方	中国的县和区（常被提到的）	179	0	deepseek-flash generation, 3-pass review	project-authored
 备菜	bei cai	400	常用的动作、做法和动词短语	吃喝与餐饮外卖	5	10	deepseek-flash generation, 3-pass review	project-authored
+被裁	bei cai	250	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 被带飞	bei dai fei	250	日常口语里常说的说法和短语	影视、音乐、游戏与娱乐	0	0	deepseek-flash generation, 3-pass review	project-authored
 背带裤	bei dai ku	250	物品	衣服和裤子的款式	4	0	deepseek-flash generation, 3-pass review	project-authored
 背带裙	bei dai qun	250	物品	衣服和裤子的款式	0	0	deepseek-flash generation, 3-pass review	project-authored
@@ -823,6 +825,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 补充材料	bu chong cai liao	400	日常口语里常说的说法和短语	工作职场与开会	9	12	deepseek-flash generation, 3-pass review	project-authored
 不错哈	bu cuo ha	400	日常口语里常说的说法和短语	微信聊天与社交网络	0	1	deepseek-flash generation, 3-pass review	project-authored
 不错哦	bu cuo o	250	日常口语里常说的说法和短语	微信聊天与社交网络	0	0	deepseek-flash generation, 3-pass review	project-authored
+不大靠谱	bu da kao pu	250	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 布达佩斯	bu da pei si	250	地方	世界各国和首都	729	0	deepseek-flash generation, 3-pass review	project-authored
 不丹	bu dan	250	地方	世界各国和首都	1020	0	deepseek-flash generation, 3-pass review	project-authored
 补档	bu dang	400	日常口语里常说的说法和短语	影视、音乐、游戏与娱乐	4	0	deepseek-flash generation, 3-pass review	project-authored
@@ -1575,6 +1578,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 慈善总会	ci shan zong hui	250	社会	政府部门和公共服务	86	0	deepseek-flash generation, 3-pass review	project-authored
 刺豚	ci tun	250	动物	鱼类和海洋生物	3	0	deepseek-flash generation, 3-pass review	project-authored
 次卧	ci wo	400	常见事物、物品、地点和机构的名称	住房、租房与装修	12	21	deepseek-flash generation, 3-pass review	project-authored
+磁吸	ci xi	254	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 磁吸充电	ci xi chong dian	250	2024	手机、汽车与科技硬件	0	0	deepseek-flash generation, 3-pass review	project-authored
 磁吸生态	ci xi sheng tai	250	2023	手机、汽车与科技硬件	0	0	deepseek-flash generation, 3-pass review	project-authored
 次中音号	ci zhong yin hao	250	物品	乐器	18	0	deepseek-flash generation, 3-pass review	project-authored
@@ -1945,6 +1949,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 带鱼屏	dai yu ping	250	物品	数码产品和配件	2	4	deepseek-flash generation, 3-pass review	project-authored
 带状疱疹	dai zhuang pao zhen	250	身体与健康	常见疾病和病名	31	2	deepseek-flash generation, 3-pass review	project-authored
 带走吃	dai zou chi	400	日常口语里常说的说法和短语	吃喝与餐饮外卖	2	0	deepseek-flash generation, 3-pass review	project-authored
+待做	dai zuo	400	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 蛋白棒	dan bai bang	250	食物	零食和糖果	3	1	deepseek-flash generation, 3-pass review	project-authored
 蛋白粉	dan bai fen	400	常见事物、物品、地点和机构的名称	体育运动与健身	4	0	deepseek-flash generation, 3-pass review	project-authored
 淡斑	dan ban	141	常用的动作、做法和动词短语	美妆、穿搭与个人护理	2	0	deepseek-flash generation, 3-pass review	project-authored
@@ -2208,6 +2213,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 底线球	di xian qiu	250	文化娱乐	球类运动的术语	0	0	deepseek-flash generation, 3-pass review	project-authored
 低血压	di xue ya	250	身体与健康	常见疾病和病名	138	1	deepseek-flash generation, 3-pass review	project-authored
 滴眼液	di yan ye	250	物品	医疗器械和药品剂型	12	2	deepseek-flash generation, 3-pass review	project-authored
+第一梯队	di yi ti dui	250	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 第一性原理	di yi xing yuan li	400	2025	当年的年度十大流行语、年度热词、年度网络用语（如遥遥领先、情绪价值、松弛感、city不city 里的中文部分）	8	0	deepseek-flash generation, 3-pass review	project-authored
 第一学历	di yi xue li	250	2026	社会热点、政策与经济	0	0	deepseek-flash generation, 3-pass review	project-authored
 第一志愿	di yi zhi yuan	250	学习与工作	考试、升学和留学常用词	44	0	deepseek-flash generation, 3-pass review	project-authored
@@ -2534,6 +2540,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 抖音豆包	dou yin dou bao	250	2024	人工智能产品、大模型与 AI 公司的中文名（如文心一言、通义千问、智谱、月之暗面、豆包、元宝）	0	0	deepseek-flash generation, 3-pass review	project-authored
 抖音火山版	dou yin huo shan ban	250	社会	互联网平台和常见的 App 名称	1	0	deepseek-flash generation, 3-pass review	project-authored
 抖音极速版	dou yin ji su ban	250	社会	互联网平台和常见的 App 名称	0	0	deepseek-flash generation, 3-pass review	project-authored
+抖音视频	dou yin shi pin	250	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 斗鱼	dou yu	174	动物	常见宠物（兔、仓鼠、鸟、鱼、龟等）及其品种和毛色叫法	71	0	deepseek-flash generation, 3-pass review	project-authored
 堵半天	du ban tian	250	日常口语里常说的说法和短语	交通出行与驾车	0	0	deepseek-flash generation, 3-pass review	project-authored
 杜宾	du bin	250	动物	宠物狗的品种	88	0	deepseek-flash generation, 3-pass review	project-authored
@@ -3201,6 +3208,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 复方甘草片	fu fang gan cao pian	250	物品	医疗器械和药品剂型	0	0	deepseek-flash generation, 3-pass review	project-authored
 付费短剧	fu fei duan ju	250	2024	App、小程序与互联网服务的中文名	0	0	deepseek-flash generation, 3-pass review	project-authored
 付费解锁	fu fei jie suo	400	2024	手机、汽车与科技硬件	4	0	deepseek-flash generation, 3-pass review	project-authored
+付费皮肤	fu fei pi fu	400	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 付费墙	fu fei qiang	400	2025	App、小程序与互联网服务的中文名	4	1	deepseek-flash generation, 3-pass review	project-authored
 浮粉	fu fen	250	日常口语里常说的说法和短语	美妆、穿搭与个人护理	0	0	deepseek-flash generation, 3-pass review	project-authored
 负分割	fu fen ge	250	2025	健康与运动	0	0	deepseek-flash generation, 3-pass review	project-authored
@@ -3566,6 +3574,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 工具车	gong ju che	250	物品	工具和五金	8	0	deepseek-flash generation, 3-pass review	project-authored
 工具调用	gong ju diao yong	400	2024	人工智能与大模型	3	4	deepseek-flash generation, 3-pass review	project-authored
 工具人	gong ju ren	400	2025	游戏、影视与娱乐	23	1	deepseek-flash generation, 3-pass review	project-authored
+工具书	gong ju shu	400	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 公开水域	gong kai shui yu	250	文化娱乐	体育项目和赛事	56	0	deepseek-flash generation, 3-pass review	project-authored
 贡梨	gong li	250	植物	水果	0	0	deepseek-flash generation, 3-pass review	project-authored
 公路车	gong lu che	400	常见事物、物品、地点和机构的名称	体育运动与健身	48	2	deepseek-flash generation, 3-pass review	project-authored
@@ -3649,6 +3658,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 狗獾	gou huan	250	动物	野生哺乳动物	18	0	deepseek-flash generation, 3-pass review	project-authored
 狗粮碗	gou liang wan	250	物品	宠物用品	0	0	deepseek-flash generation, 3-pass review	project-authored
 狗笼	gou long	250	物品	宠物用品	2	0	deepseek-flash generation, 3-pass review	project-authored
+购买记录	gou mai ji lu	250	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 狗奴	gou nu	250	人	各种爱好者和某某党某某族的叫法	22	0	deepseek-flash generation, 3-pass review	project-authored
 狗牌	gou pai	250	物品	宠物用品	23	0	deepseek-flash generation, 3-pass review	project-authored
 购票软件	gou piao ruan jian	400	常见事物、物品、地点和机构的名称	影视、音乐、游戏与娱乐	1	0	deepseek-flash generation, 3-pass review	project-authored
@@ -3670,6 +3680,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 狗证	gou zheng	250	物品	宠物用品	0	2	deepseek-flash generation, 3-pass review	project-authored
 购置税	gou zhi shui	250	社会	新闻里常见的机构和政策词	3	0	deepseek-flash generation, 3-pass review	project-authored
 购置税减免	gou zhi shui jian mian	250	2025	手机、汽车与科技硬件	0	0	deepseek-flash generation, 3-pass review	project-authored
+苟住	gou zhu	250	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 谷氨酰胺	gu an xian an	250	身体与健康	营养成分和保健品	40	0	deepseek-flash generation, 3-pass review	project-authored
 古城旅拍	gu cheng lv pai	250	2026	消费、生活方式与旅游	0	0	deepseek-flash generation, 3-pass review	project-authored
 古城游	gu cheng you	250	2026	消费、生活方式与旅游	0	0	deepseek-flash generation, 3-pass review	project-authored
@@ -3791,6 +3802,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 关空调	guan kong tiao	400	常用的动作、做法和动词短语	穿着与日用品	2	7	deepseek-flash generation, 3-pass review	project-authored
 管理闭环	guan li bi huan	250	2023	职场与办公	0	0	deepseek-flash generation, 3-pass review	project-authored
 管理费下调	guan li fei xia tiao	400	2024	金融与投资	0	2	deepseek-flash generation, 3-pass review	project-authored
+管理后台	guan li hou tai	250	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 关流量	guan liu liang	400	常用的动作、做法和动词短语	手机、电脑与数码产品	0	1	deepseek-flash generation, 3-pass review	project-authored
 关麦	guan mai	400	常用的动作、做法和动词短语	手机、电脑与数码产品	7	2	deepseek-flash generation, 3-pass review	project-authored
 关你啥事	guan ni sha shi	250	日常口语里常说的说法和短语	人际关系与情绪感受	0	0	deepseek-flash generation, 3-pass review	project-authored
@@ -4325,6 +4337,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 猴头菌	hou tou jun	250	植物	菌菇	2	0	deepseek-flash generation, 3-pass review	project-authored
 后腿肉	hou tui rou	250	食物	肉类和海鲜食材	4	0	deepseek-flash generation, 3-pass review	project-authored
 候选人体验	hou xuan ren ti yan	250	2024	职场与办公	0	0	deepseek-flash generation, 3-pass review	project-authored
+候选字	hou xuan zi	250	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 后训练	hou xun lian	400	2026	人工智能与大模型	20	7	deepseek-flash generation, 3-pass review	project-authored
 喉炎	hou yan	250	身体与健康	常见疾病和病名	31	0	deepseek-flash generation, 3-pass review	project-authored
 虎斑猫	hu ban mao	250	动物	宠物猫的品种	24	0	deepseek-flash generation, 3-pass review	project-authored
@@ -4457,6 +4470,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 花生仁	hua sheng ren	250	植物	坚果和干果	10	0	deepseek-flash generation, 3-pass review	project-authored
 滑石	hua shi	250	植物	中药材和草药	123	2	deepseek-flash generation, 3-pass review	project-authored
 桦树	hua shu	250	植物	树木	83	0	deepseek-flash generation, 3-pass review	project-authored
+话术	hua shu	250	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 滑水	hua shui	146	文化娱乐	体育项目和赛事	83	0	deepseek-flash generation, 3-pass review	project-authored
 话题度	hua ti du	400	2025	游戏、影视与娱乐	10	0	deepseek-flash generation, 3-pass review	project-authored
 花童	hua tong	250	生活	婚礼、生日、丧葬等人生礼仪的词	23	0	deepseek-flash generation, 3-pass review	project-authored
@@ -4689,6 +4703,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 混合专家	hun he zhuan jia	400	2024	互联网产品、平台与应用	4	0	deepseek-flash generation, 3-pass review	project-authored
 混剪	hun jian	163	日常口语里常说的说法和短语	影视、音乐、游戏与娱乐	3	4	deepseek-flash generation, 3-pass review	project-authored
 婚戒	hun jie	154	物品	首饰和珠宝	89	0	deepseek-flash generation, 3-pass review	project-authored
+混拼	hun pin	250	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 婚前财产	hun qian cai chan	250	常见事物、物品、地点和机构的名称	政务办事与法律常识	0	0	deepseek-flash generation, 3-pass review	project-authored
 混血猫	hun xue mao	250	动物	宠物猫的品种	2	0	deepseek-flash generation, 3-pass review	project-authored
 混氧跑	hun yang pao	250	2024	健康与运动	0	0	deepseek-flash generation, 3-pass review	project-authored
@@ -4806,6 +4821,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 纪律委员	ji lv wei yuan	250	人	学校里的身份、职务和学科	103	0	deepseek-flash generation, 3-pass review	project-authored
 蓟马	ji ma	250	动物	昆虫和小虫子	11	0	deepseek-flash generation, 3-pass review	project-authored
 即买即退	ji mai ji tui	250	2024	社会热点、政策与经济	0	0	deepseek-flash generation, 3-pass review	project-authored
+即梦	ji meng	250	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 稷米	ji mi	250	植物	粮食作物和杂粮	0	0	deepseek-flash generation, 3-pass review	project-authored
 机密计算	ji mi ji suan	250	2026	软件开发与编程	0	0	deepseek-flash generation, 3-pass review	project-authored
 即墨老酒	ji mo lao jiu	250	食物	酒类和酒的品种	0	0	deepseek-flash generation, 3-pass review	project-authored
@@ -4887,6 +4903,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 济阳	ji yang	203	地方	中国的县和区（常被提到的）	226	0	deepseek-flash generation, 3-pass review	project-authored
 吉野家	ji ye jia	250	社会	常见品牌和连锁店（餐饮、零售、服饰）	102	0	deepseek-flash generation, 3-pass review	project-authored
 记忆泊车	ji yi bo che	250	2024	手机、汽车与科技硬件	0	0	deepseek-flash generation, 3-pass review	project-authored
+记忆宫殿	ji yi gong dian	250	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 记忆机制	ji yi ji zhi	400	2025	人工智能与大模型	1	0	deepseek-flash generation, 3-pass review	project-authored
 记忆库	ji yi ku	400	2026	软件开发与编程	43	2	deepseek-flash generation, 3-pass review	project-authored
 记忆棉	ji yi mian	250	物品	布料和材质	2	7	deepseek-flash generation, 3-pass review	project-authored
@@ -5169,6 +5186,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 降噪耳机	jiang zao er ji	250	物品	数码产品和配件	0	60	deepseek-flash generation, 3-pass review	project-authored
 讲真	jiang zhen	456	口语高频	聊天语料	0	44	deepseek-flash generation, 3-pass review	project-authored
 讲真的	jiang zhen de	120	口语高频	聊天语料	0	0	deepseek-flash generation, 3-pass review	project-authored
+降智	jiang zhi	400	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 降准	jiang zhun	250	社会	新闻里常见的机构和政策词	2	187	deepseek-flash generation, 3-pass review	project-authored
 降准降息	jiang zhun jiang xi	400	2023	社会热点、政策与经济	0	34	deepseek-flash generation, 3-pass review	project-authored
 姜子牙	jiang zi ya	250	文化娱乐	神话传说和民间故事里的名字	35	0	deepseek-flash generation, 3-pass review	project-authored
@@ -5726,12 +5744,14 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 开学了	kai xue le	400	日常口语里常说的说法和短语	天气、季节与自然	3	5	deepseek-flash generation, 3-pass review	project-authored
 开演唱会	kai yan chang hui	400	日常口语里常说的说法和短语	影视、音乐、游戏与娱乐	60	5	deepseek-flash generation, 3-pass review	project-authored
 开雨刷	kai yu shua	250	常用的动作、做法和动词短语	交通出行与驾车	0	0	deepseek-flash generation, 3-pass review	project-authored
+开源版本	kai yuan ban ben	250	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 开源潮	kai yuan chao	250	2024	人工智能产品、大模型与 AI 公司的中文名（如文心一言、通义千问、智谱、月之暗面、豆包、元宝）	0	0	deepseek-flash generation, 3-pass review	project-authored
 开源大模型	kai yuan da mo xing	400	2023	人工智能产品、大模型与 AI 公司的中文名（如文心一言、通义千问、智谱、月之暗面、豆包、元宝）	4	1	deepseek-flash generation, 3-pass review	project-authored
 开远光	kai yuan guang	250	常用的动作、做法和动词短语	交通出行与驾车	0	0	deepseek-flash generation, 3-pass review	project-authored
 开源模型	kai yuan mo xing	400	2023	人工智能与大模型	22	24	deepseek-flash generation, 3-pass review	project-authored
 开源权重	kai yuan quan zhong	400	2024	人工智能产品、大模型与 AI 公司的中文名（如文心一言、通义千问、智谱、月之暗面、豆包、元宝）	0	3	deepseek-flash generation, 3-pass review	project-authored
 开源生态	kai yuan sheng tai	400	2025	人工智能与大模型	36	0	deepseek-flash generation, 3-pass review	project-authored
+开源许可	kai yuan xu ke	250	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 开早会	kai zao hui	400	日常口语里常说的说法和短语	工作职场与开会	0	2	deepseek-flash generation, 3-pass review	project-authored
 开斋节	kai zhai jie	250	生活	节日、习俗和日期的叫法	101	0	deepseek-flash generation, 3-pass review	project-authored
 开震动	kai zhen dong	250	常用的动作、做法和动词短语	手机、电脑与数码产品	0	0	deepseek-flash generation, 3-pass review	project-authored
@@ -6780,6 +6800,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 路转黑	lu zhuan hei	250	2025	游戏、影视与娱乐	0	0	deepseek-flash generation, 3-pass review	project-authored
 卵磷脂	luan lin zhi	250	物品	宠物用品	98	0	deepseek-flash generation, 3-pass review	project-authored
 轮边电机	lun bian dian ji	400	2024	手机、汽车与科技硬件	2	0	deepseek-flash generation, 3-pass review	project-authored
+轮动	lun dong	400	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 伦敦塔桥	lun dun ta qiao	250	地方	世界著名城市和景点	8	0	deepseek-flash generation, 3-pass review	project-authored
 轮毂电机	lun gu dian ji	250	2024	手机、汽车与科技硬件	0	0	deepseek-flash generation, 3-pass review	project-authored
 轮滑鞋	lun hua xie	250	物品	运动器材和装备	2	6	deepseek-flash generation, 3-pass review	project-authored
@@ -6793,6 +6814,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 萝卜快跑	luo bo kuai pao	400	2024	国产新能源汽车品牌、车型和智驾系统的中文名（如问界、尊界、智界、极氪、小米汽车）	1	0	deepseek-flash generation, 3-pass review	project-authored
 萝卜排骨汤	luo bo pai gu tang	250	食物	中餐家常菜	0	0	deepseek-flash generation, 3-pass review	project-authored
 萝卜腿	luo bo tui	250	生活	健身和减肥相关的词	0	0	deepseek-flash generation, 3-pass review	project-authored
+落不了地	luo bu liao di	250	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 裸辞	luo ci	400	2026	网络流行语与梗	0	13	deepseek-flash generation, 3-pass review	project-authored
 落地签	luo di qian	250	生活	出行、交通和旅行相关的词	106	9	deepseek-flash generation, 3-pass review	project-authored
 落地情况	luo di qing kuang	400	日常口语里常说的说法和短语	工作职场与开会	0	6	deepseek-flash generation, 3-pass review	project-authored
@@ -6937,6 +6959,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 马绍尔群岛	ma shao er qun dao	250	地方	世界各国和首都	248	0	deepseek-flash generation, 3-pass review	project-authored
 麻绳	ma sheng	196	物品	工具和五金	26	1	deepseek-flash generation, 3-pass review	project-authored
 马斯喀特	ma si ka te	250	地方	世界各国和首都	122	0	deepseek-flash generation, 3-pass review	project-authored
+马斯克	ma si ke	250	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 马蹄莲	ma ti lian	250	植物	花卉	3	0	deepseek-flash generation, 3-pass review	project-authored
 马天尼	ma tian ni	250	食物	酒类和酒的品种	41	0	deepseek-flash generation, 3-pass review	project-authored
 马桶垫	ma tong dian	250	物品	日用品和洗护用品	0	0	deepseek-flash generation, 3-pass review	project-authored
@@ -7582,6 +7605,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 脑梗	nao geng	400	日常口语里常说的说法和短语	医疗看病与健康	50	0	deepseek-flash generation, 3-pass review	project-authored
 瑙鲁	nao lu	250	地方	世界各国和首都	112	0	deepseek-flash generation, 3-pass review	project-authored
 闹呢	nao ne	120	口语高频	聊天语料	0	1	deepseek-flash generation, 3-pass review	project-authored
+脑图	nao tu	400	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 脑外科	nao wai ke	250	人	医生的科室和医护岗位	21	0	deepseek-flash generation, 3-pass review	project-authored
 哪吒汽车	ne zha qi che	250	2025	国产手机、操作系统、芯片与电子产品的品牌和型号中文名（如鸿蒙、麒麟、澎湃）	0	0	deepseek-flash generation, 3-pass review	project-authored
 内比都	nei bi du	250	地方	世界各国和首都	59	0	deepseek-flash generation, 3-pass review	project-authored
@@ -7835,6 +7859,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 帕利基尔	pa li ji er	250	地方	世界各国和首都	6	0	deepseek-flash generation, 3-pass review	project-authored
 帕罗西汀	pa luo xi ting	250	物品	医疗器械和药品剂型	7	0	deepseek-flash generation, 3-pass review	project-authored
 耙耙柑	pa pa gan	250	植物	水果	0	0	deepseek-flash generation, 3-pass review	project-authored
+爬取	pa qu	250	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 爬泰山	pa tai shan	250	常用的动作、做法和动词短语	中国城市、省份与著名景点	0	0	deepseek-flash generation, 3-pass review	project-authored
 爬香山	pa xiang shan	400	常用的动作、做法和动词短语	中国城市、省份与著名景点	0	17	deepseek-flash generation, 3-pass review	project-authored
 爬行垫	pa xing dian	250	物品	玩具和游戏机	0	0	deepseek-flash generation, 3-pass review	project-authored
@@ -7996,6 +8021,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 皮尺	pi chi	250	物品	工具和五金	2	0	deepseek-flash generation, 3-pass review	project-authored
 蜱虫	pi chong	250	动物	昆虫和小虫子	55	1	deepseek-flash generation, 3-pass review	project-authored
 郫都	pi du	250	地方	中国的县和区（常被提到的）	36	0	deepseek-flash generation, 3-pass review	project-authored
+皮肤管理	pi fu guan li	250	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 皮肤痒	pi fu yang	250	身体与健康	常见症状和不适	0	0	deepseek-flash generation, 3-pass review	project-authored
 皮肤衣	pi fu yi	250	2025	健康与运动	0	0	deepseek-flash generation, 3-pass review	project-authored
 披哥	pi ge	250	2025	当年的热门影视剧、综艺、游戏和网络小说名	0	0	deepseek-flash generation, 3-pass review	project-authored
@@ -8078,6 +8104,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 平衡木	ping heng mu	250	物品	运动器材和装备	52	0	deepseek-flash generation, 3-pass review	project-authored
 平衡训练	ping heng xun lian	250	2025	健康与运动	0	0	deepseek-flash generation, 3-pass review	project-authored
 平话	ping hua	250	地方	中国的民族和方言	86	0	deepseek-flash generation, 3-pass review	project-authored
+平级	ping ji	400	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 平急两用	ping ji liang yong	250	2023	社会热点、政策与经济	0	0	deepseek-flash generation, 3-pass review	project-authored
 平角裤	ping jiao ku	250	物品	衣服和裤子的款式	6	0	deepseek-flash generation, 3-pass review	project-authored
 评剧	ping ju	250	文化娱乐	音乐类型、乐队和演唱会相关词	165	0	deepseek-flash generation, 3-pass review	project-authored
@@ -8787,6 +8814,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 认房不认贷	ren fang bu ren dai	250	2023	社会热点、政策与经济	0	0	deepseek-flash generation, 3-pass review	project-authored
 人岗匹配	ren gang pi pei	250	2026	职场与办公	0	0	deepseek-flash generation, 3-pass review	project-authored
 人工客服	ren gong ke fu	400	常见事物、物品、地点和机构的名称	微信聊天与社交网络	0	16	deepseek-flash generation, 3-pass review	project-authored
+人工审核	ren gong shen he	250	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 人工通道	ren gong tong dao	400	常见事物、物品、地点和机构的名称	交通出行与驾车	5	13	deepseek-flash generation, 3-pass review	project-authored
 人工智能安全	ren gong zhi neng an quan	400	2025	人工智能与大模型	24	0	deepseek-flash generation, 3-pass review	project-authored
 人工智能变现	ren gong zhi neng bian xian	250	2026	人工智能产品、大模型与 AI 公司的中文名（如文心一言、通义千问、智谱、月之暗面、豆包、元宝）	0	0	deepseek-flash generation, 3-pass review	project-authored
@@ -9137,6 +9165,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 沙发套	sha fa tao	250	物品	家具和家居用品	0	36	deepseek-flash generation, 3-pass review	project-authored
 杀疯了	sha feng le	400	日常口语里常说的说法和短语	影视、音乐、游戏与娱乐	0	1	deepseek-flash generation, 3-pass review	project-authored
 砂锅米线	sha guo mi xian	250	食物	各地小吃和早餐	0	0	deepseek-flash generation, 3-pass review	project-authored
+沙盒	sha he	206	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 沙盒监管	sha he jian guan	250	2025	社会热点、政策与经济	0	0	deepseek-flash generation, 3-pass review	project-authored
 沙盒游戏	sha he you xi	250	文化娱乐	游戏类型和游戏里的常用词	17	0	deepseek-flash generation, 3-pass review	project-authored
 沙壶球	sha hu qiu	250	文化娱乐	体育项目和赛事	2	0	deepseek-flash generation, 3-pass review	project-authored
@@ -9263,6 +9292,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 上四休三	shang si xiu san	250	2023	消费、生活方式与旅游	0	0	deepseek-flash generation, 3-pass review	project-authored
 上台汇报	shang tai hui bao	250	常用的动作、做法和动词短语	学校、学习与考试	0	0	deepseek-flash generation, 3-pass review	project-authored
 上台讲	shang tai jiang	400	常用的动作、做法和动词短语	学校、学习与考试	4	0	deepseek-flash generation, 3-pass review	project-authored
+商汤	shang tang	235	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 上汤菠菜	shang tang bo cai	250	食物	水果和蔬菜的做法与吃法	0	0	deepseek-flash generation, 3-pass review	project-authored
 商汤日日新	shang tang ri ri xin	250	2024	人工智能产品、大模型与 AI 公司的中文名（如文心一言、通义千问、智谱、月之暗面、豆包、元宝）	0	0	deepseek-flash generation, 3-pass review	project-authored
 上汤娃娃菜	shang tang wa wa cai	250	食物	中餐家常菜	0	0	deepseek-flash generation, 3-pass review	project-authored
@@ -9570,6 +9600,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 实景演出	shi jing yan chu	400	2023	游戏、影视与娱乐	2	0	deepseek-flash generation, 3-pass review	project-authored
 视觉大模型	shi jue da mo xing	250	2025	人工智能与大模型	0	0	deepseek-flash generation, 3-pass review	project-authored
 石决明	shi jue ming	250	植物	中药材和草药	0	0	deepseek-flash generation, 3-pass review	project-authored
+视觉能力	shi jue neng li	250	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 屎壳郎	shi ke lang	250	动物	昆虫和小虫子	4	0	deepseek-flash generation, 3-pass review	project-authored
 实况窗	shi kuang chuang	250	2024	互联网产品、平台与应用	0	0	deepseek-flash generation, 3-pass review	project-authored
 史莱姆	shi lai mu	250	物品	玩具和游戏机	65	6	deepseek-flash generation, 3-pass review	project-authored
@@ -10009,6 +10040,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 水杉	shui shan	250	植物	树木	34	0	deepseek-flash generation, 3-pass review	project-authored
 水獭	shui ta	250	动物	野生哺乳动物	175	0	deepseek-flash generation, 3-pass review	project-authored
 水桶包	shui tong bao	250	物品	鞋帽、包和配饰	2	0	deepseek-flash generation, 3-pass review	project-authored
+水豚	shui tun	250	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 水温计	shui wen ji	250	物品	母婴用品	0	0	deepseek-flash generation, 3-pass review	project-authored
 税务稽查	shui wu ji cha	250	学习与工作	财务会计和税务常用词	5	0	deepseek-flash generation, 3-pass review	project-authored
 税务师	shui wu shi	250	学习与工作	财务会计和税务常用词	2	0	deepseek-flash generation, 3-pass review	project-authored
@@ -10522,6 +10554,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 体温枪	ti wen qiang	250	常见事物、物品、地点和机构的名称	微信聊天与社交网络	0	0	deepseek-flash generation, 3-pass review	project-authored
 提鲜	ti xian	250	生活	烹饪方法和厨房动作	4	2	deepseek-flash generation, 3-pass review	project-authored
 提现手续费	ti xian shou xu fei	250	常用的动作、做法和动词短语	银行、理财与支付	0	0	deepseek-flash generation, 3-pass review	project-authored
+提效	ti xiao	121	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 剃须	ti xu	118	常用的动作、做法和动词短语	美妆、穿搭与个人护理	37	30	deepseek-flash generation, 3-pass review	project-authored
 剃须泡	ti xu pao	250	物品	日用品和洗护用品	0	0	deepseek-flash generation, 3-pass review	project-authored
 提需求	ti xu qiu	400	常用的动作、做法和动词短语	工作职场与开会	0	37	deepseek-flash generation, 3-pass review	project-authored
@@ -10663,6 +10696,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 贴个膜	tie ge mo	400	日常口语里常说的说法和短语	手机、电脑与数码产品	0	3	deepseek-flash generation, 3-pass review	project-authored
 贴梗海棠	tie geng hai tang	250	植物	花卉	6	0	deepseek-flash generation, 3-pass review	project-authored
 铁拐李	tie guai li	250	文化娱乐	古诗词和历史上的常见称呼（现代人仍常提）	7	0	deepseek-flash generation, 3-pass review	project-authored
+贴画	tie hua	250	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 铁环	tie huan	250	物品	玩具和游戏机	83	0	deepseek-flash generation, 3-pass review	project-authored
 贴剂	tie ji	250	物品	医疗器械和药品剂型	2	0	deepseek-flash generation, 3-pass review	project-authored
 铁剂	tie ji	250	身体与健康	常用药品的名称	15	1	deepseek-flash generation, 3-pass review	project-authored
@@ -10784,6 +10818,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 投顾试点	tou gu shi dian	250	2024	金融与投资	0	0	deepseek-flash generation, 3-pass review	project-authored
 投流	tou liu	400	2023	互联网产品、平台与应用	5	134	deepseek-flash generation, 3-pass review	project-authored
 头颅核磁	tou lu he ci	250	身体与健康	体检和检查项目	0	0	deepseek-flash generation, 3-pass review	project-authored
+透明代理	tou ming dai li	400	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 透明底盘	tou ming di pan	250	2024	手机、汽车与科技硬件	0	0	deepseek-flash generation, 3-pass review	project-authored
 透明机盖	tou ming ji gai	250	2024	手机、汽车与科技硬件	0	0	deepseek-flash generation, 3-pass review	project-authored
 透明质酸	tou ming zhi suan	250	物品	化妆品和护肤品	42	0	deepseek-flash generation, 3-pass review	project-authored
@@ -11162,6 +11197,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 违停	wei ting	250	生活	出行、交通和旅行相关的词	17	2	deepseek-flash generation, 3-pass review	project-authored
 维吾尔语	wei wu er yu	250	地方	中国的民族和方言	121	0	deepseek-flash generation, 3-pass review	project-authored
 维吾尔族	wei wu er zu	250	地方	中国的民族和方言	510	0	deepseek-flash generation, 3-pass review	project-authored
+危险告警	wei xian gao jing	250	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 蔚小理	wei xiao li	250	2026	国产新能源汽车品牌、车型和智驾系统的中文名（如问界、尊界、智界、极氪、小米汽车）	0	0	deepseek-flash generation, 3-pass review	project-authored
 微信豆	wei xin dou	250	2023	App、小程序与互联网服务的中文名	0	0	deepseek-flash generation, 3-pass review	project-authored
 微信读书	wei xin du shu	250	社会	互联网平台和常见的 App 名称	0	32	deepseek-flash generation, 3-pass review	project-authored
@@ -11795,6 +11831,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 橡皮艇	xiang pi ting	250	物品	交通工具和车辆部件	42	0	deepseek-flash generation, 3-pass review	project-authored
 橡皮章	xiang pi zhang	250	物品	文具和办公用品	0	0	deepseek-flash generation, 3-pass review	project-authored
 香芹	xiang qin	250	植物	香料和调味植物	15	0	deepseek-flash generation, 3-pass review	project-authored
+详情卡片	xiang qing ka pian	250	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 香砂	xiang sha	250	植物	香料和调味植物	0	0	deepseek-flash generation, 3-pass review	project-authored
 向上管理	xiang shang guan li	400	2024	职场与办公	0	1	deepseek-flash generation, 3-pass review	project-authored
 向上汇报	xiang shang hui bao	400	2026	职场与办公	2	4	deepseek-flash generation, 3-pass review	project-authored
@@ -11802,6 +11839,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 香水柠檬	xiang shui ning meng	250	植物	水果	0	0	deepseek-flash generation, 3-pass review	project-authored
 香水瓶	xiang shui ping	400	常见事物、物品、地点和机构的名称	美妆、穿搭与个人护理	23	0	deepseek-flash generation, 3-pass review	project-authored
 像素大灯	xiang su da deng	250	2024	手机、汽车与科技硬件	0	0	deepseek-flash generation, 3-pass review	project-authored
+像素块	xiang su kuai	250	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 箱体震荡	xiang ti zhen dang	400	2026	金融与投资	0	10	deepseek-flash generation, 3-pass review	project-authored
 向往的生活	xiang wang de sheng huo	400	2024	当年的热门影视剧、综艺、游戏和网络小说名	10	0	deepseek-flash generation, 3-pass review	project-authored
 香薰	xiang xun	250	物品	家具和家居用品	50	2	deepseek-flash generation, 3-pass review	project-authored
@@ -11962,6 +12000,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 小鲜肉	xiao xian rou	400	日常口语里常说的说法和短语	影视、音乐、游戏与娱乐	14	0	deepseek-flash generation, 3-pass review	project-authored
 小象	xiao xiang	250	动物	卡通和玩偶里常见的动物形象叫法	22	5	deepseek-flash generation, 3-pass review	project-authored
 小香风	xiao xiang feng	250	物品	衣服和裤子的款式	1	0	deepseek-flash generation, 3-pass review	project-authored
+肖像权	xiao xiang quan	250	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 小巷人家	xiao xiang ren jia	400	2025	当年的热门影视剧、综艺、游戏和网络小说名	6	0	deepseek-flash generation, 3-pass review	project-authored
 销项税	xiao xiang shui	250	学习与工作	财务会计和税务常用词	8	0	deepseek-flash generation, 3-pass review	project-authored
 销项税额	xiao xiang shui e	250	学习与工作	财务会计和税务常用词	0	0	deepseek-flash generation, 3-pass review	project-authored
@@ -12244,6 +12283,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 行政审批局	xing zheng shen pi ju	250	人	法律和政务里的角色和机构	4	0	deepseek-flash generation, 3-pass review	project-authored
 行政庭	xing zheng ting	250	人	法律和政务里的角色和机构	5	0	deepseek-flash generation, 3-pass review	project-authored
 星座配对	xing zuo pei dui	250	文化娱乐	星座、生肖和命理相关词	0	0	deepseek-flash generation, 3-pass review	project-authored
+雄安	xiong an	250	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 胸包	xiong bao	250	物品	鞋帽、包和配饰	2	0	deepseek-flash generation, 3-pass review	project-authored
 胸背带	xiong bei dai	250	物品	宠物用品	0	5	deepseek-flash generation, 3-pass review	project-authored
 熊蜂	xiong feng	171	动物	昆虫和小虫子	19	0	deepseek-flash generation, 3-pass review	project-authored
@@ -12309,9 +12349,11 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 萱草	xuan cao	250	植物	花卉	78	0	deepseek-flash generation, 3-pass review	project-authored
 旋齿鲨	xuan chi sha	250	动物	恐龙和史前生物	0	0	deepseek-flash generation, 3-pass review	project-authored
 宣传委员	xuan chuan wei yuan	250	人	学校里的身份、职务和学科	105	0	deepseek-flash generation, 3-pass review	project-authored
+宣传语	xuan chuan yu	400	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 选导师	xuan dao shi	250	常用的动作、做法和动词短语	学校、学习与考试	0	0	deepseek-flash generation, 3-pass review	project-authored
 选地址	xuan di zhi	400	常用的动作、做法和动词短语	吃喝与餐饮外卖	3	0	deepseek-flash generation, 3-pass review	project-authored
 选调生	xuan diao sheng	400	2023	教育与考试	15	0	deepseek-flash generation, 3-pass review	project-authored
+宣发	xuan fa	400	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 炫饭	xuan fan	250	常用的动作、做法和动词短语	吃喝与餐饮外卖	0	0	deepseek-flash generation, 3-pass review	project-authored
 玄凤	xuan feng	250	动物	常见宠物（兔、仓鼠、鸟、鱼、龟等）及其品种和毛色叫法	5	16	deepseek-flash generation, 3-pass review	project-authored
 玄凤鹦鹉	xuan feng ying wu	250	动物	常见宠物（兔、仓鼠、鸟、鱼、龟等）及其品种和毛色叫法	4	15	deepseek-flash generation, 3-pass review	project-authored
@@ -12328,6 +12370,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 选科走班	xuan ke zou ban	250	2023	教育与考试	0	0	deepseek-flash generation, 3-pass review	project-authored
 悬空寺	xuan kong si	250	地方	中国的著名景点和山水	7	0	deepseek-flash generation, 3-pass review	project-authored
 选口味	xuan kou wei	250	常用的动作、做法和动词短语	吃喝与餐饮外卖	0	0	deepseek-flash generation, 3-pass review	project-authored
+炫酷	xuan ku	400	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 选楼层	xuan lou ceng	250	常用的动作、做法和动词短语	住房、租房与装修	0	0	deepseek-flash generation, 3-pass review	project-authored
 玄猫	xuan mao	250	动物	宠物猫的品种	0	0	deepseek-flash generation, 3-pass review	project-authored
 玄派	xuan pai	266	2023	国产手机、操作系统、芯片与电子产品的品牌和型号中文名（如鸿蒙、麒麟、澎湃）	15	0	deepseek-flash generation, 3-pass review	project-authored
@@ -12665,6 +12708,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 药品监管	yao pin jian guan	400	常见事物、物品、地点和机构的名称	政务办事与法律常识	38	0	deepseek-flash generation, 3-pass review	project-authored
 腰旗橄榄	yao qi gan lan	400	2026	健康与运动	9	0	deepseek-flash generation, 3-pass review	project-authored
 腰旗橄榄球	yao qi gan lan qiu	400	2023	消费、生活方式与旅游	9	0	deepseek-flash generation, 3-pass review	project-authored
+邀请码	yao qing ma	400	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 药球	yao qiu	400	2024	健康与运动	3	0	deepseek-flash generation, 3-pass review	project-authored
 钥匙包	yao shi bao	250	物品	鞋帽、包和配饰	1	0	deepseek-flash generation, 3-pass review	project-authored
 钥匙扣	yao shi kou	250	物品	鞋帽、包和配饰	10	3	deepseek-flash generation, 3-pass review	project-authored
@@ -13408,6 +13452,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 云仓	yun cang	330	2024	互联网产品、平台与应用	2	0	deepseek-flash generation, 3-pass review	project-authored
 云侧智能	yun ce zhi neng	250	2026	手机、汽车与科技硬件	0	0	deepseek-flash generation, 3-pass review	project-authored
 晕车药	yun che yao	250	物品	旅行用品和户外装备	0	5	deepseek-flash generation, 3-pass review	project-authored
+云词库	yun ci ku	400	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 云打卡	yun da ka	250	2024	消费、生活方式与旅游	0	0	deepseek-flash generation, 3-pass review	project-authored
 云代驾	yun dai jia	250	2025	手机、汽车与科技硬件	0	0	deepseek-flash generation, 3-pass review	project-authored
 运单	yun dan	400	日常口语里常说的说法和短语	购物、电商与快递	79	4	deepseek-flash generation, 3-pass review	project-authored
@@ -13484,6 +13529,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 咋说	za shuo	120	口语高频	聊天语料	0	17	deepseek-flash generation, 3-pass review	project-authored
 扎头发	za tou fa	250	常用的动作、做法和动词短语	穿着与日用品	0	0	deepseek-flash generation, 3-pass review	project-authored
 咋样嘛	za yang ma	250	日常口语里常说的说法和短语	微信聊天与社交网络	0	0	deepseek-flash generation, 3-pass review	project-authored
+咋整	za zheng	400	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 在岸人民币	zai an ren min bi	400	2025	金融与投资	2	0	deepseek-flash generation, 3-pass review	project-authored
 在暴雪时分	zai bao xue shi fen	250	2024	当年的热门影视剧、综艺、游戏和网络小说名	0	0	deepseek-flash generation, 3-pass review	project-authored
 在不在嘛	zai bu zai ma	250	日常口语里常说的说法和短语	微信聊天与社交网络	0	0	deepseek-flash generation, 3-pass review	project-authored
@@ -13521,6 +13567,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 在线白板	zai xian bai ban	250	2024	互联网产品、平台与应用	0	0	deepseek-flash generation, 3-pass review	project-authored
 在线点餐	zai xian dian can	250	常用的动作、做法和动词短语	吃喝与餐饮外卖	0	0	deepseek-flash generation, 3-pass review	project-authored
 在线会议	zai xian hui yi	400	2025	App、小程序与互联网服务的中文名	6	0	deepseek-flash generation, 3-pass review	project-authored
+在线简历	zai xian jian li	400	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 在线教育	zai xian jiao yu	400	2024	教育与考试	7	1	deepseek-flash generation, 3-pass review	project-authored
 在线审批	zai xian shen pi	400	2026	职场与办公	0	1	deepseek-flash generation, 3-pass review	project-authored
 在线私教	zai xian si jiao	250	2025	健康与运动	0	0	deepseek-flash generation, 3-pass review	project-authored
@@ -13633,6 +13680,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 摘项链	zhai xiang lian	250	常用的动作、做法和动词短语	穿着与日用品	0	0	deepseek-flash generation, 3-pass review	project-authored
 摘眼镜	zhai yan jing	250	常用的动作、做法和动词短语	穿着与日用品	0	0	deepseek-flash generation, 3-pass review	project-authored
 债转股	zhai zhuan gu	400	2024	金融与投资	5	2	deepseek-flash generation, 3-pass review	project-authored
+占比	zhan bi	250	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 站不稳	zhan bu wen	250	身体与健康	常见症状和不适	4	3	deepseek-flash generation, 3-pass review	project-authored
 站队	zhan dui	400	常用的动作、做法和动词短语	人际关系与情绪感受	34	4	deepseek-flash generation, 3-pass review	project-authored
 战斧牛排	zhan fu niu pai	250	食物	西餐和日料、韩餐的菜名	0	0	deepseek-flash generation, 3-pass review	project-authored
@@ -14345,6 +14393,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 专项再贷款	zhuan xiang zai dai kuan	400	2025	金融与投资	1	0	deepseek-flash generation, 3-pass review	project-authored
 专项债	zhuan xiang zhai	400	2023	社会热点、政策与经济	0	2	deepseek-flash generation, 3-pass review	project-authored
 转型金融	zhuan xing jin rong	250	2024	金融与投资	0	0	deepseek-flash generation, 3-pass review	project-authored
+专业词汇	zhuan ye ci hui	250	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 专业岗	zhuan ye gang	400	2026	职场与办公	2	0	deepseek-flash generation, 3-pass review	project-authored
 专业组	zhuan ye zu	400	2023	教育与考试	134	0	deepseek-flash generation, 3-pass review	project-authored
 转移登记	zhuan yi deng ji	250	社会	交通出行的规则和证件手续	0	0	deepseek-flash generation, 3-pass review	project-authored
@@ -14511,6 +14560,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 资源税	zi yuan shui	250	学习与工作	财务会计和税务常用词	6	0	deepseek-flash generation, 3-pass review	project-authored
 紫珍珠	zi zhen zhu	250	植物	盆栽和多肉植物	0	0	deepseek-flash generation, 3-pass review	project-authored
 紫芝	zi zhi	250	植物	菌菇	6	0	deepseek-flash generation, 3-pass review	project-authored
+子智能体	zi zhi neng ti	400	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 自重训练	zi zhong xun lian	250	2026	健康与运动	0	0	deepseek-flash generation, 3-pass review	project-authored
 自助点餐	zi zhu dian can	400	常用的动作、做法和动词短语	吃喝与餐饮外卖	1	1	deepseek-flash generation, 3-pass review	project-authored
 自主规划	zi zhu gui hua	400	2025	人工智能与大模型	2	0	deepseek-flash generation, 3-pass review	project-authored
@@ -14566,6 +14616,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 阻力带	zu li dai	250	物品	运动器材和装备	0	0	deepseek-flash generation, 3-pass review	project-authored
 足膜	zu mo	250	物品	化妆品和护肤品	0	0	deepseek-flash generation, 3-pass review	project-authored
 祖母绿	zu mu lv	250	物品	首饰和珠宝	61	0	deepseek-flash generation, 3-pass review	project-authored
+租显卡	zu xian ka	250	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 足浴盆	zu yu pen	250	物品	家用电器	2	1	deepseek-flash generation, 3-pass review	project-authored
 组织盘点	zu zhi pan dian	250	2024	职场与办公	0	0	deepseek-flash generation, 3-pass review	project-authored
 组织瘦身	zu zhi shou shen	250	2026	职场与办公	0	0	deepseek-flash generation, 3-pass review	project-authored

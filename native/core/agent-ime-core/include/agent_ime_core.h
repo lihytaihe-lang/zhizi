@@ -108,7 +108,21 @@ int32_t aim_session_process(AimSession *session,
 /* Returns 1 for a matching withdrawal, 0 for no match, negative on invalid arguments. */
 int32_t aim_session_withdraw_selection(AimSession *session, const uint8_t *raw, size_t raw_len,
                                      const uint8_t *text, size_t text_len);
+/* 0 = Rime (default), 1 = Zhixu; idle session only. Native Zhixu always learns
+ * in Zhixu; only the Rime decoder writes Rime learning data. */
+int32_t aim_session_set_learning(AimSession *session, uint32_t mode);
+/* 0 = Rime (default), 1 = Zhixu decoder when fuzzy input is off; idle session only.
+ * ZHIZI_ZHIXU_WHOLE=1 forces on. Null=-1, invalid=-2, composing=-10. */
+int32_t aim_session_set_zhixu_whole(AimSession *session, uint32_t on);
+/* Read-only: 1 = validated existing library, 0 = missing, negative = invalid or unreadable. */
+int32_t aim_learning_available(const uint8_t *user, size_t user_len);
+/* Dedicated fresh worker process only, before any Rime initialization. Copies before export.
+ * 0 = ready (existing valid data is retained); negative = failure, no mode change. */
+int32_t aim_learning_migrate(const uint8_t *shared, size_t shared_len,
+                             const uint8_t *user, size_t user_len);
 int32_t aim_session_set_fuzzy(AimSession *session, uint32_t fuzzy_mask);
+/* Deploys again so dictionaries added to the user directory take effect; drops any composition. Returns 0 on success. */
+int32_t aim_session_reload_dictionaries(AimSession *session);
 int32_t aim_session_set_context_profile(AimSession *session,
                                         uint32_t app_class_override,
                                         uint32_t punctuation_policy);
@@ -116,6 +130,11 @@ uint32_t aim_session_context_group_mask(AimSession *session);
 uint32_t aim_session_context_complete_mask(AimSession *session);
 intptr_t aim_session_peek_following_pages(AimSession *session, size_t count, uint8_t *buffer, size_t capacity);
 intptr_t aim_session_composition_alternatives(AimSession *session, uint8_t *buffer, size_t capacity);
+/* Process-wide correction switches; refreshes this session without clearing keys.
+ * Call between model jobs and refresh each other live session before presenting it. */
+int32_t aim_session_set_corrections(AimSession *session, int32_t enabled,
+                                  int32_t typed_costs, int32_t multiple_readings,
+                                  int32_t trailing_letter);
 intptr_t aim_session_composition_edits(AimSession *session, uint8_t *buffer, size_t capacity);
 int32_t aim_session_lead_with_composition(AimSession *session, const uint8_t *text, size_t length);
 int32_t aim_session_offer_composition(AimSession *session, const uint8_t *text, size_t length);

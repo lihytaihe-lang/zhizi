@@ -351,6 +351,36 @@ void aim_rime_clear(uintptr_t session) {
   if (g_api != NULL && session != 0) g_api->clear_composition(session);
 }
 
+int aim_rime_has_raw_echo(uintptr_t session) {
+  if (g_api == NULL || session == 0) return 1;
+  const char *raw = g_api->get_input(session);
+  if (raw == NULL || *raw == '\0') return 1;
+  RimeCandidateListIterator iterator = {0};
+  if (!g_api->candidate_list_begin(session, &iterator)) return 1;
+  int found = 0;
+  while (g_api->candidate_list_next(&iterator)) {
+    const unsigned char *text = (const unsigned char *)iterator.candidate.text;
+    const unsigned char *input = (const unsigned char *)raw;
+    if (text == NULL) continue;
+    while (*text != '\0' && *input != '\0') {
+      unsigned char left = *text;
+      unsigned char right = *input;
+      if (left > 127 || right > 127) break;
+      if (left >= 'A' && left <= 'Z') left += 'a' - 'A';
+      if (right >= 'A' && right <= 'Z') right += 'a' - 'A';
+      if (left != right) break;
+      ++text;
+      ++input;
+    }
+    if (*text == '\0' && *input == '\0') {
+      found = 1;
+      break;
+    }
+  }
+  g_api->candidate_list_end(&iterator);
+  return found;
+}
+
 int aim_rime_snapshot(uintptr_t session, size_t maximum_candidates,
                       AimRimeSnapshot *snapshot) {
   if (g_api == NULL || session == 0 || snapshot == NULL) return 0;

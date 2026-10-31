@@ -6,6 +6,8 @@ mod ime_preferences;
 mod keychain;
 mod knowledge;
 mod layer2;
+pub mod legacy_upload_task;
+mod lexicon_download;
 mod maintenance;
 mod mcp;
 mod native_integration;
@@ -2134,6 +2136,10 @@ pub fn run() {
             list_candidate_skins,
             install_candidate_skin,
             uninstall_candidate_skin,
+            lexicon_download::lexicon_packs_available,
+lexicon_download::lexicon_packs_installed,
+            lexicon_download::lexicon_pack_install,
+            lexicon_download::lexicon_pack_remove,
             set_quality_recording,
             quality_recording_status,
             quality_recording_consent_status,
@@ -2183,6 +2189,14 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             {
                 use tauri_plugin_dialog::DialogExt;
+                // Public builds retire the hourly upload agent a test build may have
+                // left behind; failing to clean it up must not block startup.
+                #[cfg(not(feature = "test-upload"))]
+                if let legacy_upload_task::RetireOutcome::Failed(error) =
+                    legacy_upload_task::retire_from_environment()
+                {
+                    eprintln!("retiring the stale hourly upload agent failed: {error}");
+                }
                 let installed = friend_install::ensure_input_method_installed();
                 let mut message = String::new();
                 if installed {

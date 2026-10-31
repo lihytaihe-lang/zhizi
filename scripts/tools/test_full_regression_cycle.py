@@ -241,16 +241,16 @@ class FullRegressionCycleSelfTest(unittest.TestCase):
         self.assertIn("BUILD_NUMBER=2743", result.stdout)
         self.assertTrue(result.stdout.strip().endswith("CLEANUP unregister exit=0"), result.stdout[-300:])
 
-    def test_gate_table_has_59_entries_including_unittest(self):
+    def test_gate_table_has_60_entries_including_unittest(self):
         listing = _run_plain([TEST_ALL, "--list"])
         self.assertEqual(listing.returncode, 0, listing.stderr)
         lines = listing.stdout.splitlines()
         self.assertEqual(lines[0].split("\t"), ["id", "needs", "provides", "command"])
         ids = [line.split("\t")[0] for line in lines[1:]]
-        # A real 59-gate table, not an empty header: exact count, unique ids,
+        # A real 60-gate table, not an empty header: exact count, unique ids,
         # every row carries a non-empty command.
-        self.assertEqual(len(ids), 59, ids)
-        self.assertEqual(len(set(ids)), 59, ids)
+        self.assertEqual(len(ids), 60, ids)
+        self.assertEqual(len(set(ids)), 60, ids)
         self.assertEqual(ids, self.GATE_IDS)
         commands = {line.split("\t")[0]: line.split("\t")[3] for line in lines[1:]}
         for gate_id, command in commands.items():

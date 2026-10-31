@@ -1,0 +1,16 @@
+# 参考解码器展开到真实末页，再检查翻页和两种线性导航的边界。
+clear
+type f
+type o
+next
+next
+# resolve_last_page
+pagedown
+next
+next
+next_linear
+prev_linear
+prev
+pageup
+pageup
+clear

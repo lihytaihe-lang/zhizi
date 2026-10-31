@@ -129,6 +129,7 @@ cp "$ROOT_DIR/native/resources/Rime/agent_ai_names.dict.yaml" "$CONTENTS/Resourc
 cp "$ROOT_DIR/native/resources/Rime/agent_pack_poetry.dict.yaml" "$CONTENTS/Resources/Rime/agent_pack_poetry.dict.yaml"
 cp "$ROOT_DIR/native/resources/Rime/agent_pack_cad.dict.yaml" "$CONTENTS/Resources/Rime/agent_pack_cad.dict.yaml"
 cp "$ROOT_DIR/native/resources/Rime/agent_pack_industry.dict.yaml" "$CONTENTS/Resources/Rime/agent_pack_industry.dict.yaml"
+cp "$ROOT_DIR/native/resources/Rime/agent_owner_words.dict.yaml" "$CONTENTS/Resources/Rime/agent_owner_words.dict.yaml"
 cp "$ROOT_DIR/native/resources/Rime/agent_exact_readings.tsv" "$CONTENTS/Resources/Rime/agent_exact_readings.tsv"
 cp "$PINYIN_DIR/pinyin_simp.dict.yaml" "$CONTENTS/Resources/Rime/pinyin_simp.dict.yaml"
 cp "$ROOT_DIR/THIRD_PARTY_NOTICES.md" "$CONTENTS/Resources/THIRD_PARTY_NOTICES.md"
@@ -190,6 +191,7 @@ shasum -a 256 \
   "$CONTENTS/Resources/Rime/agent_pack_poetry.dict.yaml" \
   "$CONTENTS/Resources/Rime/agent_pack_cad.dict.yaml" \
   "$CONTENTS/Resources/Rime/agent_pack_industry.dict.yaml" \
+  "$CONTENTS/Resources/Rime/agent_owner_words.dict.yaml" \
   "$CONTENTS/Resources/Rime/agent_exact_readings.tsv" \
   "$CONTENTS/Resources/Rime/pinyin_simp.dict.yaml" \
   "$CONTENTS/Resources/Lexicon/lexicon_catalog.json" \

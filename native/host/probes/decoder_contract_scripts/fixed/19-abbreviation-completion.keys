@@ -1,0 +1,19 @@
+# 简拼、末尾未完成音节及 apostrophe 分隔。
+clear
+type z
+type g
+commit_raw
+type z
+type h
+type o
+type n
+type g
+type j
+commit_raw
+type x
+type i
+type '
+type a
+type n
+select 0 no_learn
+clear

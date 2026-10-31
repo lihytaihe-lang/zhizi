@@ -59,7 +59,8 @@ public final class DiagnosticsRecorder: @unchecked Sendable {
         eventKind: String,
         result: IMEViewModel,
         totalElapsedNanoseconds: UInt64,
-        clientIdentifier: String
+        clientIdentifier: String,
+        stages: KeyStageTimings? = nil
     ) {
         let event = SanitizedEvent(
             timestamp: Self.timestamp(),
@@ -75,7 +76,8 @@ public final class DiagnosticsRecorder: @unchecked Sendable {
             clientHash: Self.hash(clientIdentifier),
             detailed: isDetailedEnabled(),
             processInstanceID: "",
-            sequence: 0
+            sequence: 0,
+            stages: stages
         )
         queue.async { [self] in append(event) }
     }
@@ -202,7 +204,8 @@ public final class DiagnosticsRecorder: @unchecked Sendable {
             clientHash: "system",
             detailed: isDetailedEnabled(),
             processInstanceID: "",
-            sequence: 0
+            sequence: 0,
+            stages: nil
         )
         queue.async { [self] in append(event) }
     }
@@ -214,7 +217,7 @@ public final class DiagnosticsRecorder: @unchecked Sendable {
             coreElapsedNanoseconds: 0, totalElapsedNanoseconds: 0,
             candidateCount: 0, committed: false, selectionEventID: 0,
             clientHash: Self.hash(clientIdentifier), detailed: isDetailedEnabled(),
-            processInstanceID: "", sequence: 0
+            processInstanceID: "", sequence: 0, stages: nil
         )
         queue.async { [self] in append(event) }
     }
@@ -781,4 +784,27 @@ private struct SanitizedEvent: Codable, Sendable {
     let detailed: Bool
     var processInstanceID: String
     var sequence: UInt64
+    /// Absent for events that are not a timed key.
+    let stages: KeyStageTimings?
+}
+
+/// Where one key's handling time goes, in nanoseconds. The live key time ran
+/// ~4x the core plus the model (2026-10-31, queue Q12) and the existing two
+/// totals could not say where the rest went.
+public struct KeyStageTimings: Codable, Sendable, Equatable {
+    /// Configuration refresh and security check before the core sees the key.
+    public var setup: UInt64 = 0
+    /// Reading the client's preceding text (first key of a composition only).
+    public var preceding: UInt64 = 0
+    /// CoreSession.process: the core, the context model and the view model.
+    public var process: UInt64 = 0
+    /// The context model alone, inside `process`.
+    public var model: UInt64 = 0
+    public var quality: UInt64 = 0
+    public var insert: UInt64 = 0
+    public var marked: UInt64 = 0
+    public var caret: UInt64 = 0
+    public var panel: UInt64 = 0
+
+    public init() {}
 }

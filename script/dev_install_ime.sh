@@ -7,6 +7,8 @@
 # Stop the old process by PID, move the old bundle into DevelopmentInstalls/ime-backup-<time>, ditto the build in,
 # lsregister -f, then PROVE it took: select the input source and read it back. It never disables, unregisters or
 # reinstalls the input source (2026-10-11: that made the menu entry vanish and only a reboot fixed it).
+# Before swapping the manager app, check launchctl list | grep agentinputlayer for a stale launch agent first;
+# after installing, confirm ps -Ao pid,command | grep agent-input-layer has no leftover --upload-test-logs process.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -20,6 +22,9 @@ SOURCE_ID="com.hongye.facai.inputmethod.zhizi.pinyin"
 codesign --verify --deep --strict "$BUILD"
 "$ROOT_DIR/script/check_core_network_boundary.sh" "$BUILD" | tail -n 1
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$BUILD/Contents/Info.plist")"
+# 2026-10-28: a public export tree has no ime_context_model/, and the build then ships only an "unavailable" marker (0.1.7).
+grep -q '"available": *true' "$BUILD/Contents/Resources/ContextModel/availability.json" \
+  || { echo "refusing: the build has no context model (build with ZHIZI_WORK=<repo>/ime_context_model)" >&2; exit 2; }
 EVENTS="$SUPPORT/Quality/events.jsonl"
 BEFORE_LINES="$(wc -l < "$EVENTS" 2>/dev/null || echo 0)"
 echo "installing build $VERSION (recorder lines: $BEFORE_LINES)"
@@ -38,6 +43,11 @@ sleep 1
 [[ -d "$TARGET" ]] && mv "$TARGET" "$BACKUP/Agent Input Method.app"
 ditto "$BUILD" "$TARGET"
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$TARGET"
+# The system relaunches the active input method as soon as the old one is gone, possibly while ditto is still copying:
+# that process found no model, and a failed model load is not retried in-process (0.1.7 and 0.1.8 on 2026-10-28).
+# Stop whatever started during the copy, by PID, so the next launch sees the complete bundle.
+for pid in $(pgrep -f "$TARGET/Contents/MacOS/AgentInputMethod" || true); do kill "$pid"; done
+sleep 1
 
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$TARGET/Contents/Info.plist")" == "$VERSION" ]]
 diff -rq "$BUILD" "$TARGET" && echo "installed bundle identical to the build"

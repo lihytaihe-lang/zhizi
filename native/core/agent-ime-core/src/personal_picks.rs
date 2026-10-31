@@ -47,6 +47,22 @@ struct Document {
 
 pub(crate) fn now_ms() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
+        + EVAL_CLOCK_OFFSET_MS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Milliseconds the local evaluation has moved the clock ahead (always 0 in the input method).
+static EVAL_CLOCK_OFFSET_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Local evaluation only: a sequential replay moves the clock past the learning retention window instead of
+/// sleeping through it (5 s per commit made a 30,000-case replay take two days). Ignored unless the process
+/// was started with ZHIZI_EVAL_VIRTUAL_CLOCK=1, so the input method can never skew its own clock.
+pub fn advance_eval_clock(ms: u64) -> bool {
+    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    let enabled = *ENABLED.get_or_init(|| std::env::var("ZHIZI_EVAL_VIRTUAL_CLOCK").as_deref() == Ok("1"));
+    if enabled {
+        EVAL_CLOCK_OFFSET_MS.fetch_add(ms, std::sync::atomic::Ordering::Relaxed);
+    }
+    enabled
 }
 
 fn valid(entry: &Entry) -> bool {

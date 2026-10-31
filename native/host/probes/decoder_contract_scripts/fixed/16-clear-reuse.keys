@@ -1,0 +1,24 @@
+# 清空和 clear_after_selection 后可复用。
+clear
+type n
+type i
+type h
+type a
+type o
+clear
+type z
+type h
+type o
+type n
+type g
+type g
+type u
+type o
+select 0 deliberate
+clear_after_selection
+type c
+type e
+type s
+type h
+type i
+clear

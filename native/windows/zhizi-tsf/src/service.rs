@@ -28,6 +28,8 @@ pub static EVER_ACTIVATED: AtomicBool = AtomicBool::new(false);
 const LOAD_WAIT: std::time::Duration = std::time::Duration::from_millis(2500);
 /// How long the 中/英 badge stays at the caret after Shift switches the mode.
 pub const TOAST_FOR: std::time::Duration = std::time::Duration::from_millis(900);
+// Set only by the friend build; public builds cannot create a Recorder.
+const RECORDING_AVAILABLE: bool = option_env!("ZHIZI_TEST_RECORDING").is_some();
 fn data_dir() -> std::path::PathBuf {
     std::path::PathBuf::from(std::env::var_os("APPDATA").unwrap_or_default()).join("Zhizi")
 }
@@ -115,11 +117,11 @@ impl State {
                 self.view.english_mode = english;
                 self.host = Some(h);
                 publish_mode(self, english);
-                diagnostic("Host ready; ONNX model and recording enabled")
+                diagnostic("Host ready")
             }
             Err(_) => {
                 self.error = true;
-                diagnostic("Host/model initialization failed")
+                diagnostic("Host initialization failed")
             }
         }
     }
@@ -293,6 +295,33 @@ fn cpu_name() -> String {
         }
     }
 }
+fn enable_test_recording(host: &mut Host, data: &std::path::Path) {
+    if RECORDING_AVAILABLE && zhizi_host::quality::consent_granted(data) {
+        host.enable_recording(zhizi_host::quality::RecorderConfig {
+            path: data.join("Quality/events.jsonl"),
+            platform: "windows".into(),
+            build: env!("CARGO_PKG_VERSION").into(),
+            device: cpu_name(),
+        });
+    }
+}
+
+fn initialize_host(
+    open_host: impl FnOnce() -> std::result::Result<Host, String>,
+    load_model: impl FnOnce() -> std::result::Result<Box<dyn zhizi_host::ranking::Scorer>, String>,
+    notify: Option<Box<dyn Fn() + Send>>,
+) -> std::result::Result<(Host, Option<String>), String> {
+    let mut host = open_host()?;
+    let model_error = match load_model() {
+        Ok(scorer) => {
+            host.enable_model(scorer, notify);
+            None
+        }
+        Err(error) => Some(error),
+    };
+    Ok((host, model_error))
+}
+
 fn begin_load(state: &Rc<RefCell<State>>) {
     let (send, recv) = mpsc::channel();
     let hwnd = state.borrow().hwnd.0 as usize;
@@ -302,52 +331,53 @@ fn begin_load(state: &Rc<RefCell<State>>) {
     let app = app_name();
     std::thread::spawn(move || {
         let result = (|| -> std::result::Result<Host, String> {
-            zhizi_host::ranking::onnx::init_runtime(&root.join("onnxruntime.dll"))?;
-            diagnostic("ONNX runtime initialized");
-            let threads = (std::thread::available_parallelism()
-                .map(|n| n.get())
-                .unwrap_or(2)
-                / 2)
-            .clamp(1, 4);
-            let scorer = zhizi_host::ranking::onnx::OnnxScorer::load(
-                &root.join("Model/zhizi30m_v2.onnx"),
-                &root.join("Model/itos.json"),
-                threads,
-            )?;
-            let mut host = {
-                let _gate = CORE_GATE.lock().unwrap_or_else(|e| e.into_inner());
-                unsafe {
-                    LoadLibraryExW(
-                        PCWSTR(wide(&root.join("rime.dll").to_string_lossy()).as_ptr()),
-                        None,
-                        LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS,
-                    )
-                    .map_err(|_| "rime DLL load failed")?;
-                }
-                Host::open(&HostConfig {
-                    shared_dir: root.join("Rime"),
-                    user_dir: data.join("Rime"),
-                    app_id: app,
-                })?
-            };
-            diagnostic("Rime initialized");
-            host.enable_model(
-                Box::new(scorer),
+            let (mut host, model_error) = initialize_host(
+                || {
+                    let _gate = CORE_GATE.lock().unwrap_or_else(|e| e.into_inner());
+                    unsafe {
+                        LoadLibraryExW(
+                            PCWSTR(wide(&root.join("rime.dll").to_string_lossy()).as_ptr()),
+                            None,
+                            LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS,
+                        )
+                        .map_err(|_| "rime DLL load failed")?;
+                    }
+                    let host = Host::open(&HostConfig {
+                        shared_dir: root.join("Rime"),
+                        user_dir: data.join("Rime"),
+                        app_id: app,
+                    })?;
+                    diagnostic("Rime initialized");
+                    Ok(host)
+                },
+                || {
+                    zhizi_host::ranking::onnx::init_runtime(&root.join("onnxruntime.dll"))?;
+                    diagnostic("ONNX runtime initialized");
+                    let threads = (std::thread::available_parallelism()
+                        .map(|n| n.get())
+                        .unwrap_or(2)
+                        / 2)
+                    .clamp(1, 4);
+                    let scorer = zhizi_host::ranking::onnx::OnnxScorer::load(
+                        &root.join("Model/zhizi30m_v2.onnx"),
+                        &root.join("Model/itos.json"),
+                        threads,
+                    )?;
+                    Ok(Box::new(scorer))
+                },
                 Some(Box::new(move || unsafe {
                     let _ = PostMessageW(Some(HWND(hwnd as _)), WM_RANK, WPARAM(0), LPARAM(0));
                 })),
-            );
+            )?;
+            if let Some(error) = model_error {
+                diagnostic(&format!("ONNX model unavailable; basic input remains enabled: {error}"));
+            } else {
+                diagnostic("ONNX model enabled");
+            }
             if let Ok(records) = std::fs::read_to_string(data.join("Quality/events.jsonl")) {
                 host.set_owner_style(&records)
             }
-            if zhizi_host::quality::consent_granted(&data) {
-                host.enable_recording(zhizi_host::quality::RecorderConfig {
-                    path: data.join("Quality/events.jsonl"),
-                    platform: "windows".into(),
-                    build: env!("CARGO_PKG_VERSION").into(),
-                    device: cpu_name(),
-                });
-            }
+            enable_test_recording(&mut host, &data);
             Ok(host)
         })();
         {
@@ -919,6 +949,13 @@ unsafe fn preceding_text(range: &ITfRange, ec: u32) -> Option<String> {
     // a surrogate pair cut in two at the far end, and object placeholders, are not text
     Some(text.trim_start_matches('\u{FFFD}').replace('\u{FFFC}', ""))
 }
+fn sensitive_input(scopes: &[InputScope], style: u32) -> bool {
+    scopes.iter().any(|scope| matches!(*scope,
+        IS_PASSWORD | IS_NUMERIC_PASSWORD | IS_NUMERIC_PIN |
+        IS_ALPHANUMERIC_PIN | IS_ALPHANUMERIC_PIN_SET | IS_PRIVATE
+    )) || style & ES_PASSWORD as u32 != 0
+}
+
 unsafe fn secure(ctx: &ITfContext, ec: u32, range: &ITfRange) -> bool {
     if let Ok(status) = ctx.GetStatus() {
         if status.dwDynamicFlags & TS_SD_READONLY != 0 {
@@ -933,9 +970,7 @@ unsafe fn secure(ctx: &ITfContext, ec: u32, range: &ITfRange) -> bool {
                     let mut count = 0;
                     if scope.GetInputScopes(&mut list, &mut count).is_ok() {
                         let password = !list.is_null()
-                            && std::slice::from_raw_parts(list, count as usize)
-                                .iter()
-                                .any(|s| *s == IS_PASSWORD);
+                            && sensitive_input(std::slice::from_raw_parts(list, count as usize), 0);
                         CoTaskMemFree(Some(list as _));
                         if password {
                             return true;
@@ -951,7 +986,7 @@ unsafe fn secure(ctx: &ITfContext, ec: u32, range: &ITfRange) -> bool {
             let mut class = [0u16; 128];
             let n = GetClassNameW(hwnd, &mut class);
             if String::from_utf16_lossy(&class[..n.max(0) as usize]).eq_ignore_ascii_case("Edit")
-                && GetWindowLongW(hwnd, GWL_STYLE) as u32 & ES_PASSWORD as u32 != 0
+                && sensitive_input(&[], GetWindowLongW(hwnd, GWL_STYLE) as u32)
             {
                 return true;
             }
@@ -1116,6 +1151,27 @@ impl ITfCompositionSink_Impl for CompositionSink_Impl {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn password_pin_and_private_scopes_are_sensitive() {
+        for scope in [
+            IS_PASSWORD, IS_NUMERIC_PASSWORD, IS_NUMERIC_PIN,
+            IS_ALPHANUMERIC_PIN, IS_ALPHANUMERIC_PIN_SET, IS_PRIVATE,
+        ] {
+            assert!(sensitive_input(&[IS_DEFAULT, scope], 0), "scope {scope:?}");
+        }
+    }
+
+    #[test]
+    fn absent_or_ordinary_scopes_keep_the_legacy_password_fallback() {
+        for scopes in [&[][..], &[IS_DEFAULT, IS_EMAIL_SMTPEMAILADDRESS][..]] {
+            assert!(!sensitive_input(scopes, 0));
+            assert!(!sensitive_input(scopes, ES_MULTILINE as u32));
+            assert!(sensitive_input(scopes, ES_PASSWORD as u32));
+            assert!(sensitive_input(scopes, (ES_PASSWORD | ES_MULTILINE) as u32));
+        }
+    }
+
     // Exercises the shell's grid/key policy against the real Windows Host/model.
     // This deliberately does not claim TSF text-store or desktop UI coverage.
     #[test]
@@ -1134,6 +1190,31 @@ mod tests {
             )
             .unwrap();
         }
+        for failed_stage in ["runtime unavailable", "model damaged", "vocabulary invalid"] {
+            let opened = Cell::new(false);
+            let (mut host, model_error) = initialize_host(
+                || {
+                    let host = Host::open(&HostConfig {
+                        shared_dir: root.join("Rime"),
+                        user_dir: testdir.join("Rime"),
+                        app_id: "zhizi-shell-policy-test".into(),
+                    })?;
+                    opened.set(true);
+                    Ok(host)
+                },
+                || {
+                    assert!(opened.get(), "basic Host must open before the model");
+                    Err(failed_stage.into())
+                },
+                None,
+            ).expect("model failures must keep the basic Host");
+            assert_eq!(model_error.as_deref(), Some(failed_stage));
+            for c in "nihao".chars() {
+                host.process(Key::Text(c.to_string()), 0, false);
+            }
+            assert_eq!(host.model_observation().outcome, "unavailable");
+            assert_eq!(host.process(Key::Space, 0, false).commit, "你好");
+        }
         let mut host = Host::open(&HostConfig {
             shared_dir: root.join("Rime"),
             user_dir: testdir.join("Rime"),
@@ -1148,12 +1229,10 @@ mod tests {
         )
         .unwrap();
         host.enable_model(Box::new(scorer), None);
-        host.enable_recording(zhizi_host::quality::RecorderConfig {
-            path: testdir.join("events.jsonl"),
-            platform: "windows".into(),
-            build: "shell-policy-test".into(),
-            device: "synthetic".into(),
-        });
+        let recording_dir = testdir.join(format!("recording-{}-{}", std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        zhizi_host::quality::set_consent(&recording_dir, true).unwrap();
+        enable_test_recording(&mut host, &recording_dir);
         let mut s = State::new();
         s.host = Some(host);
         fn step(s: &mut State, key: Key) -> View {
@@ -1241,8 +1320,14 @@ mod tests {
         assert!(pass.commit.is_empty());
         s.host.as_mut().unwrap().set_app("finish-test");
         drop(s);
-        let records = std::fs::read_to_string(testdir.join("events.jsonl")).unwrap();
-        assert!(records.contains("太复杂了"));
-        assert!(!records.contains("secret-test"));
+        let events = recording_dir.join("Quality/events.jsonl");
+        if RECORDING_AVAILABLE {
+            let records = std::fs::read_to_string(events).unwrap();
+            assert!(records.contains("太复杂了"));
+            assert!(!records.contains("secret-test"));
+        } else {
+            assert!(!events.exists(), "public builds must not record even with consent");
+        }
+        std::fs::remove_dir_all(recording_dir).unwrap();
     }
 }

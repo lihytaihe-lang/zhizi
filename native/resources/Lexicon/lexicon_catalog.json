@@ -55,7 +55,7 @@
       "description": "动物、食物、物品等日常名称",
       "group": "core",
       "defaultEnabled": true,
-      "rows": 14633
+      "rows": 14684
     },
     {
       "id": "agent_idioms",
@@ -92,6 +92,7 @@
   ],
   "missing": [
     "agent_ai_names",
+    "agent_owner_words",
     "agent_pack_poetry",
     "agent_pack_cad",
     "agent_pack_industry"

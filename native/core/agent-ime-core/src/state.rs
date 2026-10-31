@@ -185,13 +185,83 @@ pub enum LearningIntent {
     RequiredSegmentCommit,
 }
 
+/// Legacy consumers accepted different preedit spellings. Keep those views
+/// during the Rime migration; native decoders return the same exact boundary.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BoundaryPurpose {
+    /// An empty confirmed prefix is valid; None means recovery is uncertain.
+    Editing,
+    /// Legacy Mixer returns None when it does not recognize a confirmed prefix.
+    Mixing,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CompositionBoundary {
+    pub confirmed: String,
+    pub unconfirmed_raw: String,
+}
+
+pub(crate) fn default_composition_boundary(
+    snapshot: &DecoderSnapshot, purpose: BoundaryPurpose,
+) -> Option<CompositionBoundary> {
+    match purpose {
+        BoundaryPurpose::Editing => {
+            let confirmed = editing_confirmed_prefix(snapshot)?;
+            let spelling = |text: &str| text.chars().filter_map(|ch| match ch {
+                ' ' | '\'' => None,
+                'ü' | 'Ü' => Some('v'),
+                ch => Some(ch),
+            }).collect::<String>();
+            let suffix = spelling(&snapshot.preedit[confirmed.len()..]);
+            let start = snapshot.raw_input.char_indices().map(|(at, _)| at).find(|&at|
+                spelling(&snapshot.raw_input[at..]) == suffix)?;
+            Some(CompositionBoundary {
+                confirmed: confirmed.to_owned(), unconfirmed_raw: snapshot.raw_input[start..].to_owned(),
+            })
+        }
+        BoundaryPurpose::Mixing => {
+            let (confirmed, unconfirmed_raw) = crate::mixer::confirmed_prefix_and_rest(&snapshot.preedit)?;
+            Some(CompositionBoundary { confirmed: confirmed.to_owned(), unconfirmed_raw })
+        }
+    }
+}
+
 pub trait Decoder: Send {
+    /// A native decoder's deployed words must also drive Mixer's reading checks,
+    /// ranking and learning. Legacy decoders use the background dictionary.
+    fn dictionary_snapshot(&self) -> Option<Arc<crate::zhixu::Index>> { None }
+    /// Native editing does not need Session's Rime menu/selection restoration.
+    fn native_editing(&self) -> bool { false }
+    fn composition_boundary(&self, purpose: BoundaryPurpose) -> Option<CompositionBoundary> {
+        default_composition_boundary(&self.snapshot(), purpose)
+    }
+    fn configure_learning(&mut self, _mode: crate::zhixu::learning::LearningMode) -> Result<(), i32> { Ok(()) }
+    fn configure_zhixu_whole(&mut self, _on: bool) -> Result<(), i32> { Ok(()) }
+    fn learning_key(&mut self, _event: &KeyEvent, _now: u64) {}
+    fn learning_commit(&mut self, _text: &str, _delivery_id: u64, _now: u64) {}
+    fn withdraw_learning(&mut self, _raw: &str, _text: &str) -> bool { false }
     fn snapshot(&self) -> DecoderSnapshot;
     /// Returns the complete stable candidate sequence without changing the
     /// native page. Decoders that cannot expose it keep the native pager.
     fn snapshot_all_candidates(&self) -> Option<DecoderSnapshot> {
         None
     }
+    /// Returns a stable global prefix without moving the native pager.
+    /// `is_last_page` is true only when the prefix contains the complete sequence.
+    fn snapshot_candidate_prefix(&self, maximum: usize) -> Option<DecoderSnapshot> {
+        let mut snapshot = self.snapshot_all_candidates()?;
+        snapshot.is_last_page &= snapshot.candidates.len() <= maximum;
+        snapshot.candidates.truncate(maximum);
+        for (index, candidate) in snapshot.candidates.iter_mut().enumerate() {
+            candidate.source_index = Some(candidate.source_index.unwrap_or(index));
+        }
+        snapshot.page_no = 0;
+        snapshot.highlighted_index = 0;
+        Some(snapshot)
+    }
+    /// A raw ASCII echo anywhere in the native sequence disables whole generation.
+    /// Unknown decoders conservatively require the complete snapshot.
+    fn whole_prefix_has_raw_echo(&self) -> bool { true }
     /// Cheap composition probe. The default derives it from `snapshot()`;
     /// decoders whose `snapshot()` runs a full ranking pipeline should
     /// override this so keystroke guards do not pay for ranking.
@@ -253,6 +323,10 @@ pub trait Decoder: Send {
     fn configure_fuzzy(&mut self, _mask: u32) -> Result<(), i32> {
         Ok(())
     }
+    /// Deploys again so dictionaries added to the user directory (downloaded packs) are compiled into the running session.
+    fn reload_dictionaries(&mut self) -> Result<(), i32> {
+        Ok(())
+    }
     fn apply_lexicon(&mut self, _lexicon: Arc<MixerLexicon>) {}
     fn apply_context_model(&mut self, _model: Arc<ContextModel>) {}
     fn context_group_mask(&self) -> u32 {
@@ -269,13 +343,14 @@ pub trait Decoder: Send {
     fn peek_following_pages(&mut self, _count: usize) -> Vec<Vec<Candidate>> {
         Vec::new()
     }
+    fn corrections_changed(&mut self) {}
+
     /// C3: whole-reading compositions the context model may lead with.
     fn composition_alternatives(&self) -> Vec<String> {
         Vec::new()
     }
-    /// Letters changed to reach the first candidate and then each alternative from
-    /// what was typed (the typing half of the choice).
-    fn composition_edits(&self) -> Vec<u8> {
+    /// Normalized typing cost (cost / edit_penalty) for the first and each alternative.
+    fn composition_edits(&self) -> Vec<f64> {
         Vec::new()
     }
     /// The typed letters are not whole pinyin, so the first is a guess as well.
@@ -546,6 +621,7 @@ pub struct ResultModel {
 
 pub struct Session {
     decoder: Box<dyn Decoder>,
+    zhixu_switch: Option<bool>,
     mode: InputMode,
     app_id: String,
     context_profile: ContextProfile,
@@ -691,8 +767,24 @@ fn page_has_chinese_candidate(snapshot: &DecoderSnapshot) -> bool {
 }
 
 impl Session {
+    pub fn configure_zhixu_whole(&mut self, on: bool) -> Result<(), i32> {
+        if self.composing() { return Err(-10); }
+        self.decoder.configure_zhixu_whole(on)?;
+        if let Some(value) = &mut self.zhixu_switch { *value = on; }
+        Ok(())
+    }
+
+    pub fn configure_learning(&mut self, mode: crate::zhixu::learning::LearningMode) -> Result<(), i32> {
+        // Switching a displayed menu would change what its digits select.
+        if self.composing() { return Err(-10); }
+        self.decoder.configure_learning(mode)
+    }
+
+    pub fn withdraw_learning(&mut self, raw: &str, text: &str) -> bool {
+        self.decoder.withdraw_learning(raw, text)
+    }
     pub fn new(decoder: Box<dyn Decoder>, app_id: String) -> Self {
-        Self::build(decoder, app_id, None)
+        Self::build(MixerDecoder::new(decoder, app_id.clone()), app_id)
     }
 
     #[cfg_attr(not(feature = "librime"), allow(dead_code))]
@@ -700,14 +792,18 @@ impl Session {
         decoder: Box<dyn Decoder>,
         app_id: String,
         blacklist: Arc<Mutex<Store>>,
-    ) -> Self {
-        Self::build(decoder, app_id, Some(blacklist))
+    ) -> Result<Self, i32> {
+        let mut decoder = MixerDecoder::new(decoder, app_id.clone());
+        decoder.apply_blacklist(blacklist);
+        decoder.enable_decoder_switch()?;
+        let mut session = Self::build(decoder, app_id);
+        session.zhixu_switch = Some(false);
+        Ok(session)
     }
 
     fn build(
-        decoder: Box<dyn Decoder>,
+        mut decoder: MixerDecoder,
         app_id: String,
-        blacklist: Option<Arc<Mutex<Store>>>,
     ) -> Self {
         let mode = app_modes()
             .lock()
@@ -718,13 +814,10 @@ impl Session {
             app_class: default_app_class(&app_id),
             punctuation_policy: PunctuationPolicy::Automatic,
         };
-        let mut decoder = MixerDecoder::new(decoder, app_id.clone());
-        if let Some(blacklist) = blacklist {
-            decoder.apply_blacklist(blacklist);
-        }
         decoder.configure_code_ascii_bias(context_profile.app_class == AppClass::Code);
         Self {
             decoder: Box::new(decoder),
+            zhixu_switch: None,
             mode,
             app_id,
             context_profile,
@@ -797,6 +890,11 @@ impl Session {
         self.decoder.context_complete_mask()
     }
 
+    pub fn set_correction_settings(&mut self, settings: crate::ranking::CorrectionSettings) {
+        crate::ranking::set_correction_settings(settings);
+        self.decoder.corrections_changed();
+    }
+
     pub fn composition_alternatives(&self) -> Vec<String> {
         if !self.inline_ascii.is_empty() {
             return Vec::new();
@@ -804,7 +902,7 @@ impl Session {
         self.decoder.composition_alternatives()
     }
 
-    pub fn composition_edits(&self) -> Vec<u8> {
+    pub fn composition_edits(&self) -> Vec<f64> {
         if !self.inline_ascii.is_empty() {
             return Vec::new();
         }
@@ -883,8 +981,17 @@ impl Session {
         if mask & !0xff != 0 {
             return Err(-12);
         }
+        if self.zhixu_switch.is_some_and(|on| on || crate::mixer::zhixu_whole_enabled()) && self.composing() {
+            return Err(-10);
+        }
         self.decoder.clear();
         self.decoder.configure_fuzzy(mask)
+    }
+
+    /// Compiles dictionaries that appeared in the user directory since the session started. Any composition is dropped.
+    pub fn reload_dictionaries(&mut self) -> Result<(), i32> {
+        self.decoder.clear();
+        self.decoder.reload_dictionaries()
     }
 
     pub fn set_mode(&mut self, mode: InputMode) {
@@ -906,11 +1013,14 @@ impl Session {
         status: i32,
         security: SecurityState,
     ) -> ResultModel {
+        if status == 0 && !security.degraded() && !commit_text.is_empty() {
+            self.decoder.learning_commit(&commit_text, self.pending_selection_event_id.get(), crate::personal_picks::now_ms());
+        }
         if !security.degraded() && !commit_text.is_empty() {
             self.previous_text_kind = classify_last_text(&commit_text);
         }
         let mut snapshot = self.decoder.snapshot();
-        if let Some(menu) = &self.editing_menu {
+        if !self.decoder.native_editing() && let Some(menu) = &self.editing_menu {
             if snapshot.raw_input == menu.raw_input
                 && !snapshot.raw_input.is_empty()
                 && snapshot.cursor_utf8 < snapshot.preedit.len()
@@ -1112,9 +1222,12 @@ impl Session {
     }
 
     pub fn process(&mut self, event: KeyEvent) -> ResultModel {
+        self.decoder.learning_key(&event, crate::personal_picks::now_ms());
+        let native_editing = self.decoder.native_editing();
+        if native_editing { self.editing_menu = None; }
         let editing_selection = event.kind == KeyKind::Space
             || (event.kind == KeyKind::Text && matches!(event.text.as_str(), "1" | "2" | "3" | "4" | "5"));
-        if !matches!(event.kind, KeyKind::Left | KeyKind::Right) && !editing_selection {
+        if !native_editing && !matches!(event.kind, KeyKind::Left | KeyKind::Right) && !editing_selection {
             self.editing_menu = None;
         }
         let host_previous_text_kind = self.host_previous_text_kind.take();
@@ -1157,7 +1270,7 @@ impl Session {
             return self.process_inline_ascii(event, security);
         }
 
-        if editing_selection {
+        if !native_editing && editing_selection {
             let live = self.decoder.snapshot();
             if let Some(menu) = self.editing_menu.clone().filter(|menu|
                 live.raw_input == menu.raw_input && !live.raw_input.is_empty()
@@ -1171,10 +1284,11 @@ impl Session {
                 // Save confirmed text before fallible restoration. If the raw
                 // suffix cannot establish a boundary, do not restore, clear, or
                 // commit any guessed prefix: retain the composition for recovery.
-                let Some(confirmed_prefix) = editing_confirmed_prefix(&live).map(str::to_owned) else {
+                let Some(boundary) = self.decoder.composition_boundary(BoundaryPurpose::Editing) else {
                     self.pending_selection_event_id.set(0);
                     return self.finish(true, String::new(), -10, security);
                 };
+                let confirmed_prefix = boundary.confirmed;
                 self.editing_menu = None;
                 let result = self.select_editing_candidate(menu, index, event.delivery_id, &confirmed_prefix);
                 if let Err(status) = result {
@@ -1251,9 +1365,11 @@ impl Session {
                 self.apply_decoder_result(result, security)
             }
             KeyKind::Left if self.composing() => {
-                let snapshot = self.decoder.snapshot();
-                if snapshot.cursor_utf8 >= snapshot.preedit.len() {
-                    self.editing_menu = Some(snapshot);
+                if !native_editing {
+                    let snapshot = self.decoder.snapshot();
+                    if snapshot.cursor_utf8 >= snapshot.preedit.len() {
+                        self.editing_menu = Some(snapshot);
+                    }
                 }
                 // assumption, unconfirmed: single-segment pinyin keeps Rime's
                 // letter stepping; multi-segment input uses syllable boundaries.
@@ -1459,11 +1575,54 @@ impl Session {
 
 #[cfg(test)]
 mod tests {
+    include!("zhixu/learning_state_tests.rs");
     use super::*;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::Instant;
 
     static NEXT_APP: AtomicUsize = AtomicUsize::new(1);
+    thread_local! { static ZHIXU_KEY_TEST: Cell<bool> = const { Cell::new(false) }; }
+
+    #[test]
+    fn whole_native_prefix_preserves_sequence_last_flag_and_pager() {
+        struct CompleteDecoder(DecoderSnapshot);
+        impl Decoder for CompleteDecoder {
+            fn snapshot(&self) -> DecoderSnapshot { self.0.clone() }
+            fn snapshot_all_candidates(&self) -> Option<DecoderSnapshot> { Some(self.0.clone()) }
+            fn input(&mut self, _: &str) -> Result<String, i32> { unreachable!() }
+            fn backspace(&mut self) -> Result<String, i32> { unreachable!() }
+            fn move_left(&mut self) -> Result<String, i32> { unreachable!() }
+            fn move_right(&mut self) -> Result<String, i32> { unreachable!() }
+            fn page_up(&mut self) -> Result<String, i32> { unreachable!() }
+            fn page_down(&mut self) -> Result<String, i32> { unreachable!() }
+            fn select_previous(&mut self) -> Result<String, i32> { unreachable!() }
+            fn select_next(&mut self) -> Result<String, i32> { unreachable!() }
+            fn select_candidate(&mut self, _: usize, _: u64, _: LearningIntent) -> Result<String, i32> { unreachable!() }
+            fn delete_candidate(&mut self, _: usize) -> Result<(), i32> { unreachable!() }
+            fn commit_raw(&mut self) -> String { unreachable!() }
+            fn clear(&mut self) { unreachable!() }
+        }
+        let decoder = CompleteDecoder(DecoderSnapshot {
+            raw_input: "abc".into(), preedit: "a bc".into(), cursor_utf8: 4,
+            candidates: (0..13).map(|index| Candidate {
+                text: format!("候选{index}"), comment: format!("注释{index}"),
+                reading_key: "abc".into(), source_index: Some(index),
+            }).collect(),
+            page_no: 2, highlighted_index: 1, is_last_page: true,
+            ..DecoderSnapshot::default()
+        });
+        for maximum in [0, 1, 5, 10, 13, 14, usize::MAX] {
+            let prefix = decoder.snapshot_candidate_prefix(maximum).unwrap();
+            assert_eq!(prefix.candidates, decoder.0.candidates[..maximum.min(13)]);
+            assert_eq!(prefix.is_last_page, maximum >= 13);
+            assert_eq!((prefix.page_no, prefix.highlighted_index), (0, 0));
+            assert_eq!((&prefix.raw_input, &prefix.preedit, prefix.cursor_utf8),
+                (&decoder.0.raw_input, &decoder.0.preedit, decoder.0.cursor_utf8));
+        }
+        assert_eq!((decoder.snapshot().page_no, decoder.snapshot().highlighted_index), (2, 1));
+        assert!(MockDecoder::default().snapshot_candidate_prefix(10).is_none());
+        assert!(decoder.whole_prefix_has_raw_echo(), "unknown decoders require full enumeration");
+    }
 
     fn event(kind: KeyKind, text: &str) -> KeyEvent {
         KeyEvent {
@@ -1476,10 +1635,12 @@ mod tests {
     }
 
     fn session() -> Session {
-        Session::new(
-            Box::new(MockDecoder::default()),
-            format!("test.app.{}", NEXT_APP.fetch_add(1, Ordering::Relaxed)),
-        )
+        let decoder: Box<dyn Decoder> = if ZHIXU_KEY_TEST.get() {
+            Box::new(crate::zhixu::decoder::ZhixuDecoder::new())
+        } else {
+            Box::new(MockDecoder::default())
+        };
+        Session::new(decoder, format!("test.app.{}", NEXT_APP.fetch_add(1, Ordering::Relaxed)))
     }
 
     fn type_text(session: &mut Session, text: &str) -> ResultModel {
@@ -2998,6 +3159,32 @@ mod tests {
     }
 
     #[test]
+    fn product_trial_rejects_busy_fuzzy_switches_in_both_directions() {
+        let mut value = Session::new_with_blacklist(Box::new(MockDecoder::default()),
+            "y3.fuzzy-idle".into(), Arc::new(Mutex::new(Store::default()))).unwrap();
+        value.configure_zhixu_whole(true).unwrap();
+        type_text(&mut value, "nihao");
+        let before = value.decoder.snapshot();
+        assert_eq!(value.configure_fuzzy(1), Err(-10));
+        assert_eq!(value.configure_zhixu_whole(false), Err(-10));
+        assert_eq!(value.decoder.snapshot().preedit, before.preedit);
+        assert!(value.decoder.native_editing());
+        value.decoder.clear();
+        value.configure_fuzzy(1).unwrap();
+        assert!(value.decoder.native_editing(), "F2: fuzzy input stays on Zhixu");
+        type_text(&mut value, "nihao");
+        assert_eq!(value.configure_fuzzy(0), Err(-10));
+        assert_eq!(value.decoder.snapshot().raw_input, "nihao");
+        value.decoder.clear();
+        value.configure_fuzzy(0).unwrap();
+        assert!(value.decoder.native_editing());
+        value.configure_zhixu_whole(false).unwrap();
+        type_text(&mut value, "nihao");
+        assert!(value.configure_fuzzy(1).is_ok());
+        assert!(value.decoder.snapshot().raw_input.is_empty(), "the disabled Rime route retains its previous fuzzy behavior");
+    }
+
+    #[test]
     fn frozen_behavior_golden_is_nonempty_complete_and_passing() {
         use std::collections::HashSet;
 
@@ -3262,6 +3449,7 @@ mod tests {
     // Already-confirmed preedit text remains pending until the phrase is committed.
     // Wrap MockDecoder's restoration failures and vary only the selection response.
     struct PrefixEditingDecoder {
+        native: bool,
         inner: FailingEditingDecoder,
         confirmed: String,
         displayed: Option<String>,
@@ -3269,6 +3457,7 @@ mod tests {
     }
 
     impl Decoder for PrefixEditingDecoder {
+        fn native_editing(&self) -> bool { self.native }
         fn snapshot(&self) -> DecoderSnapshot {
             let mut snapshot = self.inner.snapshot();
             snapshot.preedit = format!("{}{}", self.confirmed, snapshot.preedit);
@@ -3293,6 +3482,7 @@ mod tests {
         }
         fn select_candidate(&mut self, index: usize, id: u64, intent: LearningIntent) -> Result<String, i32> {
             let commit = self.inner.select_candidate(index, id, intent)?;
+            if self.native { self.confirmed.clear(); }
             Ok(self.selection_commit.take().unwrap_or(commit))
         }
         fn delete_candidate(&mut self, index: usize) -> Result<(), i32> { self.inner.delete_candidate(index) }
@@ -3300,10 +3490,41 @@ mod tests {
         fn clear(&mut self) { self.inner.clear(); self.confirmed.clear(); }
     }
 
+    #[test]
+    fn native_editing_bypasses_freeze_restore_and_response_compensation() {
+        for failure in [EditingFailure::MoveRight, EditingFailure::PageDown, EditingFailure::Reorder] {
+            let mut value = session();
+            value.decoder = Box::new(PrefixEditingDecoder {
+                native: true,
+                inner: FailingEditingDecoder {
+                    inner: MockDecoder { raw: "nihao".into(), cursor: 5, ..Default::default() },
+                    order: Vec::new(), failure: Some(failure),
+                },
+                confirmed: "你好".into(), displayed: Some("你".into()),
+                selection_commit: Some("你好原生完整提交".into()),
+            });
+            let shown = value.decoder.snapshot();
+            let moved = value.process(event(KeyKind::Left, ""));
+            assert_eq!(moved.status, 0);
+            assert!(value.editing_menu.is_none(), "native editing must never freeze a menu");
+            // Even a stale menu from a replaced decoder cannot enter restoration.
+            value.editing_menu = Some(shown);
+            let mut key = event(KeyKind::Text, "1");
+            key.delivery_id = 940;
+            let selected = value.process(key);
+            assert_eq!(selected.status, 0, "{failure:?}");
+            assert_eq!(selected.commit_text, "你好原生完整提交");
+            assert!(selected.marked_text.is_empty());
+            assert_eq!(selected.selection_event_id, 940);
+            assert!(value.editing_menu.is_none());
+        }
+    }
+
     fn assert_editing_selection_response(prefix: &str, displayed: &str, commit: &str) {
         for (kind, text) in [(KeyKind::Text, "1"), (KeyKind::Space, "")] {
             let mut value = session();
             value.decoder = Box::new(PrefixEditingDecoder {
+                native: false,
                 inner: FailingEditingDecoder {
                     inner: MockDecoder { raw: "nihao".into(), cursor: 5, ..Default::default() },
                     order: Vec::new(), failure: None,
@@ -3341,7 +3562,10 @@ mod tests {
         let snapshot = DecoderSnapshot {
             raw_input: raw.into(), preedit: preedit.into(), cursor_utf8: preedit.len(), ..Default::default()
         };
-        editing_confirmed_prefix(&snapshot).map(str::to_owned)
+        let old = editing_confirmed_prefix(&snapshot).map(str::to_owned);
+        let boundary = default_composition_boundary(&snapshot, BoundaryPurpose::Editing);
+        assert_eq!(boundary.map(|value| value.confirmed), old);
+        old
     }
 
     #[test]
@@ -3367,6 +3591,7 @@ mod tests {
     fn assert_editing_failure_keeps_confirmed_prefix(failure: EditingFailure) {
         let mut value = session();
         value.decoder = Box::new(PrefixEditingDecoder {
+            native: false,
             inner: FailingEditingDecoder {
                 inner: MockDecoder { raw: "abc".into(), cursor: 3, page_no: 1, ..Default::default() },
                 order: vec![1, 0, 2, 3, 4], failure: Some(failure),
@@ -3459,6 +3684,7 @@ mod tests {
         let mut value = session();
         value.decoder = Box::new(SuffixEditingDecoder {
             inner: PrefixEditingDecoder {
+                native: false,
                 inner: FailingEditingDecoder {
                     inner: MockDecoder { raw: "nihao".into(), cursor: 5, ..Default::default() },
                     order: Vec::new(), failure,
@@ -3531,6 +3757,7 @@ mod tests {
             ("nihaonihao", "你好2026ni hao", Some("你好2026")),
             ("nihaonihao", "你好 AI ni hao", Some("你好 AI ")),
             ("nihaolvse", "你好AIlü se", Some("你好AI")),
+            ("nihaolüse", "你好AIlü se", Some("你好AI")),
             ("nihaoxi'an", "你好AIxi an", Some("你好AI")),
             ("nihao", "ni hao", Some("")),
             ("nihao", "你好AIwronghao", None),
@@ -3539,6 +3766,257 @@ mod tests {
         ] {
             let snapshot = DecoderSnapshot { raw_input: raw.into(), preedit: preedit.into(), ..Default::default() };
             assert_eq!(editing_confirmed_prefix(&snapshot), expected, "raw={raw:?}, preedit={preedit:?}");
+            assert_eq!(default_composition_boundary(&snapshot, BoundaryPurpose::Editing)
+                .map(|value| value.confirmed), expected.map(str::to_owned));
+            let old_mixing = crate::mixer::confirmed_prefix_and_rest(&snapshot.preedit)
+                .map(|(confirmed, unconfirmed_raw)| CompositionBoundary {
+                    confirmed: confirmed.to_owned(), unconfirmed_raw,
+                });
+            assert_eq!(default_composition_boundary(&snapshot, BoundaryPurpose::Mixing), old_mixing);
+        }
+    }
+
+    mod zhixu_keys {
+        use super::*;
+        use crate::zhixu::loader::{DictionaryData, Entry};
+        use crate::zhixu::Index;
+
+        fn fixture(run: impl FnOnce()) {
+            let mut entries = [
+                ("你", "ni", 9000), ("呢", "ni", 8000), ("拟", "ni", 7000),
+                ("你好", "ni hao", 6000), ("好", "hao", 8000),
+                ("吗", "ma", 7000), ("嘛", "ma", 6000), ("马", "ma", 5000),
+                ("西", "xi", 5000), ("先", "xian", 6000), ("安", "an", 4000),
+                ("比如", "bi ru", 7000), ("比", "bi", 5000), ("如", "ru", 5000),
+                ("中华", "zhong hua", 7000), ("中", "zhong", 6000), ("华", "hua", 5000),
+                ("书名", "shu ming", 7000), ("书", "shu", 5000), ("名", "ming", 5000),
+                ("巴塞", "ba se", 6000), ("巴", "ba", 5000), ("塞", "se", 5000),
+                ("女", "nv", 5000),
+            ].into_iter().map(|(text, reading, weight)| Entry {
+                text: text.into(), reading: reading.into(), weight, layer: "pinyin_simp".into(),
+            }).collect::<Vec<_>>();
+            entries.extend("是时事十使世式市识师诗史石室视试士实始示势食失施适释拾饰氏尸湿蚀誓驶逝矢柿侍狮"
+                .chars().enumerate().map(|(at, text)| Entry {
+                    text: text.to_string(), reading: "shi".into(), weight: 9000 - at as u32,
+                    layer: "pinyin_simp".into(),
+                }));
+            struct Reset(bool);
+            impl Drop for Reset { fn drop(&mut self) { ZHIXU_KEY_TEST.set(self.0); } }
+            crate::zhixu::with_index(Arc::new(Index::from_data(DictionaryData { entries })), || {
+                let _reset = Reset(ZHIXU_KEY_TEST.replace(true));
+                run();
+            });
+        }
+
+        // Re-run the existing Session assertions with only the inner decoder
+        // replaced. The ordinary copies above still exercise the Rime-style path.
+        macro_rules! existing_key_test {
+            ($name:ident) => { #[test] fn $name() { fixture(super::$name); } };
+        }
+        existing_key_test!(full_pinyin_space_commits_first_candidate);
+        existing_key_test!(enter_raw_and_escape_cancel_are_distinct);
+        existing_key_test!(empty_digit_slot_on_chinese_page_is_consumed_without_mutating_composition);
+        existing_key_test!(apostrophe_stays_in_composition_but_idle_quote_pairs);
+        existing_key_test!(shift_commits_composition_and_toggles_mode);
+        existing_key_test!(command_option_control_pass_through_without_ending_composition);
+        existing_key_test!(secure_and_unknown_are_marked_fail_closed);
+        existing_key_test!(preceding_text_is_frozen_for_one_composition_and_cleared_for_secure_input);
+        existing_key_test!(sessions_do_not_share_composition);
+        existing_key_test!(selection_event_id_is_host_delivery_id_and_emitted_once);
+        existing_key_test!(editing_keys_modify_only_composition_cursor);
+        existing_key_test!(editing_keys_commit_the_composition_and_reach_the_application);
+        existing_key_test!(punctuation_commits_candidate_then_mapped_mark_and_ascii_mode_passes_through);
+        existing_key_test!(unsupported_printable_commits_composition_before_host_pass_through);
+        existing_key_test!(shifted_letter_and_caps_lock_pass_through_without_persistent_mode_change);
+        existing_key_test!(shifted_letter_opens_inline_english_until_space);
+        existing_key_test!(inline_english_edits_and_flushes_before_other_keys);
+        existing_key_test!(focus_loss_commits_but_sleep_clears_without_duplicate_commit);
+        existing_key_test!(double_character_chinese_punctuation_commits_atomically_and_backspace_passes_through);
+        existing_key_test!(at_sign_is_left_alone_and_the_middle_dot_is_on_the_backtick_key);
+        existing_key_test!(book_title_marks_map_in_chinese_and_ascii_angle_brackets_pass_in_english);
+        existing_key_test!(inline_ascii_arrows_commit_and_pass_through_and_system_arrows_do_not_move);
+        existing_key_test!(editing_menu_does_not_change_ordinary_input_snapshots);
+        existing_key_test!(host_context_digits_and_space_select_displayed_order_while_enter_remains_raw);
+        existing_key_test!(decimal_period_stays_ascii_while_chinese_sentence_period_is_full_width);
+        existing_key_test!(frozen_context_punctuation_examples_are_stable);
+        existing_key_test!(secure_and_unknown_security_states_disable_context_routing);
+        existing_key_test!(no_chinese_page_allows_alphanumeric_digit_extension);
+        existing_key_test!(blacklist_action_is_exact_and_secure_unknown_fail_closed);
+        existing_key_test!(explicit_raw_ascii_path_keeps_base64_typeable_without_stealing_digits);
+
+        #[test]
+        fn five_primary_digits_select_displayed_slots_and_other_digits_stay_owned() {
+            fixture(|| {
+                for digit in 1..=5 {
+                    let mut value = session();
+                    let shown = type_text(&mut value, "shi");
+                    assert_eq!(shown.candidates.len(), 5);
+                    let selected = value.process(event(KeyKind::Text, &digit.to_string()));
+                    assert_eq!(selected.commit_text, shown.candidates[digit - 1].text);
+                    assert!(selected.marked_text.is_empty());
+                }
+                let mut value = session();
+                let shown = type_text(&mut value, "shi");
+                for digit in SECONDARY_SELECTION_DIGITS {
+                    let ignored = value.process(event(KeyKind::Text, &digit.to_string()));
+                    assert!(ignored.consumed);
+                    assert!(ignored.commit_text.is_empty());
+                    assert_eq!(ignored.marked_text, shown.marked_text);
+                    assert_eq!(ignored.candidates, shown.candidates);
+                }
+                value.process(event(KeyKind::PageDown, ""));
+                let shown = value.decoder.snapshot();
+                let selected = value.process(event(KeyKind::Text, "2"));
+                assert_eq!(selected.commit_text, shown.candidates[1].text);
+                assert!(selected.marked_text.is_empty());
+            });
+        }
+
+        #[test]
+        fn empty_candidate_page_space_commits_raw_and_ascii_space() {
+            fixture(|| {
+                let mut value = session();
+                let shown = type_text(&mut value, "vqqv");
+                assert!(shown.candidates.is_empty());
+                assert_eq!(value.process(event(KeyKind::Space, "")).commit_text, "vqqv ");
+            });
+        }
+
+        #[test]
+        fn caret_boundaries_keep_whole_menu_without_session_freezing() {
+            fixture(|| {
+                // SogouKeyModelTests.testCoreCaretBoundariesKeepWholeReadingMenuAndReturnToEnd.
+                for (raw, boundaries) in [("nihao", vec![2, 0]), ("biru", vec![2, 0]),
+                    ("bi'ru", vec![3, 0]), ("xian", vec![3, 2, 1, 0]), ("zhonghua", vec![5, 0])] {
+                    let mut value = session();
+                    type_text(&mut value, raw);
+                    assert!(value.decoder.native_editing());
+                    let whole = value.decoder.snapshot();
+                    for &boundary in &boundaries {
+                        let moved = value.process(event(KeyKind::Left, ""));
+                        assert_eq!(moved.status, 0, "{raw}");
+                        assert_eq!(moved.marked_cursor_utf8, boundary, "{raw}");
+                        assert_menu_matches(&moved, &whole);
+                        assert!(value.editing_menu.is_none());
+                    }
+                    for &boundary in boundaries.iter().rev().skip(1) {
+                        let moved = value.process(event(KeyKind::Right, ""));
+                        assert_eq!(moved.marked_cursor_utf8, boundary, "{raw}");
+                        assert_menu_matches(&moved, &whole);
+                    }
+                    let ended = value.process(event(KeyKind::Right, ""));
+                    assert_eq!(ended.marked_cursor_utf8, ended.marked_text.len());
+                    assert_menu_matches(&ended, &whole);
+                }
+            });
+        }
+
+        #[test]
+        fn expanded_right_flow_and_peek_follow_four_consecutive_pages() {
+            fixture(|| {
+                let mut value = session();
+                type_text(&mut value, "shi");
+                let mut baseline = session();
+                type_text(&mut baseline, "shi");
+                let mut canonical = vec![baseline.decoder.snapshot().candidates];
+                for _ in 0..6 {
+                    canonical.push(baseline.process(event(KeyKind::PageDown, "")).candidates);
+                }
+                // The host's Down-to-expand uses pageDown plus three-page peek;
+                // expansion state belongs to Swift, not the Decoder ABI.
+                let expanded = value.process(event(KeyKind::PageDown, ""));
+                assert_eq!((expanded.page_no, expanded.highlighted_index), (1, 0));
+                assert_eq!(value.peek_following_pages(3), canonical[2..5]);
+                for position in 6..=26 {
+                    let moved = value.process(event(KeyKind::LinearNext, ""));
+                    assert_eq!((moved.page_no, moved.highlighted_index), (position / 5, position % 5));
+                    assert_eq!(moved.candidates, canonical[position / 5]);
+                    assert!(moved.commit_text.is_empty());
+                    assert_eq!(moved.selection_event_id, 0);
+                }
+                for position in (4..26).rev() {
+                    let moved = value.process(event(KeyKind::LinearPrevious, ""));
+                    assert_eq!((moved.page_no, moved.highlighted_index), (position / 5, position % 5));
+                    assert_eq!(moved.candidates, canonical[position / 5]);
+                }
+            });
+        }
+
+        #[test]
+        fn paging_preserves_column_and_peek_does_not_change_the_selection() {
+            fixture(|| {
+                let mut value = session();
+                type_text(&mut value, "shi");
+                for _ in 0..3 { value.process(event(KeyKind::Down, "")); }
+                let first = value.decoder.snapshot();
+                let second = value.process(event(KeyKind::PageDown, ""));
+                assert_eq!((second.page_no, second.highlighted_index), (1, 3));
+                let before = value.decoder.snapshot();
+                let peeked = value.peek_following_pages(99);
+                assert_eq!(peeked.len(), MAX_PEEK_PAGES);
+                assert_menu_matches(&value.finish(true, String::new(), 0, SecurityState::NonSecure), &before);
+                let next = value.process(event(KeyKind::PageDown, ""));
+                assert_eq!((next.page_no, next.highlighted_index), (2, 3));
+                assert_eq!(next.candidates, peeked[0]);
+                value.process(event(KeyKind::PageUp, ""));
+                let back = value.process(event(KeyKind::PageUp, ""));
+                assert_menu_matches(&back, &first);
+            });
+        }
+
+        #[test]
+        fn editing_selection_uses_live_page_highlight_and_reordered_display() {
+            fixture(|| {
+                for page in [0, 1] {
+                    for (kind, text, slot) in [(KeyKind::Space, "", 3), (KeyKind::Text, "2", 1)] {
+                        let mut value = session();
+                        type_text(&mut value, "shi");
+                        if page > 0 { value.process(event(KeyKind::PageDown, "")); }
+                        value.reorder_context_candidates(&[1, 0, 2, 3, 4]).unwrap();
+                        for _ in 0..3 { value.process(event(KeyKind::Down, "")); }
+                        let shown = value.decoder.snapshot();
+                        let moved = value.process(event(KeyKind::Left, ""));
+                        assert_menu_matches(&moved, &shown);
+                        assert!(value.editing_menu.is_none());
+                        let mut key = event(kind, text);
+                        key.delivery_id = 941;
+                        let selected = value.process(key);
+                        assert_eq!(selected.commit_text, shown.candidates[slot].text);
+                        assert_eq!(selected.selection_event_id, 941);
+                        assert!(selected.marked_text.is_empty());
+                    }
+                }
+            });
+        }
+
+        #[test]
+        fn editing_partial_pick_commits_displayed_word_and_confirmed_prefix_once() {
+            fixture(|| {
+                for (confirmed, space) in [(false, false), (false, true), (true, false), (true, true)] {
+                    let mut value = session();
+                    type_text(&mut value, if confirmed { "nihaoma" } else { "nihao" });
+                    if confirmed {
+                        let before = value.decoder.snapshot();
+                        let slot = before.candidates.iter().position(|item| item.text == "你好").unwrap();
+                        let partial = value.process(event(KeyKind::Text, &(slot + 1).to_string()));
+                        assert!(partial.commit_text.is_empty());
+                        assert!(partial.marked_text.starts_with("你好"));
+                    }
+                    let moved = value.process(event(KeyKind::Left, ""));
+                    let target = if confirmed { "吗" } else { "你" };
+                    let slot = moved.candidates.iter().position(|item| item.text == target).unwrap();
+                    assert!(value.editing_menu.is_none());
+                    let selected = if space {
+                        for _ in 0..slot { value.process(event(KeyKind::Down, "")); }
+                        value.process(event(KeyKind::Space, ""))
+                    } else {
+                        value.process(event(KeyKind::Text, &(slot + 1).to_string()))
+                    };
+                    assert_eq!(selected.commit_text, if confirmed { "你好吗" } else { "你" });
+                    assert!(selected.marked_text.is_empty());
+                    assert!(!value.composing());
+                }
+            });
         }
     }
 

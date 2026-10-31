@@ -1,0 +1,17 @@
+# 分段确认后 commit_raw 返回整串 raw 还是剩余输入。
+clear
+type n
+type i
+type h
+type a
+type o
+type s
+type h
+type i
+type j
+type i
+type e
+# resolve_prefix
+select 1 deliberate
+commit_raw
+clear

@@ -40,9 +40,38 @@ class ReleasePackTests(unittest.TestCase):
         (self.provenance / "agent-test-provenance.tsv").write_text(
             "text\tsource\n你好\t手工\n世界\t手工\n", encoding="utf-8")
 
-    def build(self, out="out", layers=None):
+    def build(self, out="out", layers=None, **kwargs):
         return packer.build_release_pack(self.rime, self.provenance, "2026.10",
-                                         self.root / out, layers, self.audit)
+                                         self.root / out, layers, self.audit, **kwargs)
+
+    def pack_fixture(self):
+        """Add a fixture base, a core layer and two downloadable packs.
+
+        明月 and 世界 also live in the base/core layers, so pack membership must
+        drop them; 一帆风顺 is shared by both packs and must appear in each
+        pack's own membership with that pack's id. agent_ai_names is absent
+        from the catalog fixture on purpose (name/description/rows fall back).
+        """
+        base = self.root / "deps" / "pinyin_simp.dict.yaml"
+        base.parent.mkdir()
+        base.write_text("---\nname: pinyin_simp\n...\n"
+                        "明月\tming yue\t1\n你好\tni hao\t1\n", encoding="utf-8")
+        (self.rime / "agent_general.dict.yaml").write_text(
+            "---\nname: agent_general\n...\n"
+            "你好\tni hao\t100\n世界\tshi jie\t100\n", encoding="utf-8")
+        (self.rime / "agent_pack_poetry.dict.yaml").write_text(
+            "---\nname: agent_pack_poetry\n...\n"
+            "一帆风顺\tyi fan feng shun\t200\n"
+            "床前明月光\tchang qian ming yue guang\t200\n"
+            "明月\tming yue\t200\n世界\tshi jie\t200\n", encoding="utf-8")
+        (self.rime / "agent_ai_names.dict.yaml").write_text(
+            "---\nname: agent_ai_names\n...\n一帆风顺\tyi fan feng shun\t50\n", encoding="utf-8")
+        catalog = self.root / "catalog.json"
+        catalog.write_text(json.dumps({"formatVersion": 1, "layers": [
+            {"id": "agent_pack_poetry", "name": "诗词", "description": "古诗词名句与诗人",
+             "group": "pack", "defaultEnabled": False, "rows": 14880}]},
+            ensure_ascii=False), encoding="utf-8")
+        return base, catalog
 
     def test_ditto_cells_resolve_to_the_row_above(self):
         self.audit.write_text(
@@ -172,6 +201,65 @@ class ReleasePackTests(unittest.TestCase):
             self.build()
         self.assertEqual((directory / "MANIFEST.json").read_bytes(), before)
 
+    def test_pack_index_fields_sorting_and_checksums(self):
+        base, catalog = self.pack_fixture()
+        directory = self.build(base=base, catalog_path=catalog)
+        index = json.loads((directory / "packs/packs.json").read_text(encoding="utf-8"))
+        self.assertEqual(list(index), ["formatVersion", "lexiconVersion", "packs"])
+        self.assertEqual((index["formatVersion"], index["lexiconVersion"]), (1, "2026.10"))
+        self.assertEqual([entry["id"] for entry in index["packs"]],
+                         ["agent_ai_names", "agent_pack_poetry"])
+        names = {entry["id"]: entry for entry in index["packs"]}
+        self.assertEqual(names["agent_pack_poetry"]["name"], "诗词")
+        self.assertEqual(names["agent_pack_poetry"]["description"], "古诗词名句与诗人")
+        self.assertEqual(names["agent_pack_poetry"]["rows"], 14880)
+        # Not in the catalog: id as name, empty description, dictionary data rows.
+        self.assertEqual(names["agent_ai_names"]["name"], "agent_ai_names")
+        self.assertEqual(names["agent_ai_names"]["description"], "")
+        self.assertEqual(names["agent_ai_names"]["rows"], 1)
+        for entry in index["packs"]:
+            for key in ("dict", "membership"):
+                part = entry[key]
+                data = (directory / "packs" / part["file"]).read_bytes()
+                self.assertEqual(part["bytes"], len(data))
+                self.assertEqual(part["sha256"], hashlib.sha256(data).hexdigest())
+                self.assertEqual(part["file"], entry["id"] + (".dict.yaml" if key == "dict"
+                                                              else ".membership.tsv"))
+        sums = (directory / "SHA256SUMS").read_text().splitlines()
+        packed = {line.split("  ", 1)[1] for line in sums if line.split("  ", 1)[1].startswith("packs/")}
+        self.assertEqual(packed, {"packs/packs.json", "packs/agent_ai_names.dict.yaml",
+                                  "packs/agent_ai_names.membership.tsv",
+                                  "packs/agent_pack_poetry.dict.yaml",
+                                  "packs/agent_pack_poetry.membership.tsv"})
+
+    def test_pack_membership_lists_pack_only_words(self):
+        base, catalog = self.pack_fixture()
+        directory = self.build(base=base, catalog_path=catalog)
+        poetry = (directory / "packs/agent_pack_poetry.membership.tsv").read_text(encoding="utf-8")
+        self.assertEqual(poetry,
+                         "一帆风顺\tagent_pack_poetry\n床前明月光\tagent_pack_poetry\n")
+        names = (directory / "packs/agent_ai_names.membership.tsv").read_text(encoding="utf-8")
+        # Shared with the poetry pack but listed under its own pack id.
+        self.assertEqual(names, "一帆风顺\tagent_ai_names\n")
+        for core_word in ("你好", "世界", "明月"):
+            self.assertNotIn(core_word + "\t", poetry)
+
+    def test_pack_build_is_byte_identical_when_repeated(self):
+        base, catalog = self.pack_fixture()
+        first = self.build("pack-one", base=base, catalog_path=catalog)
+        second = self.build("pack-two", base=base, catalog_path=catalog)
+        for name in ("packs/packs.json", "packs/agent_ai_names.membership.tsv",
+                     "packs/agent_pack_poetry.membership.tsv"):
+            self.assertEqual((first / name).read_bytes(), (second / name).read_bytes())
+        self.assertEqual(first.with_name(first.name + ".tar.gz").read_bytes(),
+                         second.with_name(second.name + ".tar.gz").read_bytes())
+
+    def test_pack_dictionaries_are_byte_copies_of_layers(self):
+        base, catalog = self.pack_fixture()
+        directory = self.build(base=base, catalog_path=catalog)
+        for pack_id in ("agent_ai_names", "agent_pack_poetry"):
+            self.assertEqual((directory / f"packs/{pack_id}.dict.yaml").read_bytes(),
+                             (directory / f"layers/{pack_id}.dict.yaml").read_bytes())
 
 if __name__ == "__main__":
     unittest.main()

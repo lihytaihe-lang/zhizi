@@ -604,10 +604,17 @@ final class QualityRecorder: @unchecked Sendable {
         }
     }
 
-    /// The owner's own records, read in place for local preferences (never copied).
-    func readRecordsForLocalPreferences() -> Data? {
-        guard let secureDirectory = try? LocalSecureDirectory.openExisting(directory) else { return nil }
-        return try? secureDirectory.readRegular("events.jsonl", maximumBytes: 32 * 1024 * 1024).0
+    /// The owner's own records, read in place for local preferences (never copied): the most
+    /// recent `maximumBytes`, from the first whole line. The log only grows; a cap on the whole
+    /// file loaded no habit at all once it passed 32 MiB (10-20), and d lost 的 on 10-25.
+    func readRecordsForLocalPreferences(maximumBytes: Int = 32 * 1024 * 1024) -> Data? {
+        guard let secureDirectory = try? LocalSecureDirectory.openExisting(directory),
+              let (data, truncated) = try? secureDirectory.readRegularTail(
+                  "events.jsonl", maximumBytes: maximumBytes
+              ) else { return nil }
+        guard truncated else { return data }
+        guard let newline = data.firstIndex(of: 0x0a) else { return Data() }
+        return Data(data[data.index(after: newline)...])
     }
 
     private func recordingIsAuthorized(

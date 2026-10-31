@@ -10,6 +10,8 @@ pub mod quality;
 pub mod ranking;
 pub mod settings;
 
+pub use agent_ime_core::zhixu::learning::LearningMode;
+
 use agent_ime_core::{
     AimCandidate, AimKeyEvent, AimResult, AimSession, aim_result_free,
     aim_session_composition_alternatives, aim_session_composition_edits, aim_session_composition_guessed,
@@ -18,7 +20,7 @@ use agent_ime_core::{
     aim_session_lead_with_composition, aim_session_offer_composition, aim_session_peek_following_pages,
     aim_session_process,
     aim_session_reorder_context_candidates, aim_session_set_mode, aim_session_set_preceding_text,
-    aim_session_set_candidate_context, aim_session_set_typo_correction,
+    aim_session_set_candidate_context, aim_session_set_typo_correction, aim_session_set_learning, aim_session_set_fuzzy,
 };
 use ranking::{COMPOSITION_COMMENT, COMPOSITION_OFFER_COMMENT, Done, Job, Worker};
 use std::path::{Path, PathBuf};
@@ -117,14 +119,26 @@ pub struct ModelObservation {
     pub late: bool,
 }
 
+/// Which part of the model's decisions to apply (local evaluation only; the shells never set it).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Ablation {
+    /// Both: whole-reading compositions (C3) and the group order (C2/C1).
+    #[default]
+    None,
+    /// Group order only; compositions are never led with or offered.
+    RerankOnly,
+    /// Compositions only; the group order is left as the core made it.
+    JoinOnly,
+}
+
 struct Pending {
     generation: u64,
     view: View,
     slots: Vec<usize>,
     homophone: Vec<bool>,
     composition: Vec<String>,
-    /// Letters changed to reach each composition entry from what was typed.
-    edits: Vec<u8>,
+    /// Normalized typing cost for each composition entry.
+    edits: Vec<f64>,
     /// The typed letters are not whole pinyin (the first is a guess too).
     guessed: bool,
 }
@@ -133,7 +147,7 @@ struct Pending {
 #[derive(Clone, Debug, Default)]
 pub struct CompositionTrace {
     pub texts: Vec<String>,
-    pub edits: Vec<u8>,
+    pub edits: Vec<f64>,
     pub scores: Vec<f64>,
 }
 
@@ -145,6 +159,7 @@ pub struct Host {
     pending: Option<Pending>,
     observation: ModelObservation,
     last_composition: CompositionTrace,
+    ablation: Ablation,
     recorder: Option<quality::Recorder>,
     app_id: String,
     /// Unique per key: the core claims each selection's ID once before Rime may learn.
@@ -183,6 +198,7 @@ impl Host {
             pending: None,
             observation: ModelObservation::default(),
             last_composition: CompositionTrace::default(),
+            ablation: Ablation::None,
             recorder: None,
             app_id: config.app_id.clone(),
             // Start from the clock so IDs never repeat across restarts within the
@@ -220,6 +236,22 @@ impl Host {
         agent_ime_core::ranking::load_owner_style(records);
     }
 
+    /// Selects the learning provider. Rime remains the default; the Zhixu trial
+    /// decoder writes only Zhixu learning. Rime-backed sessions retain Rime writes.
+    pub fn set_learning(&mut self, mode: LearningMode) -> bool {
+        unsafe { aim_session_set_learning(self.session, mode as u32) == 0 }
+    }
+
+    /// Enables fuzzy-pinyin groups (bit 0 z/zh … bit 7 in/ing), as the menu does.
+    pub fn set_fuzzy(&mut self, mask: u32) -> bool {
+        unsafe { aim_session_set_fuzzy(self.session, mask) == 0 }
+    }
+
+    /// Local evaluation: apply only the group order or only the compositions.
+    pub fn set_ablation(&mut self, ablation: Ablation) {
+        self.ablation = ablation;
+    }
+
     pub fn model_observation(&self) -> &ModelObservation {
         &self.observation
     }
@@ -229,7 +261,7 @@ impl Host {
         &self.last_composition
     }
 
-    fn composition_edits(&mut self) -> Vec<u8> {
+    fn composition_edits(&mut self) -> Vec<f64> {
         let mut buffer = vec![0u8; 256];
         let written = unsafe { aim_session_composition_edits(self.session, buffer.as_mut_ptr(), buffer.len()) };
         if written <= 0 {
@@ -329,7 +361,7 @@ impl Host {
         let alternatives = self.composition_alternatives();
         let mut edits = self.composition_edits();
         if edits.len() != alternatives.len() + 1 {
-            edits = vec![0; alternatives.len() + 1];
+            edits = vec![0.0; alternatives.len() + 1];
         }
         let composition = match view.candidates.first() {
             Some(first) if !alternatives.is_empty() => {
@@ -385,7 +417,12 @@ impl Host {
             .collect()
     }
 
-    fn apply_ranking(&mut self, pending: Pending, done: Done, late: bool) -> View {
+    fn apply_ranking(&mut self, pending: Pending, mut done: Done, late: bool) -> View {
+        match self.ablation {
+            Ablation::None => {}
+            Ablation::RerankOnly => done.composition_scores = None,
+            Ablation::JoinOnly => done.group_scores = None,
+        }
         let latency_ms = Some((done.elapsed.as_secs_f64() * 100_000.0).round() / 100.0);
         let mut view = pending.view;
         let mut offer: Option<String> = None;
@@ -399,7 +436,7 @@ impl Host {
                 edits: pending.edits.clone(),
                 scores: scores.clone(),
             };
-            let edits: Vec<f64> = (0..scores.len()).map(|i| f64::from(pending.edits.get(i).copied().unwrap_or(0))).collect();
+            let edits: Vec<f64> = (0..scores.len()).map(|i| pending.edits.get(i).copied().unwrap_or(0.0)).collect();
             offer = ranking::composition_offer(&pending.composition, scores, &edits)
                 .map(|best| pending.composition[best].clone());
             if let Some(best) = ranking::composition_lead(&pending.composition, scores, &edits, pending.guessed) {
@@ -495,12 +532,9 @@ impl Host {
     }
 
     /// The text the application really has before the caret (read by the shell through its text interface): the context the next
-    /// candidates are ranked against and the punctuation direction follows. Empty text changes nothing, since some applications
-    /// cannot be read at all and the shell then keeps what it committed itself.
+    /// candidates are ranked against and the punctuation direction follows. Empty text clears the context; when the application
+    /// cannot be read, the shell must skip this call to keep what it committed itself.
     pub fn set_context(&mut self, text: &str) {
-        if text.is_empty() {
-            return;
-        }
         self.recent.clear();
         self.note_committed(text);
     }
@@ -615,12 +649,16 @@ mod context_tests {
             pending: None,
             observation: ModelObservation::default(),
             last_composition: CompositionTrace::default(),
+            ablation: Ablation::None,
             recorder: None,
             app_id: String::new(),
             next_delivery_id: 1,
         };
+        assert_eq!(LearningMode::default(), LearningMode::Rime);
+        assert!(!host.set_learning(LearningMode::Zhixu), "a closed session cannot switch providers");
+        assert_ne!(unsafe { aim_session_set_learning(host.session, 2) }, 0);
         host.set_context("");
-        assert_eq!(host.recent, "旧的", "unreadable or empty: keep what the shell has");
+        assert_eq!(host.recent, "", "a successfully read empty document clears stale context");
         host.set_context("今天天气不错，");
         assert_eq!(host.recent, "今天天气不错，");
         host.set_context(&"字".repeat(40));

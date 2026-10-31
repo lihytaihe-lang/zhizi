@@ -9,7 +9,8 @@ mod english_choices;
 mod exact_readings;
 mod mixer;
 mod lexicon_layers;
-mod personal_picks;
+pub mod learning_migration;
+pub mod personal_picks;
 pub mod ranking;
 #[cfg(feature = "librime")]
 mod rime;
@@ -17,6 +18,7 @@ mod secure_directory;
 #[cfg(any(test, feature = "librime"))]
 mod selection_ledger;
 mod state;
+pub mod zhixu;
 
 use context_model::ContextModel;
 use mixer::MixerLexicon;
@@ -260,7 +262,10 @@ pub unsafe extern "C" fn aim_session_create(
     let session = Box::new(AimSession {
         app_id: app_id.clone(),
         #[cfg(feature = "librime")]
-        inner: Session::new_with_blacklist(decoder, app_id, blacklist),
+        inner: match Session::new_with_blacklist(decoder, app_id, blacklist) {
+            Ok(session) => session,
+            Err(_) => return ptr::null_mut(),
+        },
         #[cfg(not(feature = "librime"))]
         inner: Session::new(decoder, app_id),
     });
@@ -342,7 +347,76 @@ pub unsafe extern "C" fn aim_session_withdraw_selection(
     let (Ok(raw), Ok(text)) = (unsafe { utf8_argument(raw, raw_len) }, unsafe { utf8_argument(text, text_len) }) else {
         return -2;
     };
-    i32::from(mixer::withdraw_selection(&unsafe { &*session }.app_id, &raw, &text))
+    let session = unsafe { &mut *session };
+    let withdrawn = session.inner.withdraw_learning(&raw, &text);
+    i32::from(mixer::withdraw_selection(&session.app_id, &raw, &text) || withdrawn)
+}
+
+#[unsafe(no_mangle)]
+/// Selects learning rules: 0 = Rime (default), 1 = Zhixu. Native Zhixu sessions
+/// always learn in Zhixu; only sessions using the Rime decoder write Rime data.
+/// Call only with no composition; invalid modes and busy sessions are rejected.
+/// # Safety
+/// `session` must be null or a live, exclusively accessed session.
+pub unsafe extern "C" fn aim_session_set_learning(session: *mut AimSession, mode: u32) -> i32 {
+    let Some(session) = (unsafe { session.as_mut() }) else { return -1 };
+    let mode = match mode {
+        0 => zhixu::learning::LearningMode::Rime,
+        1 => zhixu::learning::LearningMode::Zhixu,
+        _ => return -2,
+    };
+    session.inner.configure_learning(mode).err().unwrap_or(0)
+}
+
+#[unsafe(no_mangle)]
+/// Selects the decoder: 0 = Rime (default), 1 = Zhixu when fuzzy input is off.
+/// The evaluation flag ZHIZI_ZHIXU_WHOLE=1 forces the same product switch.
+/// Returns -1 for null, -2 for invalid values, and -10 during composition.
+/// # Safety
+/// `session` must be null or a live, exclusively accessed session.
+pub unsafe extern "C" fn aim_session_set_zhixu_whole(session: *mut AimSession, on: u32) -> i32 {
+    let Some(session) = (unsafe { session.as_mut() }) else { return -1 };
+    let on = match on {
+        0 => false,
+        1 => true,
+        _ => return -2,
+    };
+    session.inner.configure_zhixu_whole(on).err().unwrap_or(0)
+}
+
+#[unsafe(no_mangle)]
+/// Returns 1 for a validated learning library, 0 for missing, -2 for invalid paths,
+/// and -3 for unreadable or invalid existing data. Never creates or modifies files.
+/// # Safety
+/// `user` must be a valid UTF-8 pointer/length pair.
+pub unsafe extern "C" fn aim_learning_available(user: *const u8, user_len: usize) -> i32 {
+    let Ok(user) = (unsafe { utf8_argument(user, user_len) }) else { return -2 };
+    if user.is_empty() || user.contains('\0') { return -2; }
+    match learning_migration::learning_available(std::path::Path::new(&user)) {
+        Ok(available) => i32::from(available),
+        Err(_) => -3,
+    }
+}
+
+#[unsafe(no_mangle)]
+/// One-time migration for a dedicated worker process before any Rime initialization.
+/// Only copies the source database; Rime opens the private staging directory.
+/// Returns 0 when ready, -2 for invalid paths, -3 for migration/validation failure,
+/// or -10 if this process already has live input sessions.
+/// # Safety
+/// Paths must be valid UTF-8 pointer/length pairs. Run in a fresh child process.
+pub unsafe extern "C" fn aim_learning_migrate(
+    shared: *const u8, shared_len: usize, user: *const u8, user_len: usize,
+) -> i32 {
+    let (Ok(shared), Ok(user)) = (unsafe { utf8_argument(shared, shared_len) }, unsafe { utf8_argument(user, user_len) }) else {
+        return -2;
+    };
+    if shared.is_empty() || user.is_empty() || shared.contains('\0') || user.contains('\0') { return -2; }
+    if LIVE_SESSIONS.load(Ordering::SeqCst) != 0 { return -10; }
+    match learning_migration::migrate_if_needed(std::path::Path::new(&shared), std::path::Path::new(&user)) {
+        Ok(()) => 0,
+        Err(_) => -3,
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -357,6 +431,23 @@ pub unsafe extern "C" fn aim_session_set_fuzzy(session: *mut AimSession, fuzzy_m
         return -1;
     }
     match unsafe { &mut *session }.inner.configure_fuzzy(fuzzy_mask) {
+        Ok(()) => 0,
+        Err(status) => status,
+    }
+}
+
+#[unsafe(no_mangle)]
+/// Deploys the Rime schema again so dictionaries added to the user directory since the session started (downloaded
+/// professional packs) take effect. Drops any composition; call it only at a safe point. Returns 0 on success.
+///
+/// # Safety
+///
+/// `session` must reference a live session returned by [`aim_session_create`].
+pub unsafe extern "C" fn aim_session_reload_dictionaries(session: *mut AimSession) -> i32 {
+    if session.is_null() {
+        return -1;
+    }
+    match unsafe { &mut *session }.inner.reload_dictionaries() {
         Ok(()) => 0,
         Err(status) => status,
     }
@@ -468,7 +559,24 @@ pub unsafe extern "C" fn aim_session_composition_alternatives(
 }
 
 #[unsafe(no_mangle)]
-/// C3: letters changed to reach the first candidate and then each alternative of
+/// Set core correction switches (nonzero = on). Process-wide; refreshes this session
+/// without losing typed keys. Other live sessions pick up settings on their next key.
+/// # Safety
+/// `session` must be live and exclusively accessed.
+pub unsafe extern "C" fn aim_session_set_corrections(
+    session: *mut AimSession, enabled: i32, typed_costs: i32,
+    multiple_readings: i32, trailing_letter: i32,
+) -> i32 {
+    if session.is_null() { return -1; }
+    unsafe { &mut *session }.inner.set_correction_settings(ranking::CorrectionSettings {
+        enabled: enabled != 0, typed_costs: typed_costs != 0,
+        multiple_readings: multiple_readings != 0, trailing_letter: trailing_letter != 0,
+    });
+    0
+}
+
+#[unsafe(no_mangle)]
+/// C3: normalized edit cost (cost / edit_penalty), first candidate then alternatives of
 /// `aim_session_composition_alternatives`, tab-separated decimals; length or -needed.
 /// # Safety
 /// `session` is a live session; `buffer` holds `capacity` bytes.
@@ -484,7 +592,7 @@ pub unsafe extern "C" fn aim_session_composition_edits(
         .inner
         .composition_edits()
         .iter()
-        .map(u8::to_string)
+        .map(|value| ranking::format_edit_units(*value))
         .collect::<Vec<_>>()
         .join("\t");
     let bytes = text.as_bytes();
@@ -1049,6 +1157,82 @@ mod ffi_tests {
         LIVE_SESSION_TESTS
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    #[test]
+    fn ffi_correction_settings_and_fractional_costs_round_trip() {
+        // The settings are process-wide; exercise the public setter in a child so
+        // the rest of the parallel suite retains its own defaults.
+        const CHILD: &str = "ZHIXU_CORRECTION_FFI_TEST";
+        if std::env::var_os(CHILD).is_none() {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "ffi_tests::ffi_correction_settings_and_fractional_costs_round_trip", "--nocapture"])
+                .env(CHILD, "1").output().unwrap();
+            assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+            return;
+        }
+        use crate::state::{Decoder, MockDecoder};
+        let mut decoder = MockDecoder::default();
+        decoder.input("yijignshile").unwrap();
+        let app_id = "ffi.corrections".to_string();
+        let mut session = AimSession { inner: Session::new(Box::new(decoder), app_id.clone()), app_id };
+        assert_eq!(unsafe { aim_session_set_corrections(ptr::null_mut(), 1, 1, 1, 1) }, -1);
+        assert_eq!(unsafe { aim_session_set_corrections(&mut session, 1, 1, 1, 1) }, 0);
+        let alternatives = session.inner.composition_alternatives();
+        assert!(alternatives.iter().any(|text| text == "已经是了"));
+        let expected = session.inner.composition_edits();
+        assert!(expected.iter().any(|value| value.fract() != 0.0));
+        let mut buffer = [0u8; 256];
+        let size = unsafe { aim_session_composition_edits(&mut session, buffer.as_mut_ptr(), buffer.len()) };
+        assert!(size > 0 && size <= 256);
+        let decoded: Vec<f64> = std::str::from_utf8(&buffer[..size as usize]).unwrap()
+            .split('\t').map(|value| value.parse().unwrap()).collect();
+        assert_eq!(decoded.len(), alternatives.len() + 1);
+        for (value, expected) in decoded.iter().zip(expected) { assert!((value - expected).abs() <= 0.0000005); }
+        assert_eq!(unsafe { aim_session_set_corrections(&mut session, 0, 1, 1, 1) }, 0);
+        assert!(!ranking::settings().enabled);
+        assert!(!session.inner.composition_alternatives().is_empty(), "settings must keep typed keys");
+        assert!(session.inner.composition_edits().iter().all(|value| value.fract() == 0.0));
+        assert!(include_str!("../include/agent_ime_core.h").contains("int32_t aim_session_set_corrections("));
+    }
+
+    #[test]
+    fn ffi_learning_mode_rejects_invalid_or_busy_sessions() {
+        let app_id = "ffi.learning-mode".to_string();
+        let mut session = AimSession { inner: Session::new(Box::new(crate::state::MockDecoder::default()), app_id.clone()), app_id };
+        assert_eq!(unsafe { aim_session_set_learning(ptr::null_mut(), 1) }, -1);
+        assert_eq!(unsafe { aim_session_set_learning(&mut session, 2) }, -2);
+        assert_eq!(unsafe { aim_session_set_learning(&mut session, 1) }, 0);
+        session.inner.process(KeyEvent { kind: KeyKind::Text, text: "n".into(), modifiers: 0,
+            security: SecurityState::NonSecure, delivery_id: 1 });
+        assert_eq!(unsafe { aim_session_set_learning(&mut session, 0) }, -10);
+        let cancelled = session.inner.process(KeyEvent { kind: KeyKind::Escape, text: String::new(), modifiers: 0,
+            security: SecurityState::NonSecure, delivery_id: 2 });
+        assert!(cancelled.marked_text.is_empty());
+        assert_eq!(unsafe { aim_session_set_learning(&mut session, 0) }, 0);
+        assert!(include_str!("../include/agent_ime_core.h").contains("int32_t aim_session_set_learning("));
+    }
+
+    #[test]
+    fn ffi_zhixu_whole_rejects_invalid_or_busy_sessions() {
+        let app_id = "ffi.zhixu-whole".to_string();
+        let mut session = AimSession { inner: Session::new(Box::new(crate::state::MockDecoder::default()), app_id.clone()), app_id };
+        assert_eq!(unsafe { aim_session_set_zhixu_whole(ptr::null_mut(), 1) }, -1);
+        for invalid in [2, u32::MAX] {
+            assert_eq!(unsafe { aim_session_set_zhixu_whole(&mut session, invalid) }, -2);
+        }
+        for on in [0, 1] {
+            assert_eq!(unsafe { aim_session_set_zhixu_whole(&mut session, on) }, 0);
+        }
+        session.inner.process(KeyEvent { kind: KeyKind::Text, text: "n".into(), modifiers: 0,
+            security: SecurityState::NonSecure, delivery_id: 1 });
+        for on in [0, 1] {
+            assert_eq!(unsafe { aim_session_set_zhixu_whole(&mut session, on) }, -10);
+        }
+        session.inner.process(KeyEvent { kind: KeyKind::Escape, text: String::new(), modifiers: 0,
+            security: SecurityState::NonSecure, delivery_id: 2 });
+        assert_eq!(unsafe { aim_session_set_zhixu_whole(&mut session, 0) }, 0);
+        assert!(include_str!("../include/agent_ime_core.h").contains("int32_t aim_session_set_zhixu_whole("));
     }
 
     #[test]

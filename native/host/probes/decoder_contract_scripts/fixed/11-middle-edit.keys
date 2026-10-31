@@ -1,0 +1,18 @@
+# 拼音中间移动时的候选和插入、退格。
+clear
+type z
+type h
+type o
+type n
+type g
+type g
+type u
+type o
+left
+left
+left
+backspace
+type g
+right
+right
+clear

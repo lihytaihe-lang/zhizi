@@ -37,6 +37,7 @@ enum RealRimeProcessFixture {
             "agent_pack_poetry.dict.yaml",
             "agent_pack_cad.dict.yaml",
             "agent_pack_industry.dict.yaml",
+            "agent_owner_words.dict.yaml",
             "agent_project_terms.dict.yaml",
             "agent_tech_terms.dict.yaml",
             "agent_ai_terms.dict.yaml",

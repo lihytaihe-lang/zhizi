@@ -908,6 +908,34 @@ final class QualityRecorderTests: XCTestCase {
         XCTAssertEqual(observation.includingAppendedCandidate(count: 5).baseOrder, [2, 1, 0, 3, 4])
     }
 
+    func testLocalPreferencesReadTheMostRecentWholeLinesPastTheCap() throws {
+        let root = try fixtureRoot("preferences-tail")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = root.appendingPathComponent("Quality", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: directory, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700]
+        )
+        let recorder = QualityRecorder(root: root, now: { 1_000 })
+        XCTAssertNil(recorder.readRecordsForLocalPreferences(), "no log yet")
+
+        let line = #"{"pinyin":"d","selectedText":"的","candidates":["的","地"]}"#
+        let lines = (0..<200).map { _ in line }.joined(separator: "\n") + "\n"
+        let file = directory.appendingPathComponent("events.jsonl")
+        try Data(lines.utf8).write(to: file)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
+
+        XCTAssertEqual(recorder.readRecordsForLocalPreferences(), Data(lines.utf8), "under the cap: all of it")
+        // Past the cap (the owner's log passed 32 MiB on 10-20): the newest lines, never nothing.
+        let cap = (line.utf8.count + 1) * 10 + 5
+        let tail = try XCTUnwrap(recorder.readRecordsForLocalPreferences(maximumBytes: cap))
+        let text = String(decoding: tail, as: UTF8.self)
+        XCTAssertEqual(text, String(repeating: line + "\n", count: 10), "whole lines only, the cut one dropped")
+        let preferences = OwnerStylePreferences()
+        preferences.load(records: tail)
+        defer { preferences.load(records: Data()) }
+        XCTAssertTrue(preferences.keeps("的", over: "地"))
+    }
+
     private func fixtureRoot(_ name: String) throws -> URL {
         let root = URL(fileURLWithPath: "/private/tmp", isDirectory: true)
             .appendingPathComponent("quality-recorder-\(name)-\(UUID().uuidString)", isDirectory: true)

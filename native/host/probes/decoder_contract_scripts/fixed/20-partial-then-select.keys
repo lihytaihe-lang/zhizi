@@ -1,0 +1,18 @@
+# 前半截确认后继续候选选择，包含确认文本的最终提交。
+clear
+type n
+type i
+type h
+type a
+type o
+type s
+type h
+type i
+type j
+type i
+type e
+# resolve_prefix
+select 1 deliberate
+select 0 no_learn
+clear_after_selection
+clear

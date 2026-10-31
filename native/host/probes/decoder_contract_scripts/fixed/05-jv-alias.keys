@@ -1,0 +1,11 @@
+# jv 显示 ju，不能按 ASCII/非 ASCII 猜测确认边界。
+clear
+type j
+type v
+type h
+type a
+type o
+left
+right
+commit_raw
+clear

@@ -122,6 +122,18 @@ class BuildCatalogTests(unittest.TestCase):
         content = (out / "lexicon_membership.tsv").read_text(encoding="utf-8")
         self.assertNotIn("agent_pack_poetry", content)
 
+    def test_owner_words_are_default_enabled_and_an_empty_shell_stays_missing(self):
+        path = self.rime / "agent_owner_words.dict.yaml"
+        write_dict(path, [("合成词", "he cheng ci", 1000)])
+        catalog, _, _ = self.build()
+        owner = next(layer for layer in catalog["layers"] if layer["id"] == "agent_owner_words")
+        self.assertEqual((owner["name"], owner["description"], owner["group"], owner["defaultEnabled"]),
+                         ("我的常用词", "从你的输入记录里整理出的、词库里没有的词，只在本机", "pack", True))
+        write_dict(path, [])
+        catalog, _, _ = self.build()
+        self.assertNotIn("agent_owner_words", [layer["id"] for layer in catalog["layers"]])
+        self.assertIn("agent_owner_words", catalog["missing"])
+
     def test_unlisted_and_missing_layers(self):
         catalog, out, _ = self.build()
         self.assertEqual(catalog["formatVersion"], 1)
@@ -129,7 +141,7 @@ class BuildCatalogTests(unittest.TestCase):
         self.assertEqual(catalog["missing"], [
             "agent_common_fix", "agent_daily", "agent_modern", "agent_spoken",
             "agent_newwords", "agent_thuocl_it", "agent_thuocl_caijing",
-            "agent_ai_names", "agent_pack_cad", "agent_pack_industry"])
+            "agent_ai_names", "agent_owner_words", "agent_pack_cad", "agent_pack_industry"])
         self.assertEqual([layer["id"] for layer in catalog["layers"]],
                          ["pinyin_simp", "agent_general", "agent_idioms", "agent_pack_poetry"])
         poetry = catalog["layers"][3]

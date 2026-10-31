@@ -20,7 +20,7 @@ final class ContextRankingTests: XCTestCase {
         XCTAssertEqual(session.lastOutcome, .noGroup)
     }
 
-    func testHardCapTimeoutFallsBackAndTwentyConsecutiveTimeoutsDisableSession() {
+    func testHardCapTimeoutFallsBackAndTwentyConsecutiveTimeoutsPauseTheModel() {
         var ticks: UInt64 = 0
         var diagnostics: [String] = []
         var session = ContextRankingSession()
@@ -31,12 +31,12 @@ final class ContextRankingTests: XCTestCase {
             XCTAssertNil(session.order(context: "", candidates: ["在", "再"], apply: { _ in XCTFail("applied past the hard cap"); return true }) { _, _ in ticks += 50_000_001; return [0, 4] })
             XCTAssertEqual(session.lastOutcome, .timeout)
         }
-        XCTAssertTrue(session.disabledForSession)
+        XCTAssertTrue(session.suspended)
         XCTAssertEqual(session.timeouts, 20)
         XCTAssertEqual(session.calls, 20)
         XCTAssertNil(session.order(context: "", candidates: ["在", "再"]) { _, _ in XCTFail(); return [0, 4] })
         XCTAssertEqual(session.lastOutcome, .suspended)
-        XCTAssertEqual(diagnostics.last, "context-model-session-disabled")
+        XCTAssertEqual(diagnostics.last, "context-model-session-paused seconds=60")
     }
 
     func testSlowWarmResultIsStillAppliedAndTwentyInARowSuspend() {
@@ -51,12 +51,67 @@ final class ContextRankingTests: XCTestCase {
             XCTAssertEqual(session.order(context: "", candidates: ["在", "再"], apply: { applied = $0; return true }) { _, _ in ticks += 9_000_000; return [0, 4] }, [1, 0])
             XCTAssertEqual(applied, [1, 0], "a late result already paid for must reach the core")
             XCTAssertEqual(session.lastOutcome, .reordered)
-            XCTAssertEqual(session.disabledForSession, index == 19)
+            XCTAssertEqual(session.suspended, index == 19)
         }
         XCTAssertEqual(session.slowCalls, 20)
         XCTAssertEqual(session.timeouts, 0)
         XCTAssertTrue(diagnostics.contains("context-model-slow-warm-count-1"))
-        XCTAssertEqual(diagnostics.last, "context-model-session-disabled")
+        XCTAssertEqual(diagnostics.last, "context-model-session-paused seconds=60")
+    }
+
+    /// 10-29: one slow stretch switched the model off until the IME restarted, and it
+    /// stayed off for most of two days. A pause now ends, and the model scores again.
+    func testPauseEndsAndTheModelScoresAgain() {
+        var ticks: UInt64 = 0
+        var diagnostics: [String] = []
+        var session = ContextRankingSession()
+        session.enabled = true
+        session.now = { ticks }
+        session.diagnostic = { diagnostics.append($0) }
+        for _ in 0..<20 { _ = session.order(context: "", candidates: ["在", "再"]) { _, _ in ticks += 9_000_000; return [0, 4] } }
+        XCTAssertTrue(session.suspended)
+        ticks += 59_000_000_000
+        XCTAssertNil(session.order(context: "", candidates: ["在", "再"]) { _, _ in XCTFail("scored while paused"); return [0, 4] })
+        XCTAssertEqual(session.lastOutcome, .suspended)
+        ticks += 1_000_000_000
+        XCTAssertFalse(session.suspended)
+        XCTAssertEqual(session.order(context: "", candidates: ["在", "再"]) { _, _ in ticks += 3_000_000; return [0, 4] }, [1, 0])
+        XCTAssertEqual(session.lastOutcome, .reordered)
+        XCTAssertTrue(diagnostics.contains("context-model-session-resumed"))
+    }
+
+    func testPausesInARowDoubleUpToTenMinutesAndTimeInBudgetStartsOver() {
+        var ticks: UInt64 = 0
+        var diagnostics: [String] = []
+        var session = ContextRankingSession()
+        session.enabled = true
+        session.now = { ticks }
+        session.diagnostic = { diagnostics.append($0) }
+        func slowStretch() {
+            for _ in 0..<20 { _ = session.order(context: "", candidates: ["在", "再"]) { _, _ in ticks += 9_000_000; return [0, 4] } }
+            ticks = session.pausedUntil ?? ticks
+        }
+        for _ in 0..<6 { slowStretch() }
+        XCTAssertEqual(diagnostics.filter { $0.hasPrefix("context-model-session-paused") },
+                       [60, 120, 240, 480, 600, 600].map { "context-model-session-paused seconds=\($0)" })
+        for _ in 0..<20 { _ = session.order(context: "", candidates: ["在", "再"]) { _, _ in ticks += 3_000_000; return [0, 4] } }
+        XCTAssertEqual(session.pauses, 0)
+        slowStretch()
+        XCTAssertEqual(diagnostics.last { $0.hasPrefix("context-model-session-paused") }, "context-model-session-paused seconds=60")
+    }
+
+    /// Slow calls with fast ones in between never pause: only twenty in a row do.
+    func testInterleavedFastCallsNeverPause() {
+        var ticks: UInt64 = 0
+        var session = ContextRankingSession()
+        session.enabled = true
+        session.now = { ticks }
+        session.diagnostic = { _ in }
+        for index in 0..<200 {
+            _ = session.order(context: "", candidates: ["在", "再"]) { _, _ in ticks += index % 10 == 0 ? 3_000_000 : 9_000_000; return [0, 4] }
+        }
+        XCTAssertFalse(session.suspended)
+        XCTAssertEqual(session.pauses, 0)
     }
 
     func testColdSlowResultIsAppliedAndNeverCountsTowardSuspension() {
@@ -69,7 +124,7 @@ final class ContextRankingTests: XCTestCase {
         for _ in 0..<40 {
             XCTAssertEqual(session.order(context: "", candidates: ["在", "再"], cold: true) { _, _ in ticks += 25_000_000; return [0, 4] }, [1, 0])
         }
-        XCTAssertFalse(session.disabledForSession)
+        XCTAssertFalse(session.suspended)
         XCTAssertEqual(session.consecutiveTimeouts, 0)
         XCTAssertEqual(diagnostics.last, "context-model-slow-cold-count-40")
     }

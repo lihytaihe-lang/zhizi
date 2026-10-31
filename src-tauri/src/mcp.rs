@@ -1,7 +1,10 @@
 use crate::{layer2, storage::AppStorage};
 use serde::Serialize;
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use std::{
+    collections::hash_map::RandomState,
+    hash::{BuildHasher, Hasher},
     io::{Read, Write},
     net::{SocketAddr, TcpListener, TcpStream},
     sync::{
@@ -9,7 +12,7 @@ use std::{
         Arc, Mutex,
     },
     thread,
-    time::Duration,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tauri::{AppHandle, Manager};
 
@@ -22,7 +25,51 @@ pub struct McpServerStatus {
 
 struct RunningServer {
     address: SocketAddr,
+    token: String,
     stop: Arc<AtomicBool>,
+}
+
+impl RunningServer {
+    fn endpoint(&self) -> String {
+        format!("http://{}/mcp/{}", self.address, self.token)
+    }
+}
+
+/// 每次启动 server 轮换一次性访问令牌：熵取自标准库 OS 随机种子的哈希键、
+/// 纳秒时钟与进程号，经 SHA-256 展开为 256 位十六进制，不引入新依赖。
+fn generate_access_token() -> String {
+    let mut hasher = Sha256::new();
+    for round in 0_u64..4 {
+        let mut seeder = RandomState::new().build_hasher();
+        seeder.write_u64(round);
+        hasher.update(&seeder.finish().to_le_bytes());
+    }
+    hasher.update(
+        &SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or_default()
+            .to_le_bytes(),
+    );
+    hasher.update(&std::process::id().to_le_bytes());
+    format!("{:x}", hasher.finalize())
+}
+
+/// 恒定时间比较：不因逐字节提前返回而泄露令牌前缀。
+fn constant_time_eq(expected: &str, provided: &str) -> bool {
+    if expected.len() != provided.len() {
+        return false;
+    }
+    expected
+        .bytes()
+        .zip(provided.bytes())
+        .fold(0_u8, |diff, (left, right)| diff | (left ^ right))
+        == 0
+}
+
+fn request_path_is_authorized(path: &str, token: &str) -> bool {
+    path.strip_prefix("/mcp/")
+        .is_some_and(|provided| constant_time_eq(provided, token))
 }
 
 #[derive(Default)]
@@ -38,9 +85,7 @@ impl McpServerState {
             .map_err(|_| "MCP 状态锁已损坏。".to_string())?;
         Ok(McpServerStatus {
             enabled: running.is_some(),
-            endpoint: running
-                .as_ref()
-                .map(|server| format!("http://{}/mcp", server.address)),
+            endpoint: running.as_ref().map(|server| server.endpoint()),
         })
     }
 
@@ -62,7 +107,7 @@ impl McpServerState {
         if let Some(server) = running.as_ref() {
             return Ok(McpServerStatus {
                 enabled: true,
-                endpoint: Some(format!("http://{}/mcp", server.address)),
+                endpoint: Some(server.endpoint()),
             });
         }
         let listener = TcpListener::bind(("127.0.0.1", 0))
@@ -76,15 +121,18 @@ impl McpServerState {
         listener
             .set_nonblocking(true)
             .map_err(|error| format!("无法设置 MCP server：{error}"))?;
+        // 每次启动都生成新令牌；重启后旧令牌随之失效。
+        let token = generate_access_token();
         let stop = Arc::new(AtomicBool::new(false));
         let worker_stop = Arc::clone(&stop);
+        let worker_token = token.clone();
         thread::Builder::new()
             .name("agent-input-mcp".into())
             .spawn(move || {
                 while !worker_stop.load(Ordering::Acquire) {
                     match listener.accept() {
                         Ok((stream, peer)) if peer.ip().is_loopback() => {
-                            handle_connection(&app, stream)
+                            handle_connection(&app, &worker_token, stream)
                         }
                         Ok(_) => {}
                         Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
@@ -95,15 +143,25 @@ impl McpServerState {
                 }
             })
             .map_err(|error| format!("无法创建 MCP server 线程：{error}"))?;
-        *running = Some(RunningServer { address, stop });
+        let endpoint = format!("http://{address}/mcp/{token}");
+        *running = Some(RunningServer {
+            address,
+            token,
+            stop,
+        });
         Ok(McpServerStatus {
             enabled: true,
-            endpoint: Some(format!("http://{address}/mcp")),
+            endpoint: Some(endpoint),
         })
     }
 }
 
-fn read_http_body(stream: &mut TcpStream) -> Result<String, String> {
+enum ReadRequest {
+    Unauthorized,
+    Body(String),
+}
+
+fn read_http_body(stream: &mut TcpStream, token: &str) -> Result<ReadRequest, String> {
     stream
         .set_read_timeout(Some(Duration::from_secs(2)))
         .map_err(|error| error.to_string())?;
@@ -121,12 +179,14 @@ fn read_http_body(stream: &mut TcpStream) -> Result<String, String> {
         if expected.is_none() {
             if let Some(header_end) = request.windows(4).position(|part| part == b"\r\n\r\n") {
                 let headers = String::from_utf8_lossy(&request[..header_end]);
-                if !headers
-                    .lines()
-                    .next()
-                    .is_some_and(|line| line.starts_with("POST /mcp "))
-                {
-                    return Err("MCP 只接受 POST /mcp。".into());
+                let request_line = headers.lines().next().unwrap_or_default();
+                if !request_line.starts_with("POST ") {
+                    return Err("MCP 只接受 POST 请求。".into());
+                }
+                let path = request_line.split_whitespace().nth(1).unwrap_or_default();
+                // 路径或令牌不对时直接拒绝，不处理请求体。
+                if !request_path_is_authorized(path, token) {
+                    return Ok(ReadRequest::Unauthorized);
                 }
                 let length = headers
                     .lines()
@@ -151,8 +211,9 @@ fn read_http_body(stream: &mut TcpStream) -> Result<String, String> {
         .windows(4)
         .position(|part| part == b"\r\n\r\n")
         .ok_or_else(|| "MCP HTTP 请求不完整。".to_string())?;
-    String::from_utf8(request[header_end + 4..].to_vec())
-        .map_err(|_| "MCP 请求必须是 UTF-8。".into())
+    let body = String::from_utf8(request[header_end + 4..].to_vec())
+        .map_err(|_| "MCP 请求必须是 UTF-8。".to_string())?;
+    Ok(ReadRequest::Body(body))
 }
 
 fn http_response(status: &str, body: Option<&str>) -> Vec<u8> {
@@ -160,19 +221,36 @@ fn http_response(status: &str, body: Option<&str>) -> Vec<u8> {
     format!("HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).into_bytes()
 }
 
-fn handle_connection(app: &AppHandle, mut stream: TcpStream) {
+fn handle_connection(app: &AppHandle, token: &str, mut stream: TcpStream) {
     let storage = app.state::<AppStorage>();
-    handle_connection_with_storage(&storage, &mut stream);
+    handle_connection_with_storage(&storage, token, &mut stream);
 }
 
-fn handle_connection_with_storage(storage: &AppStorage, stream: &mut TcpStream) {
-    let response = match read_http_body(stream).and_then(|body| {
-        let request: Value =
-            serde_json::from_str(&body).map_err(|_| "MCP JSON-RPC 请求无效。".to_string())?;
-        dispatch(storage, request)
-    }) {
-        Ok(Some(value)) => http_response("200 OK", Some(&value.to_string())),
-        Ok(None) => http_response("202 Accepted", None),
+fn handle_connection_with_storage(storage: &AppStorage, token: &str, stream: &mut TcpStream) {
+    let response = match read_http_body(stream, token) {
+        Ok(ReadRequest::Unauthorized) => http_response(
+            "401 Unauthorized",
+            Some(
+                &json!({"jsonrpc":"2.0","id":null,"error":{"code":-32001,"message":"MCP 访问令牌无效或已过期。"}})
+                    .to_string(),
+            ),
+        ),
+        Ok(ReadRequest::Body(body)) => {
+            match serde_json::from_str::<Value>(&body)
+                .map_err(|_| "MCP JSON-RPC 请求无效。".to_string())
+                .and_then(|request| dispatch(storage, request))
+            {
+                Ok(Some(value)) => http_response("200 OK", Some(&value.to_string())),
+                Ok(None) => http_response("202 Accepted", None),
+                Err(message) => http_response(
+                    "400 Bad Request",
+                    Some(
+                        &json!({"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":message}})
+                            .to_string(),
+                    ),
+                ),
+            }
+        }
         Err(message) => http_response(
             "400 Bad Request",
             Some(
@@ -387,28 +465,142 @@ mod tests {
         assert_eq!(state.status().unwrap().endpoint, None);
     }
 
-    #[test]
-    fn loopback_http_client_calls_read_only_mcp_server() {
-        let (storage, path) = storage();
+    /// 用给定令牌串行服务 count 个连接；线程结束后归还 storage。
+    fn spawn_token_server(
+        storage: AppStorage,
+        token: &str,
+        count: usize,
+    ) -> (SocketAddr, thread::JoinHandle<AppStorage>) {
         let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
         let address = listener.local_addr().unwrap();
         assert!(address.ip().is_loopback());
-        let server = thread::spawn(move || {
-            let (mut stream, peer) = listener.accept().unwrap();
-            assert!(peer.ip().is_loopback());
-            handle_connection_with_storage(&storage, &mut stream);
+        let token = token.to_string();
+        let worker = thread::spawn(move || {
+            for _ in 0..count {
+                let (mut stream, peer) = listener.accept().unwrap();
+                assert!(peer.ip().is_loopback());
+                handle_connection_with_storage(&storage, &token, &mut stream);
+            }
             storage
         });
-        let body = json!({"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"render_prompt","arguments":{"raw_input":"loopback 本地原文","mode":"summarize"}}}).to_string();
+        (address, worker)
+    }
+
+    fn post_json(address: SocketAddr, path: &str, body: &str) -> String {
         let mut client = TcpStream::connect(address).unwrap();
-        client.write_all(format!("POST /mcp HTTP/1.1\r\nHost: {address}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes()).unwrap();
+        client
+            .write_all(
+                format!(
+                    "POST {path} HTTP/1.1\r\nHost: {address}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                )
+                .as_bytes(),
+            )
+            .unwrap();
         let mut response = String::new();
         client.read_to_string(&mut response).unwrap();
-        assert!(response.starts_with("HTTP/1.1 200 OK"));
+        response
+    }
+
+    fn render_body(text: &str) -> String {
+        json!({"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"render_prompt","arguments":{"raw_input":text,"mode":"summarize"}}}).to_string()
+    }
+
+    fn assert_unauthorized(response: &str) {
+        assert!(response.starts_with("HTTP/1.1 401"), "{response}");
+        assert!(!response.contains("本地原文"), "{response}");
+    }
+
+    #[test]
+    fn access_tokens_are_long_unique_and_hexadecimal() {
+        let mut seen = std::collections::HashSet::new();
+        for _ in 0..8 {
+            let token = generate_access_token();
+            // 256 位十六进制，远高于 128 位下限。
+            assert!(token.len() * 4 >= 128, "{token}");
+            assert!(
+                token.bytes().all(|byte| byte.is_ascii_hexdigit()),
+                "{token}"
+            );
+            assert!(seen.insert(token.clone()), "重复令牌：{token}");
+        }
+    }
+
+    #[test]
+    fn constant_time_eq_compares_bytes_without_length_leak_inside_match() {
+        assert!(constant_time_eq("abc123", "abc123"));
+        assert!(!constant_time_eq("abc123", "abc124"));
+        assert!(!constant_time_eq("abc123", "abc1234"));
+        assert!(request_path_is_authorized("/mcp/abc123", "abc123"));
+        assert!(!request_path_is_authorized("/mcp", "abc123"));
+        assert!(!request_path_is_authorized("/mcp/", "abc123"));
+        assert!(!request_path_is_authorized("/mcp/abc123/x", "abc123"));
+        assert!(!request_path_is_authorized("/other/abc123", "abc123"));
+    }
+
+    #[test]
+    fn loopback_http_client_calls_read_only_mcp_server_with_current_token() {
+        let (storage, path) = storage();
+        let token = generate_access_token();
+        let (address, worker) = spawn_token_server(storage, &token, 1);
+        let response = post_json(
+            address,
+            &format!("/mcp/{token}"),
+            &render_body("loopback 本地原文"),
+        );
+        assert!(response.starts_with("HTTP/1.1 200 OK"), "{response}");
         assert!(response.contains("loopback 本地原文"));
         assert!(!response.contains("events.jsonl"));
-        let storage = server.join().unwrap();
-        drop(storage);
+        drop(worker.join().unwrap());
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn requests_with_missing_or_wrong_token_get_401_without_processing_the_body() {
+        let (storage, path) = storage();
+        let token = generate_access_token();
+        let wrong = format!(
+            "{}{}",
+            &token[..token.len() - 1],
+            if token.ends_with('0') { '1' } else { '0' }
+        );
+        let (address, worker) = spawn_token_server(storage, &token, 3);
+        assert_unauthorized(&post_json(address, "/mcp", &render_body("本地原文")));
+        assert_unauthorized(&post_json(address, "/mcp/", &render_body("本地原文")));
+        assert_unauthorized(&post_json(
+            address,
+            &format!("/mcp/{wrong}"),
+            &render_body("本地原文"),
+        ));
+        drop(worker.join().unwrap());
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn token_rotates_on_restart_and_old_token_is_rejected() {
+        let (storage, path) = storage();
+        // 第一次启动。
+        let first = generate_access_token();
+        let (address, worker) = spawn_token_server(storage, &first, 1);
+        let response = post_json(
+            address,
+            &format!("/mcp/{first}"),
+            &render_body("第一代令牌"),
+        );
+        assert!(response.starts_with("HTTP/1.1 200 OK"), "{response}");
+        let storage = worker.join().unwrap();
+        // 重启：生成第二代令牌，旧令牌随之失效。
+        let second = generate_access_token();
+        assert_ne!(first, second);
+        let (address, worker) = spawn_token_server(storage, &second, 2);
+        assert_unauthorized(&post_json(
+            address,
+            &format!("/mcp/{first}"),
+            &render_body("旧令牌"),
+        ));
+        let response = post_json(address, &format!("/mcp/{second}"), &render_body("新令牌"));
+        assert!(response.starts_with("HTTP/1.1 200 OK"), "{response}");
+        drop(worker.join().unwrap());
         let _ = fs::remove_dir_all(path.parent().unwrap());
     }
 }

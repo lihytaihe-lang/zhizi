@@ -23,5 +23,6 @@ import_tables:
   - agent_pack_poetry
   - agent_pack_cad
   - agent_pack_industry
+  - agent_owner_words
   - pinyin_simp
 ...

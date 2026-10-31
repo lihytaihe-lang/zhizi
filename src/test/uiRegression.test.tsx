@@ -403,3 +403,14 @@ test("context model setting is off and disabled until a verified local bundle is
   assert.match(html, /type="checkbox" disabled=""/);
   assert.match(html, /正在检查本机模型文件/);
 });
+
+test("enabled MCP status shows the full token endpoint plus a trust warning", () => {
+  const html = renderToStaticMarkup(<SettingsPanel
+    providerSettings={{ enabled: false, baseUrl: "", model: "", apiKey: "" }}
+    shortcutSettings={{ shortcut: "control+space" }} settingsMessage=""
+    onProviderChange={() => {}} onShortcutChange={() => {}} onApplyShortcut={() => {}}
+    mcpStatus={{ enabled: true, endpoint: "http://127.0.0.1:39571/mcp/0f1e2d3c4b5a69788796a5b4c3d2e1f0" }}
+  />);
+  assert.match(html, /已开启：http:\/\/127\.0\.0\.1:39571\/mcp\/0f1e2d3c4b5a69788796a5b4c3d2e1f0/);
+  assert.match(html, /地址里含访问令牌，只给你信任的本机程序/);
+});

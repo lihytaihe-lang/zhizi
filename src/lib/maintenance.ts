@@ -24,7 +24,7 @@ export type LearningCleanupItem = {
   suspected: boolean;
   modelAudit?: ModelAuditEvidence;
 };
-export type BackupPreview = { formatVersion: number; createdAtMs: number; lexiconCount: number; projectCount: number; dynamicSourceCount: number; knowledgeSourceCount: number; containsSecrets: false };
+export type BackupPreview = { formatVersion: number; createdAtMs: number; lexiconCount: number; projectCount: number; dynamicSourceCount: number; knowledgeSourceCount: number; knowledgeSourceNewCount: number; knowledgeSourceUpdatedCount: number; knowledgeSourceKeptCount: number; containsSecrets: false };
 export type IntegrityReport = { quickCheck: string; foreignKeyErrors: number; schemaVersion: number; expectedSchemaVersion: number; lexiconCount: number; knowledgeChunkCount: number; recoveryContract: string };
 export type ScaleProbeReport = { personalEntryCount: number; knowledgeChunkCount: number; personalQueryMilliseconds: number; knowledgeQueryMilliseconds: number; passed: boolean };
 export type PersonalBlacklistItem = { id: string; reading: string; text: string };

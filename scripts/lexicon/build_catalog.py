@@ -36,7 +36,7 @@ BASE_DIRNAME = ".build-deps/rime-pinyin-simp"
 SUFFIX = ".dict.yaml"
 
 # Fixed layer table from the lexicon manager spec; deliberately not a config file.
-# The packs are off by default (owner 2026-10-17); change here and in DEFAULT_DISABLED in agent-ime-core/src/lexicon_layers.rs together
+# The professional packs are off by default (owner 2026-10-17); change here and in DEFAULT_DISABLED in agent-ime-core/src/lexicon_layers.rs together
 # (a core test compares them).
 # (id, Chinese name, one-line description, group, default enabled)
 LAYERS = (
@@ -51,6 +51,7 @@ LAYERS = (
     ("agent_thuocl_it", "IT 词汇", "编程与互联网常用词", "extension", True),
     ("agent_thuocl_caijing", "财经词汇", "财经金融常用词", "extension", True),
     ("agent_ai_names", "AI 产品名", "AI 工具与模型的中文名", "extension", True),
+    ("agent_owner_words", "我的常用词", "从你的输入记录里整理出的、词库里没有的词，只在本机", "pack", True),
     ("agent_pack_poetry", "诗词", "古诗词名句与诗人", "pack", False),
     ("agent_pack_cad", "CAD 术语", "设计与绘图软件术语", "pack", False),
     ("agent_pack_industry", "行业术语", "工业与工程领域词条", "pack", False),
@@ -88,20 +89,24 @@ def read_layer(path):
     return rows, words
 
 
-def build_catalog(rime, base, out):
-    """Write both outputs into out; return (catalog dict, membership word count)."""
-    rime, base, out = Path(rime), Path(base), Path(out)
-    if not rime.is_dir():
-        raise ValueError(f"Rime directory does not exist: {rime}")
-    if not base.is_file():
-        raise ValueError(f"base dictionary not found: {base}")
+def scan_layers(rime, base):
+    """Read the fixed layer table against a Rime directory and base dictionary.
+
+    Returns (catalog layers, missing layer ids, core word set, optional
+    {word: layer id set}). A missing file or an empty optional layer is only
+    reported as missing (its words feed nothing); core layers, the base
+    dictionary included, feed the core set. A None base simply skips
+    pinyin_simp, so callers without a base still get the Rime directory's core
+    layers.
+    """
+    rime = Path(rime)
     catalog_layers = []
     missing = []
     core_words = set()
     optional = {}
     for layer_id, name, description, group, default_enabled in LAYERS:
         path = base if layer_id == "pinyin_simp" else rime / (layer_id + SUFFIX)
-        if not path.is_file():
+        if path is None or not path.is_file():
             missing.append(layer_id)
             continue
         rows, words = read_layer(path)
@@ -117,6 +122,17 @@ def build_catalog(rime, base, out):
         else:
             for word in words:
                 optional.setdefault(word, set()).add(layer_id)
+    return catalog_layers, missing, core_words, optional
+
+
+def build_catalog(rime, base, out):
+    """Write both outputs into out; return (catalog dict, membership word count)."""
+    rime, base, out = Path(rime), Path(base), Path(out)
+    if not rime.is_dir():
+        raise ValueError(f"Rime directory does not exist: {rime}")
+    if not base.is_file():
+        raise ValueError(f"base dictionary not found: {base}")
+    catalog_layers, missing, core_words, optional = scan_layers(rime, base)
     membership = {word: layer_ids for word, layer_ids in optional.items()
                   if word not in core_words}
     listed = {layer[0] for layer in LAYERS}

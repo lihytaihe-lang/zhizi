@@ -5,6 +5,10 @@ public final class InputMethodAppDelegate: NSObject, NSApplicationDelegate {
     private var server: IMKServer?
     private var recoveryMarker: RuntimeRecoveryMarker?
     private var runtimeStorageLease: RuntimeStorageLease?
+    /// A windowless background-only app is App Napped and scheduled at low QoS, which puts key handling
+    /// on efficiency cores: live core time per key ran ~10x the same replay. Held for the process lifetime;
+    /// it must still allow idle system sleep (plain .userInitiated kept the Mac awake in 0.3.6).
+    private var keyHandlingActivity: NSObjectProtocol?
 
     public override init() { super.init() }
 
@@ -45,6 +49,8 @@ public final class InputMethodAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
+        keyHandlingActivity = ProcessInfo.processInfo.beginActivity(
+            options: [.userInitiatedAllowingIdleSystemSleep, .latencyCritical], reason: "Input method key handling")
         LegacyPreferences.migrate()
         let primaryApplicationSupport = ProcessInfo.processInfo.environment["AIM_COLD_START_PROBE_DIR"]
             .map { URL(fileURLWithPath: $0, isDirectory: true) }
@@ -174,6 +180,15 @@ public final class InputMethodAppDelegate: NSObject, NSApplicationDelegate {
         }
         let readyLine = "agent-ime-cold-ready-ns=\(readyElapsedNanoseconds)\n"
         FileHandle.standardOutput.write(Data(readyLine.utf8))
+        // The ready measurement above is final. Drain the asynchronous model
+        // load (its ANE compilation can still be in flight) before exiting:
+        // teardown-time destruction of C++ statics racing that compilation is
+        // the suspected cold-probe crash. Bounded, so a stuck load only costs
+        // the timeout.
+        if environment["AIM_COLD_START_CONTEXT_MODEL"] == "1",
+           !ContextRankingModelLoader.shared.waitForPendingLoad(timeout: 5) {
+            FileHandle.standardError.write(Data("agent-ime-cold-model-load-drain-timeout\n".utf8))
+        }
         releaseRuntimeStorage()
         exit(0)
     }
@@ -189,6 +204,12 @@ public final class InputMethodAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     public func applicationWillTerminate(_ notification: Notification) {
+        // Same drain as the cold-start probe: an installed IME quit during a
+        // first model load hits the same exit/ANE-compilation race. Short and
+        // bounded so termination never waits indefinitely on the main thread.
+        if !ContextRankingModelLoader.shared.waitForPendingLoad(timeout: 1) {
+            DiagnosticsRecorder.shared.recordSystem(eventKind: "context-model-load-drain-timeout")
+        }
         recoveryMarker?.stop()
         NSWorkspace.shared.notificationCenter.removeObserver(self)
         // Main-queue delivery is synchronous here: close every controller's

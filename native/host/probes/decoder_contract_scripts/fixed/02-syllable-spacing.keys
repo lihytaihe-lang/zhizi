@@ -1,0 +1,9 @@
+# 完整音节间空格、逐键候选及原样上屏。
+clear
+type n
+type i
+type h
+type a
+type o
+commit_raw
+clear

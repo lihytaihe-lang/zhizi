@@ -2044,3 +2044,22 @@ select:focus {
 @media (max-width: 560px) {
   .home-toggles, .home-stats { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* 词库包下载面板（2026-10-23） */
+.packs-panel { padding: 18px; }
+.packs-list { display: grid; gap: 8px; }
+.packs-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  border: 1px solid #cbd7d0; border-radius: 10px; background: #f9fbfa; padding: 10px 12px;
+}
+.packs-row-info { display: grid; gap: 2px; text-align: left; }
+.packs-row-info strong { font-size: 0.92rem; color: #24342d; }
+.packs-row-info span { font-size: 0.8rem; color: #5f6f68; }
+.packs-row-info small { font-size: 0.75rem; color: #5f6f68; }
+.packs-row-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.packs-installed { font-size: 0.8rem; font-weight: 700; color: #1f684f; }
+.packs-error { margin: 8px 0 0; font-size: 0.82rem; color: #b93a2b; }
+.packs-note { margin: 12px 0 0; font-size: 0.78rem; color: #5f6f68; }
+@media (max-width: 560px) {
+  .packs-row { flex-direction: column; align-items: stretch; }
+}

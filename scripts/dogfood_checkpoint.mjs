@@ -181,6 +181,11 @@ const DIAGNOSTIC_EVENT_KEYS = new Set([
   "processInstanceID",
   "sequence",
 ]);
+// Optional per-key stage timings (queue Q12, 2026-10-31).
+const DIAGNOSTIC_STAGE_KEYS = new Set([
+  "setup", "preceding", "process", "model", "quality",
+  "insert", "marked", "caret", "panel",
+]);
 const DIAGNOSTIC_EVENT_KINDS = new Set([
   "text", "backspace", "left", "right", "space", "enter", "escape",
   "pageUp", "pageDown", "up", "down", "shiftTap", "capsLock",
@@ -992,7 +997,16 @@ export function countAppSwitches(activations) {
 }
 
 function validateDiagnosticEvent(event) {
-  if (!hasExactKeys(event, DIAGNOSTIC_EVENT_KEYS)) throw new Error("diagnostic event schema is invalid");
+  const { stages, ...core } = event;
+  if (!hasExactKeys(core, DIAGNOSTIC_EVENT_KEYS)) throw new Error("diagnostic event schema is invalid");
+  if (stages !== undefined) {
+    if (stages === null || typeof stages !== "object" || Array.isArray(stages) || !hasExactKeys(stages, DIAGNOSTIC_STAGE_KEYS)) {
+      throw new Error("diagnostic stages are invalid");
+    }
+    for (const key of DIAGNOSTIC_STAGE_KEYS) {
+      if (!Number.isSafeInteger(stages[key]) || stages[key] < 0) throw new Error(`diagnostic stage ${key} is invalid`);
+    }
+  }
   parseTimestamp(event.timestamp, "diagnostic event timestamp");
   if (typeof event.eventKind !== "string" || !DIAGNOSTIC_EVENT_KINDS.has(event.eventKind)) {
     throw new Error("diagnostic event kind is invalid");

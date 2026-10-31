@@ -5,7 +5,9 @@
 #define Output "H:\zhizi\output"
 #endif
 #ifndef Version
-#define Version "0.0.0"
+#define VersionHandle FileOpen(SourcePath + "..\..\..\VERSION")
+#define Version Trim(FileRead(VersionHandle))
+#expr FileClose(VersionHandle)
 #endif
 #ifndef Tag
 #define Tag "bdev"
@@ -29,7 +31,11 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
 OutputDir={#Output}
+#ifdef PUBLIC
+OutputBaseFilename=Zhizi-setup-{#Version}-beta
+#else
 OutputBaseFilename=知字-setup-{#Version}
+#endif
 SetupIconFile={#Stage}\zhizi.ico
 UninstallDisplayIcon={app}\{#Tag}\zhizi.ico
 Compression=lzma2
@@ -53,8 +59,10 @@ Source: "{#Stage}\*"; DestDir: "{app}\{#Tag}"; Flags: ignoreversion recursesubdi
 Source: "{#LoaderDir}\zhizi_loader_1.dll"; DestDir: "{app}"; Flags: onlyifdoesntexist
 
 [Icons]
+#ifndef PUBLIC
 Name: "{group}\关闭测试记录与上传"; Filename: "{app}\{#Tag}\zhizi-upload.exe"; Parameters: "--set-consent no"; IconFilename: "{app}\{#Tag}\zhizi.ico"
 Name: "{group}\开启测试记录与上传"; Filename: "{app}\{#Tag}\zhizi-upload.exe"; Parameters: "--set-consent yes"; IconFilename: "{app}\{#Tag}\zhizi.ico"
+#endif
 Name: "{group}\关闭键位纠错"; Filename: "{app}\{#Tag}\zhizi-settings.exe"; Parameters: "--typo-correction off"; IconFilename: "{app}\{#Tag}\zhizi.ico"
 Name: "{group}\开启键位纠错"; Filename: "{app}\{#Tag}\zhizi-settings.exe"; Parameters: "--typo-correction on"; IconFilename: "{app}\{#Tag}\zhizi.ico"
 
@@ -62,12 +70,18 @@ Name: "{group}\开启键位纠错"; Filename: "{app}\{#Tag}\zhizi-settings.exe";
 Type: files; Name: "{app}\current.txt"
 
 [UninstallRun]
+#ifndef PUBLIC
 Filename: "{app}\{#Tag}\zhizi-upload.exe"; Parameters: "--uninstall-schedule"; Flags: runhidden waituntilterminated; RunOnceId: "RemoveUploadSchedule"
+#endif
 Filename: "{sys}\regsvr32.exe"; Parameters: "/u /s ""{app}\zhizi_loader_1.dll"""; Flags: runhidden waituntilterminated; RunOnceId: "UnregisterTsf"
 
 [Code]
 procedure InitializeWizard;
 begin
+#ifdef PUBLIC
+  WizardForm.WelcomeLabel2.Caption := '知字 Windows 公开 beta 版，未签名，Windows 可能提示未知发布者。' + #13#10#13#10 +
+    '支持 Intel/AMD x64。安装后在输入法列表选择“知字拼音”。';
+#else
   WizardForm.WelcomeLabel2.Caption := '知字 Windows 朋友测试版，支持 Intel/AMD x64。' + #13#10#13#10 +
     '这是测试版，已默认开启测试记录：' + #13#10 +
     '  · 输入的拼音、候选词、您选了哪一个' + #13#10 +
@@ -76,6 +90,7 @@ begin
     '这些记录每小时通过 HTTPS 上传到作者的服务器，只用来改进输入法，不会给别人。' + #13#10 +
     '随时可在开始菜单“知字拼音”里点“关闭测试记录与上传”。' + #13#10#13#10 +
     '安装后在输入法列表选择“知字拼音”。卸载会撤销上传任务，但保留您的个人词库。';
+#endif
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
@@ -111,9 +126,38 @@ begin
   end;
 end;
 
-procedure CurStepChanged(CurStep: TSetupStep);
-var Code: Integer; Answer: String; Previous: AnsiString;
+#ifdef PUBLIC
+procedure RevokeTestRecording;
+var Code: Integer; Command: String;
 begin
+  // Run as the original user, just like the friend installer's consent switch. Only consent changes; records stay on disk.
+  Command := '$ErrorActionPreference = ''Stop''; ' +
+    '$data = Join-Path ([Environment]::GetFolderPath(''ApplicationData'')) ''Zhizi''; ' +
+    '[IO.Directory]::CreateDirectory($data) | Out-Null; ' +
+    '[IO.File]::WriteAllText((Join-Path $data ''consent.json''), ' +
+    '(@{granted=$false; notice=''win-v1''} | ConvertTo-Json -Compress))';
+  if not ExecAsOriginalUser(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+    '-NoProfile -NonInteractive -Command "' + Command + '"', '', SW_HIDE, ewWaitUntilTerminated, Code) or (Code <> 0) then
+    RaiseException('Revoking the recording choice failed. Exit code: ' + IntToStr(Code));
+  if not ExecAsOriginalUser(ExpandConstant('{sys}\schtasks.exe'), '/Delete /F /TN "Zhizi Test Upload"',
+    '', SW_HIDE, ewWaitUntilTerminated, Code) or (Code <> 0) then begin
+    // A fresh public install has no task. Match the uploader's uninstall behavior.
+    if not ExecAsOriginalUser(ExpandConstant('{sys}\schtasks.exe'), '/Query /TN "Zhizi Test Upload"',
+      '', SW_HIDE, ewWaitUntilTerminated, Code) or (Code = 0) then
+      RaiseException('Removing the test upload schedule failed.');
+  end;
+end;
+#endif
+
+procedure CurStepChanged(CurStep: TSetupStep);
+var Code: Integer; Previous: AnsiString;
+#ifndef PUBLIC
+    Answer: String;
+#endif
+begin
+#ifdef PUBLIC
+  if CurStep = ssInstall then RevokeTestRecording;
+#endif
   if CurStep = ssPostInstall then begin
     // the release that was current until now stays on disk too: apps still running it load its Model/Rime lazily
     Previous := '';
@@ -125,11 +169,13 @@ begin
       RaiseException('Cannot set application package read access.');
     if not Exec(ExpandConstant('{sys}\regsvr32.exe'), ExpandConstant('/s "{app}\zhizi_loader_1.dll"'), '', SW_HIDE, ewWaitUntilTerminated, Code) or (Code <> 0) then
       RaiseException('TSF registration failed. Exit code: ' + IntToStr(Code));
+#ifndef PUBLIC
     // Recording starts on (the owner tells testers in person); /CONSENT=no installs it switched off.
     Answer := 'yes';
     if ExpandConstant('{param:CONSENT|}') = 'no' then Answer := 'no';
     if not ExecAsOriginalUser(ExpandConstant('{app}\{#Tag}\zhizi-upload.exe'), '--set-consent ' + Answer, '', SW_HIDE, ewWaitUntilTerminated, Code) or (Code <> 0) then
       RaiseException('Saving the recording choice failed. Exit code: ' + IntToStr(Code));
+#endif
     RemoveEarlierReleases(String(Previous));
   end;
 end;

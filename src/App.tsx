@@ -10,6 +10,7 @@ import { SettingsPanel } from "./components/SettingsPanel";
 import { HomePanel } from "./components/HomePanel";
 import { QualityRecordingPanel } from "./components/QualityRecordingPanel";
 import { LexiconManager } from "./components/LexiconManager";
+import { LexiconPacksPanel } from "./components/LexiconPacksPanel";
 import { DataSourceManager } from "./components/DataSourceManager";
 import { KnowledgeManager } from "./components/KnowledgeManager";
 import { MaintenanceManager } from "./components/MaintenanceManager";
@@ -707,7 +708,10 @@ function App() {
               <ResultPanel copyState={copyState} onCopy={() => void handleCopy()} output={output} />
             </>
           ) : view === "lexicon" ? (
-            <LexiconManager />
+            <>
+              <LexiconPacksPanel />
+              <LexiconManager />
+            </>
           ) : view === "sources" ? (
             <DataSourceManager />
           ) : view === "knowledge" ? (

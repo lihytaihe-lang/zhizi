@@ -17,14 +17,15 @@ use sha2::{Digest, Sha256};
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const PRECEDING_WINDOW: usize = 8;
 const REDO_WINDOW_MS: i64 = 5_000;
 const MAX_CANDIDATES: usize = 12;
+const CONSENT_CACHE_TTL: Duration = Duration::from_secs(2);
 
 pub struct RecorderConfig {
-    /// The events.jsonl to append to (its directory is created).
+    /// <data>/Quality/events.jsonl to append to; consent is read from <data>/consent.json.
     pub path: PathBuf,
     pub platform: String,
     pub build: String,
@@ -129,6 +130,8 @@ pub struct Recorder {
     pending: Option<Pending>,
     waiting: Option<Waiting>,
     counter: u64,
+    consent_checked_at: Option<Instant>,
+    consent: bool,
 }
 
 fn now_ms() -> i64 {
@@ -252,7 +255,22 @@ pub(crate) fn sanitized_preceding_text(value: &str) -> String {
 
 impl Recorder {
     pub fn new(config: RecorderConfig, app_id: &str) -> Self {
-        Self { app_hash: hex_sha256(app_id), config, pending: None, waiting: None, counter: 0 }
+        Self {
+            app_hash: hex_sha256(app_id), config, pending: None, waiting: None, counter: 0,
+            consent_checked_at: None, consent: false,
+        }
+    }
+
+    fn check_consent(&mut self, force: bool) -> bool {
+        if force || !self.consent_checked_at.is_some_and(|at| at.elapsed() < CONSENT_CACHE_TTL) {
+            self.consent = self.config.path.parent().and_then(|quality| quality.parent()).is_some_and(consent_granted);
+            self.consent_checked_at = Some(Instant::now());
+        }
+        if !self.consent {
+            self.pending = None;
+            self.waiting = None;
+        }
+        self.consent
     }
 
     pub fn set_app(&mut self, app_id: &str) {
@@ -268,10 +286,14 @@ impl Recorder {
         format!("{}-{}-4{}-a{}-{}", &h[0..8], &h[8..12], &h[13..16], &h[17..20], &h[20..32])
     }
 
-    fn write(&self, event: &Event) {
+    fn write(&mut self, event: &Event) {
         let Ok(mut line) = serde_json::to_vec(event) else { return };
         line.push(b'\n');
         if line.len() > 16 * 1024 {
+            return;
+        }
+        // Disk writes always recheck; only per-key in-memory updates use the short cache.
+        if !self.check_consent(true) {
             return;
         }
         if let Some(parent) = self.config.path.parent() {
@@ -284,6 +306,9 @@ impl Recorder {
 
     /// Writes the record waiting out its redo window.
     pub fn flush(&mut self) {
+        if !self.check_consent(true) {
+            return;
+        }
         if let Some(waiting) = self.waiting.take() {
             self.write(&waiting.event);
         }
@@ -291,6 +316,9 @@ impl Recorder {
 
     /// A late 顺手·知字 result redrew the page: record that page instead.
     pub fn refresh(&mut self, view: &View, model: &ModelObservation) {
+        if !self.check_consent(false) {
+            return;
+        }
         let Some(current) = &mut self.pending else { return };
         let shown: Vec<(String, String)> = view
             .candidates
@@ -320,6 +348,9 @@ impl Recorder {
         model: &ModelObservation,
         secure: bool,
     ) {
+        if !self.check_consent(false) {
+            return;
+        }
         let now = now_ms();
         if secure {
             self.pending = None;
@@ -341,6 +372,9 @@ impl Recorder {
             }
         }
 
+        if !self.consent {
+            return;
+        }
         if !view.preedit.is_empty() {
             let Some((prefix, pinyin)) = split_preedit(&view.preedit) else { return };
             let shown: Vec<(String, String)> = view
@@ -495,6 +529,9 @@ impl Recorder {
             deleted_after_commit: None,
         };
         self.flush();
+        if !self.consent {
+            return;
+        }
         if outcome == "abandoned" || selected_text.is_empty() {
             self.write(&event);
         } else {
@@ -555,21 +592,132 @@ mod tests {
         }
     }
 
+    fn recorder_for_test(name: &str) -> (PathBuf, Recorder) {
+        let dir = std::env::temp_dir().join(format!("zhizi-quality-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let recorder = Recorder::new(RecorderConfig {
+            path: dir.join("Quality/events.jsonl"),
+            platform: "test".into(), build: "0".into(), device: "0".into(),
+        }, "app");
+        (dir, recorder)
+    }
+
+    #[test]
+    fn recorder_does_not_buffer_without_consent() {
+        let (dir, mut recorder) = recorder_for_test("no-consent");
+        recorder.observe(&Key::Text("n".into()), &page("ni", "", &["你"]), false, "", &ModelObservation::default(), false);
+        assert!(recorder.pending.is_none());
+        recorder.flush();
+        assert!(!dir.join("Quality/events.jsonl").exists());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn revocation_discards_waiting_and_pending_records_before_flush() {
+        let model = ModelObservation::default();
+        for committed in [false, true] {
+            let (dir, mut recorder) = recorder_for_test(if committed { "revoke-waiting" } else { "revoke-pending" });
+            set_consent(&dir, true).unwrap();
+            recorder.observe(&Key::Text("n".into()), &page("ni", "", &["你"]), false, "", &model, false);
+            if committed {
+                recorder.observe(&Key::Space, &page("", "你", &[]), true, "", &model, false);
+                assert!(recorder.waiting.is_some());
+            } else {
+                assert!(recorder.pending.is_some());
+            }
+            set_consent(&dir, false).unwrap();
+            recorder.flush();
+            assert!(!dir.join("Quality/events.jsonl").exists());
+            assert!(recorder.pending.is_none());
+            assert!(recorder.waiting.is_none());
+            set_consent(&dir, true).unwrap();
+            drop(recorder);
+            assert!(!dir.join("Quality/events.jsonl").exists(), "revoked buffers must not return after re-enabling");
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+
+    #[test]
+    fn revocation_blocks_abandoned_records_and_drop_flush() {
+        let model = ModelObservation::default();
+        for abandoned in [false, true] {
+            let (dir, mut recorder) = recorder_for_test(if abandoned { "revoke-write" } else { "revoke-drop" });
+            set_consent(&dir, true).unwrap();
+            recorder.observe(&Key::Text("n".into()), &page("ni", "", &["你"]), false, "", &model, false);
+            if !abandoned {
+                recorder.observe(&Key::Space, &page("", "你", &[]), true, "", &model, false);
+            }
+            set_consent(&dir, false).unwrap();
+            if abandoned {
+                recorder.observe(&Key::Escape, &View::default(), false, "", &model, false);
+            }
+            drop(recorder);
+            assert!(!dir.join("Quality/events.jsonl").exists());
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+
+    #[test]
+    fn expired_consent_cache_stops_observe_and_refresh() {
+        let model = ModelObservation::default();
+        let view = page("ni", "", &["你"]);
+        for refresh in [false, true] {
+            let (dir, mut recorder) = recorder_for_test(if refresh { "cache-refresh" } else { "cache-observe" });
+            set_consent(&dir, true).unwrap();
+            recorder.observe(&Key::Text("n".into()), &view, false, "", &model, false);
+            let checked_at = recorder.consent_checked_at;
+            recorder.observe(&Key::Text("i".into()), &view, false, "", &model, false);
+            assert_eq!(recorder.consent_checked_at, checked_at, "per-key updates reuse the short cache");
+            set_consent(&dir, false).unwrap();
+            recorder.consent_checked_at = Some(Instant::now() - CONSENT_CACHE_TTL);
+            if refresh {
+                recorder.refresh(&view, &model);
+            } else {
+                recorder.observe(&Key::Text("i".into()), &view, false, "", &model, false);
+            }
+            assert!(recorder.pending.is_none());
+            assert!(recorder.waiting.is_none());
+            assert!(!dir.join("Quality/events.jsonl").exists());
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+
+    #[test]
+    fn invalid_consent_stops_append_and_preserves_existing_records() {
+        let (dir, mut recorder) = recorder_for_test("invalid-consent");
+        set_consent(&dir, true).unwrap();
+        let model = ModelObservation::default();
+        for _ in 0..2 {
+            recorder.observe(&Key::Text("n".into()), &page("ni", "", &["你"]), false, "", &model, false);
+            recorder.observe(&Key::Space, &page("", "你", &[]), true, "", &model, false);
+            recorder.flush();
+        }
+        let path = dir.join("Quality/events.jsonl");
+        let before = std::fs::read(&path).unwrap();
+        assert_eq!(before.iter().filter(|&&b| b == b'\n').count(), 2);
+        recorder.observe(&Key::Text("n".into()), &page("ni", "", &["你"]), false, "", &model, false);
+        recorder.observe(&Key::Space, &page("", "你", &[]), true, "", &model, false);
+        std::fs::write(dir.join("consent.json"), b"invalid").unwrap();
+        recorder.flush();
+        drop(recorder);
+        assert_eq!(std::fs::read(path).unwrap(), before);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
     #[test]
     fn picks_in_parts_record_the_whole_reading_and_what_was_put_together() {
-        let path = std::env::temp_dir().join(format!("zhizi-quality-{}.jsonl", std::process::id()));
-        let _ = std::fs::remove_file(&path);
-        let config = RecorderConfig { path: path.clone(), platform: "test".into(), build: "0".into(), device: "0".into() };
+        let (dir, mut recorder) = recorder_for_test("segments");
+        set_consent(&dir, true).unwrap();
         let model = ModelObservation::default();
         {
-            let mut recorder = Recorder::new(config, "app");
             let key = Key::Text("e".into());
             recorder.observe(&key, &page("hui chang yi xie", "", &["会场一些", "会场", "会长"]), false, "", &model, false);
             recorder.observe(&Key::Text("3".into()), &page("会长yi xie", "", &["一些", "依稀"]), true, "", &model, false);
             recorder.observe(&Key::Space, &page("", "会长一些", &[]), true, "", &model, false);
         }
-        let line = std::fs::read_to_string(&path).unwrap();
-        let _ = std::fs::remove_file(&path);
+        drop(recorder);
+        let line = std::fs::read_to_string(dir.join("Quality/events.jsonl")).unwrap();
+        let _ = std::fs::remove_dir_all(dir);
         let event: serde_json::Value = serde_json::from_str(line.trim()).unwrap();
         assert_eq!(event["pinyin"], "huichangyixie");
         assert_eq!(event["selectedText"], "会长一些");

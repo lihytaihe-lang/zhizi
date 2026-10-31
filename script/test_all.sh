@@ -109,7 +109,14 @@ gate_add fuzzy_exact_priority_replay deps,core_lib,bundle '' '"$REG_SCRIPT_DIR/t
 gate_add offcorpus_probe deps,core_lib,bundle '' '"$REG_SCRIPT_DIR/test_offcorpus_probe.sh"'
 gate_add q3b1_garble_replay deps,core_lib,bundle '' '"$REG_SCRIPT_DIR/test_q3b1_garble_replay.sh"'
 gate_add q3b2_heavy_garble_replay deps,core_lib,bundle '' '"$REG_SCRIPT_DIR/test_q3b2_heavy_garble_replay.sh"'
+# partial_coverage_top1_replay copies the owner's LIVE Rime user dir
+# (AGENT_IME_OWNER_RIME_DIR, default ~/Library/Application Support/AgentInputMethod/Rime)
+# into the replay, so its result is only meaningful on the owner's machine with
+# the owner's current lexicon; it is kept as-is (no threshold change). The
+# closed variant below builds the declared synthetic state in a throwaway user
+# dir and asserts the same corpus's top1 without reading any real user data.
 gate_add partial_coverage_top1_replay deps,core_lib,bundle '' '"$REG_SCRIPT_DIR/test_partial_coverage_top1_replay.sh"'
+gate_add partial_coverage_closed_replay deps,core_lib,bundle '' '"$REG_SCRIPT_DIR/test_partial_coverage_closed.sh"'
 gate_add q1_pointwise_invariance deps,core_lib,bundle '' '"$REG_SCRIPT_DIR/test_q1_pointwise_invariance.sh"'
 gate_add mixed_abbrev_replay deps,core_lib,bundle '' '"$REG_SCRIPT_DIR/test_mixed_abbrev_replay.sh"'
 gate_add idiom_replay deps,core_lib,bundle '' '"$REG_SCRIPT_DIR/test_idiom_replay.sh"'

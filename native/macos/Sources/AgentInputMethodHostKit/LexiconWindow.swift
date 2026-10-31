@@ -44,9 +44,13 @@ struct LexiconCatalog: Decodable {
         return Bundle.main.resourceURL?.appendingPathComponent("Lexicon/lexicon_catalog.json")
     }
 
-    func overview(_ choices: LexiconChoices) -> String {
-        let active = layers.filter { choices.isEnabled($0) }
-        return "已启用 \(active.count) 个词库 · 共 \(Self.countString(active.reduce(0) { $0 + $1.rows })) 条"
+    func overview(_ choices: LexiconChoices, available: (Layer) -> Bool = { _ in true }) -> String {
+        Self.overview(layers, choices, available: available)
+    }
+
+    static func overview(_ layers: [Layer], _ choices: LexiconChoices, available: (Layer) -> Bool = { _ in true }) -> String {
+        let active = layers.filter { choices.isEnabled($0) && available($0) }
+        return "已启用 \(active.count) 个词库 · 共 \(countString(active.reduce(0) { $0 + $1.rows })) 条"
     }
 
     static func countString(_ value: Int) -> String {
@@ -164,7 +168,10 @@ public final class LexiconWindowController: NSObject, NSWindowDelegate {
     public static let shared = LexiconWindowController()
     private let catalogURL: URL?
     private let store: LexiconChoicesStore
+    private let inventory: LexiconPackInventory
     private var catalog: LexiconCatalog?
+    /// What the list shows: the catalog layers plus the downloaded packs it does not list, merged by id.
+    private var rows: [LexiconCatalog.Layer] = []
     private var choices = LexiconChoices()
     private var window: NSWindow?
     private var saveAlert: NSAlert?
@@ -172,9 +179,12 @@ public final class LexiconWindowController: NSObject, NSWindowDelegate {
     private let overview = NSTextField(labelWithString: "")
     private let stack = LexiconListView()
 
-    init(catalogURL: URL? = nil, userDirectory: URL? = nil) {
+    /// `bundledRime` is the Rime directory inside the app; without it every layer counts as present (tests).
+    init(catalogURL: URL? = nil, userDirectory: URL? = nil, bundledRime: URL? = nil) {
         self.catalogURL = catalogURL ?? LexiconCatalog.defaultURL()
         store = LexiconChoicesStore(root: userDirectory)
+        let bundled = bundledRime ?? (catalogURL == nil ? Bundle.main.resourceURL?.appendingPathComponent("Rime") : nil)
+        inventory = LexiconPackInventory(bundledRime: bundled, userRime: store.root)
         super.init()
     }
 
@@ -189,6 +199,11 @@ public final class LexiconWindowController: NSObject, NSWindowDelegate {
     }
 
     public func close() { window?.close() }
+
+    /// Coming back from the management console after a download: show what is installed now.
+    public func windowDidBecomeKey(_ notification: Notification) {
+        if catalog != nil { reload() }
+    }
 
     public func windowWillClose(_ notification: Notification) {
         if let previousPolicy { NSApp.setActivationPolicy(previousPolicy) }
@@ -241,8 +256,22 @@ public final class LexiconWindowController: NSObject, NSWindowDelegate {
             overview.stringValue = "无法读取词库目录，请检查安装资源。"
             return
         }
-        overview.stringValue = catalog.overview(choices)
-        if catalog.layers.isEmpty {
+        let listed = Set(catalog.layers.map(\.id))
+        // Downloaded packs the catalog does not carry (the public export leaves the empty-shell professional layers
+        // out): the membership table supplies the row count. The locally generated owner layer has a known name
+        // and is on by default; other packs fall back to their id.
+        rows = catalog.layers + inventory.downloadedPacks().compactMap { pack in
+            guard !listed.contains(pack.id) else { return nil }
+            let ownerWords = pack.id == "agent_owner_words"
+            return LexiconCatalog.Layer(
+                id: pack.id, name: ownerWords ? "我的常用词" : pack.id,
+                description: ownerWords ? "从你的输入记录里整理出的、词库里没有的词，只在本机" : "",
+                group: .pack, defaultEnabled: ownerWords, rows: pack.rows
+            )
+        }
+        enableFirstAppearances()
+        overview.stringValue = overviewText()
+        if rows.isEmpty {
             stack.addArrangedSubview(NSTextField(labelWithString: "暂无可显示的词库。"))
         }
         for group in LexiconCatalog.Group.allCases {
@@ -250,18 +279,35 @@ public final class LexiconWindowController: NSObject, NSWindowDelegate {
             heading.font = .systemFont(ofSize: 12, weight: .semibold)
             heading.textColor = .secondaryLabelColor
             stack.addArrangedSubview(heading)
-            for layer in catalog.layers where layer.group == group { addRow(layer) }
+            for layer in rows where layer.group == group { addRow(layer) }
         }
         window?.contentView?.layoutSubtreeIfNeeded()
     }
 
+    /// Downloading a pack that is off by default means the user wants to use it: the first time it shows up here —
+    /// its id sits in neither choice set — the switch is written on. A manual choice made earlier wins. The window
+    /// is where a download first becomes visible, so the rule lives here once; the core keeps rereading the file.
+    private func enableFirstAppearances() {
+        for layer in rows
+        where inventory.state(of: layer) == .installed && !layer.defaultEnabled
+            && !choices.disabled.contains(layer.id) && !choices.enabled.contains(layer.id) {
+            choices = (try? store.set(layer.id, enabled: true, defaultEnabled: layer.defaultEnabled)) ?? choices
+        }
+    }
+
+    private func overviewText() -> String {
+        LexiconCatalog.overview(rows, choices) { inventory.state(of: $0) != .notInstalled }
+    }
+
     private func addRow(_ layer: LexiconCatalog.Layer) {
+        let state = inventory.state(of: layer)
         let name = NSTextField(labelWithString: layer.name)
         name.font = .systemFont(ofSize: 13, weight: .semibold)
         let detail = NSTextField(wrappingLabelWithString: layer.description)
         detail.font = .systemFont(ofSize: 12)
         detail.textColor = .secondaryLabelColor
-        let count = NSTextField(labelWithString: "\(LexiconCatalog.countString(layer.rows)) 条")
+        let count = NSTextField(labelWithString: state == .notInstalled ? "未下载" : state == .installed
+            ? "已安装 · \(LexiconCatalog.countString(layer.rows)) 条" : "\(LexiconCatalog.countString(layer.rows)) 条")
         count.font = .systemFont(ofSize: 11)
         count.textColor = .secondaryLabelColor
         let labels = NSStackView(views: [name, detail, count])
@@ -274,6 +320,13 @@ public final class LexiconWindowController: NSObject, NSWindowDelegate {
             status.font = .systemFont(ofSize: 11)
             status.textColor = .secondaryLabelColor
             control = status
+        } else if state == .notInstalled {
+            let button = NSButton(title: "获取…", target: self, action: #selector(openManager(_:)))
+            button.bezelStyle = .rounded
+            button.controlSize = .small
+            button.identifier = NSUserInterfaceItemIdentifier("get-" + layer.id)
+            button.setAccessibilityLabel("获取" + layer.name)
+            control = button
         } else {
             let toggle = NSSwitch()
             toggle.identifier = NSUserInterfaceItemIdentifier(layer.id)
@@ -302,11 +355,11 @@ public final class LexiconWindowController: NSObject, NSWindowDelegate {
     }
 
     @objc private func toggleLayer(_ sender: NSSwitch) {
-        guard let layer = catalog?.layers.first(where: { $0.id == sender.identifier?.rawValue }) else { return }
+        guard let layer = rows.first(where: { $0.id == sender.identifier?.rawValue }) else { return }
         let previous = choices.isEnabled(layer)
         do {
             choices = try store.set(layer.id, enabled: sender.state == .on, defaultEnabled: layer.defaultEnabled)
-            overview.stringValue = catalog?.overview(choices) ?? ""
+            overview.stringValue = overviewText()
         } catch {
             sender.state = previous ? .on : .off
             let alert = NSAlert()
@@ -315,6 +368,26 @@ public final class LexiconWindowController: NSObject, NSWindowDelegate {
                 saveAlert = alert
                 alert.beginSheetModal(for: window) { [weak self] _ in self?.saveAlert = nil }
             }
+        }
+    }
+
+    static let managerBundleIdentifier = "com.agentinputlayer.desktop"
+
+    /// The input method never downloads: the management console fetches the dictionaries into the user directory.
+    @objc private func openManager(_ sender: Any?) {
+        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: Self.managerBundleIdentifier) {
+            NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+            return
+        }
+        let alert = NSAlert()
+        alert.messageText = "找不到知字管理台"
+        alert.informativeText = "专业词库需要在知字管理台里下载。请先把「知字」应用放进「应用程序」文件夹，打开后进入「词库」页。"
+        alert.addButton(withTitle: "好")
+        if let window {
+            saveAlert = alert
+            alert.beginSheetModal(for: window) { [weak self] _ in self?.saveAlert = nil }
+        } else {
+            alert.runModal()
         }
     }
 

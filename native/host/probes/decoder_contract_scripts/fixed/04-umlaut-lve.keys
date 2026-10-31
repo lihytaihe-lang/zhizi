@@ -1,0 +1,9 @@
+# lve 的显示变换、退格和清空。
+clear
+type l
+type v
+type e
+backspace
+type e
+commit_raw
+clear

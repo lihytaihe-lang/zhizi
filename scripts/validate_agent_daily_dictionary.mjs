@@ -21,8 +21,8 @@ const assets = Object.freeze({
   modern: ["native/resources/Rime/agent_modern.dict.yaml", "d1e6a40abca03593a85c38da0e5da9cf8d04404fa1ccb0039027268bd7b54682"],
   general: ["native/resources/Rime/agent_general.dict.yaml", "0d41f62fae2a717da06aeb5fefd77d569fce6ae215c51ea178659e6a63fc5cec"],
   generalProvenance: ["quality/corpus/agent-general-provenance.tsv", "7d540c4fc7ccf32934149bfbea63fdc505b113b2cad08784d55874d3d3faff17"],
-  newwords: ["native/resources/Rime/agent_newwords.dict.yaml", "bef0359c6a89f0675712a1b50c11603f60f46a35cf9a8c218f2419d6c7d76870"],
-  newwordsProvenance: ["quality/corpus/agent-newwords-provenance.tsv", "6a94bdb6996dcb6508cabb870bd623be42c487aa90055f11747772b713eea18d"],
+  newwords: ["native/resources/Rime/agent_newwords.dict.yaml", "4dcde77fae2ebfd06434071f281baf04f3c580a491bb7233813978202e71bef7"],
+  newwordsProvenance: ["quality/corpus/agent-newwords-provenance.tsv", "44203c28579d601924eda4ab7daaa4240a9f3bb9f8ba4cdd9df2f88b8dfbb0b3"],
   spoken: ["native/resources/Rime/agent_spoken.dict.yaml", "1294b968bfb0e6e2946991c349ea1f62dc3afa388bc984963216e2a26c2f4293"],
   spokenProvenance: ["quality/corpus/agent-spoken-provenance.tsv", "8651403810bea8474e955c7d1e9e2856f1bd35a834b710b7e3c473cf710aedfb"],
   aiTerms: ["native/resources/Rime/agent_ai_terms.dict.yaml", "2e4e058bc42a1a83f4fedf1c9b2a31ed93d63f1c7558f63dcdef01caed2ec4b3"],
@@ -34,10 +34,11 @@ const assets = Object.freeze({
   packCad: ["native/resources/Rime/agent_pack_cad.dict.yaml", "1348f3b39281afd125c7e43fbcff1488d2e02b2ad51ea78f18314987325a5080"],
   packCadProvenance: ["quality/corpus/agent-pack-cad-provenance.tsv", "cd4540eec556def58428274133c349781f79ddf6635edaf40497882db8742040"],
   packIndustry: ["native/resources/Rime/agent_pack_industry.dict.yaml", "b1e4849e41b67addf8a706a41fe21ef2ef811c34c1efffcd7cca1d6df3b522cf"],
+  ownerWordsShell: ["native/resources/Rime/agent_owner_words.dict.yaml", "21ac7737984c8947f7dd1b3af3693cbdc7a7d5bbe260a253cfc616f48acaf75c"],
   packIndustryProvenance: ["quality/corpus/agent-pack-industry-provenance.tsv", "881c28fe0a8c7f73f50a4035f34375e7255c2a990fffc78796b5f17725c68823"],
   packTerms: ["native/resources/Rime/agent_pack_terms.dict.yaml", "996b22ce36ed3ddc4c97763d52bcd77d07bf57531d27b8177407b806c949a68d"],
   packTermsProvenance: ["quality/corpus/agent-pack-terms-provenance.tsv", "2385d7e53d6bfdfeb8e3651f04f17e20153641c81a5123e96e32cf92811e4077"],
-  aggregate: ["native/resources/Rime/agent_pinyin.dict.yaml", "ecbb7bfb6e0e84039e68f78c5f628e19491e2059b9df4c98303536ccef6f81ee"],
+  aggregate: ["native/resources/Rime/agent_pinyin.dict.yaml", "f2b5a8904ee6fb51c7eb243447b0f51e9a70f77953a6b1d5e311a0e1d97adbf5"],
   commonFixProvenance: ["quality/corpus/agent-common-fix-provenance.tsv", "cac917eb4b33155877e016d3a1a6113b9393e3342c2b2fcc13abe6d2f67d50cf"],
   provenance: ["quality/corpus/agent-daily-provenance.tsv", "1b32e5dde5d7b9912e3bcd7a99fb55a4d380de4f0c37e872c53b9ad051121d1f"],
   englishProvenance: ["quality/corpus/agent-english-provenance.tsv", "5072ef56b73f0d8273df92fc7b5db888747b3707ee84774620b65064f7517583"],
@@ -261,7 +262,7 @@ assert(JSON.stringify(mixedLanguage.cases.slice(0, 6).map((item) => item.allowed
 const importOrder = [...loaded.aggregate.matchAll(/^  - (.+)$/gmu)].map((match) => match[1]);
 assert(JSON.stringify(importOrder) === JSON.stringify([
   "agent_common_fix", "agent_daily", "agent_idioms", "agent_thuocl_it", "agent_thuocl_caijing", "agent_modern",
-  "agent_general", "agent_newwords", "agent_spoken", "agent_ai_names", "agent_pack_poetry", "agent_pack_cad", "agent_pack_industry", "pinyin_simp",
+  "agent_general", "agent_newwords", "agent_spoken", "agent_ai_names", "agent_pack_poetry", "agent_pack_cad", "agent_pack_industry", "agent_owner_words", "pinyin_simp",
 ]),
   "agent_pinyin import order changed");
 assert(!loaded.aggregate.includes("agent_english") && !loaded.aggregate.includes("agent_project_terms")
@@ -297,7 +298,7 @@ for (const [, reading, weight] of precedingRows) {
 }
 const syllables = new Set(upstreamRows.flatMap(([, reading]) => reading.toLowerCase().split(" ")));
 assert(syllables.size === 415, "pinned schema syllable inventory changed");
-for (const [name, expectedCount] of [["general", 26947], ["newwords", 14633], ["spoken", 10853]]) {
+for (const [name, expectedCount] of [["general", 26947], ["newwords", 14684], ["spoken", 10853]]) {
   const rows = parseDictionaryRows(loaded[name]);
   const provenance = loaded[`${name}Provenance`].trimEnd().split(/\r?\n/u).slice(1).map((line) => line.split("\t"));
   assert(rows.length === expectedCount && provenance.length === rows.length, `${name} row count changed`);
@@ -329,7 +330,10 @@ for (const [name, expectedCount] of [["general", 26947], ["newwords", 14633], ["
       assert(fields.length === 7 && fields[3] === "strong" && fields.slice(4, 6).every((v) => /^\d+$/u.test(v))
         && fields[6] === "CLI-generated", `${name} unregistered provenance: ${text}`);
     } else {
-      assert(fields.length === 9 && fields[7] === "deepseek-flash generation, 3-pass review" && fields[8] === "project-authored"
+      // newwords also carries words the owner's records show missing (scripts/lexicon/append_owner_words.py)
+      const newwordsSources = ["deepseek-flash generation, 3-pass review",
+        "owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked"];
+      assert(fields.length === 9 && newwordsSources.includes(fields[7]) && fields[8] === "project-authored"
         && fields.slice(5, 7).every((v) => /^\d+$/u.test(v)), `${name} unregistered provenance: ${text}`);
     }
     shippedTexts.add(text);

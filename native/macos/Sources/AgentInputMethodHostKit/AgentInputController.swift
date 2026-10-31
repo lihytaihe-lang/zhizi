@@ -4,6 +4,11 @@ import AgentIMECoreBridge
 
 @objc(AgentInputController)
 public final class AgentInputController: IMKInputController, @unchecked Sendable {
+    @MainActor private static var processLearningController: LearningModeController?
+    private static let learningModeDidChange = Notification.Name("agentLearningModeDidChange")
+    private let learningSessionID = UUID()
+    private var learningController: LearningModeController?
+    private var personalModelDirectory: URL?
     private static let fuzzyLock = NSLock()
     private static let fuzzyLabels = [
         "模糊音 zh/z", "模糊音 ch/c", "模糊音 sh/s", "模糊音 n/l",
@@ -40,7 +45,13 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
     private var performanceSharedDirectory: URL?
     private var performanceUserDirectory: URL?
     private var lastPerformanceSample: InputControllerPerformanceSample?
+    /// Filled by `apply` for the key being handled.
+    private var applyStages = KeyStageTimings()
     private var lastFuzzyApply: (mask: UInt32, status: Int32)?
+    /// Installed professional packs as the engine of this controller's session last saw them (see reloadPacksAtSafePoint).
+    private var packInventory: LexiconPackInventory?
+    private var appliedPackFingerprint: String?
+    private var failedPackFingerprint: String?
     private var resourcesClosed = false
     private var didCallSuperClose = false
 
@@ -83,6 +94,7 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
         currentClient = inputClient as? (any IMKTextInput & NSObjectProtocol)
         let sharedDirectory = Bundle.main.resourceURL?.appendingPathComponent("Rime")
         let storage = InputMethodRuntimeStorage.current()
+        personalModelDirectory = storage?.rootDirectory.appendingPathComponent("PersonalModel", isDirectory: true)
         if let sharedDirectory, let storage {
             core = CoreSession(
                 sharedDirectory: sharedDirectory,
@@ -93,6 +105,7 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
             _ = core?.setDirectEnglish(latestDirectEnglish)
             _ = core?.setTypoCorrectionEnabled(UserDefaults.standard.bool(forKey: "typoCorrectionEnabled"))
             applySavedContextProfile()
+            notePackInventory(userDirectory: storage.userDirectory)
         }
         if let storage {
             let profileReader = ProjectRuntimeConfigurationReader(root: storage.rootDirectory)
@@ -167,6 +180,29 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
                 self?.closeForProcessTermination()
             },
         ]
+        if let sharedDirectory, let storage {
+            MainActor.assumeIsolated {
+                if Self.processLearningController == nil {
+                    let learning = LearningModeController(
+                        defaults: .standard,
+                        libraryExists: { LearningMigrationProcess.libraryExists(userDirectory: storage.userDirectory) },
+                        migrate: { completion in
+                            LearningMigrationProcess.start(
+                                executable: Bundle.main.executableURL,
+                                sharedDirectory: sharedDirectory, userDirectory: storage.userDirectory,
+                                completion: completion
+                            )
+                        },
+                        diagnose: { DiagnosticsRecorder.shared.recordSystem(eventKind: $0) }
+                    )
+                    learning.onChange = {
+                        NotificationCenter.default.post(name: Self.learningModeDidChange, object: nil)
+                    }
+                    Self.processLearningController = learning
+                }
+                if let learning = Self.processLearningController { bindLearningController(learning) }
+            }
+        }
     }
 
     @_spi(PerformanceHarness)
@@ -193,6 +229,7 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
         performanceMode = true
         performanceSharedDirectory = sharedDirectory
         performanceUserDirectory = userDirectory
+        personalModelDirectory = PersonalContextModelSelection.personalDirectory(userDirectory: userDirectory)
         callbackExecutor.sync {
             MainActor.assumeIsolated {
                 candidatePanel = CandidatePanelController(
@@ -235,6 +272,9 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
             return true
         }
         let wasComposing = hasActiveComposition
+        var stages = KeyStageTimings()
+        let precedingStarted = DispatchTime.now().uptimeNanoseconds
+        stages.setup = precedingStarted &- started
         if security != .nonSecure {
             activePrecedingText = nil
             recentCommitContext.clear()
@@ -259,6 +299,7 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
             return handled
         }
         let candidatePipelineStarted = DispatchTime.now().uptimeNanoseconds
+        stages.preceding = candidatePipelineStarted &- precedingStarted
         let result = core.process(
             kind: mapped.kind,
             text: mapped.text,
@@ -267,6 +308,9 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
             deliveryID: mapped.deliveryID
         )
         guard let result else { return false }
+        let qualityStarted = DispatchTime.now().uptimeNanoseconds
+        stages.process = qualityStarted &- candidatePipelineStarted
+        stages.model = core.lastModelNanoseconds
         hasActiveComposition = !result.markedText.isEmpty
         latestView = hasActiveComposition ? result : nil
         if security == .nonSecure,
@@ -289,6 +333,7 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
             activePrecedingText = nil
         }
         let candidatePipelineElapsed = DispatchTime.now().uptimeNanoseconds &- candidatePipelineStarted
+        stages.quality = DispatchTime.now().uptimeNanoseconds &- qualityStarted
         let previousDirectEnglish = latestDirectEnglish
         latestDirectEnglish = result.directEnglish
         if mapped.kind == .shiftTap {
@@ -299,6 +344,10 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
         }
         let insertTextElapsed = apply(result, to: client)
         let elapsed = DispatchTime.now().uptimeNanoseconds &- started
+        stages.insert = applyStages.insert
+        stages.marked = applyStages.marked
+        stages.caret = applyStages.caret
+        stages.panel = applyStages.panel
         if performanceMode {
             lastPerformanceSample = InputControllerPerformanceSample(
                 result: result,
@@ -311,7 +360,8 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
                 eventKind: String(describing: mapped.kind),
                 result: result,
                 totalElapsedNanoseconds: elapsed,
-                clientIdentifier: appIdentifier
+                clientIdentifier: appIdentifier,
+                stages: stages
             )
         }
         applyPendingAppSwitchIfSafe()
@@ -403,6 +453,7 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
         qualityRecorder?.refreshConfiguration()
         refreshProjectConfigurationAtSafePoint()
         refreshSnapshotAtSafePoint()
+        reloadPacksAtSafePoint()
         DiagnosticsRecorder.shared.recordTransition(eventKind: "app-activate", clientIdentifier: appIdentifier)
     }
 
@@ -429,6 +480,7 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
         _ = core?.setDirectEnglish(latestDirectEnglish)
         _ = core?.setTypoCorrectionEnabled(UserDefaults.standard.bool(forKey: "typoCorrectionEnabled"))
         applySavedContextProfile()
+        if performanceSharedDirectory == nil { notePackInventory(userDirectory: userDirectory) }
         _ = core?.setCandidateContext(
             activeProject: projectConfiguration.activeProjectDomain,
             activePacks: projectConfiguration.activeProfessionalPacks,
@@ -440,6 +492,35 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
             _ = core?.applyLexiconSnapshot(currentPreparedLexicon)
         }
         applySavedFuzzyConfigurationIfNeeded()
+        registerLearningSession()
+    }
+
+    @MainActor
+    func bindLearningController(_ learning: LearningModeController) {
+        learningController?.unregister(id: learningSessionID)
+        learningController = learning
+        runtimeObservers.append(NotificationCenter.default.addObserver(
+            forName: Self.learningModeDidChange, object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.callbackExecutor.sync { self?.refreshStatusItemMenu() }
+        })
+        registerLearningSession()
+    }
+
+    private func registerLearningSession() {
+        MainActor.assumeIsolated {
+            guard let learningController else { return }
+            let registered = learningController.register(
+                id: learningSessionID,
+                isComposing: { [weak self] in self?.hasActiveComposition ?? false },
+                apply: { [weak self] mode in self?.core?.setLearningMode(mode) ?? -1 },
+                applyZhixuWhole: { [weak self] enabled in self?.core?.setZhixuWholeEnabled(enabled) ?? -1 }
+            )
+            if !registered {
+                core?.close()
+                core = nil
+            }
+        }
     }
 
     private var modeDefaultsKey: String { "directEnglishMode.\(appIdentifier)" }
@@ -614,6 +695,8 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
         for observer in runtimeObservers { NotificationCenter.default.removeObserver(observer) }
         runtimeObservers.removeAll()
         MainActor.assumeIsolated {
+            learningController?.unregister(id: learningSessionID)
+            learningController = nil
             candidatePanel?.hide()
             candidatePanel = nil
             if !performanceMode {
@@ -684,6 +767,38 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
         let lexicon = NSMenuItem(title: "词库…", action: #selector(openLexiconWindow(_:)), keyEquivalent: "")
         lexicon.target = self
         menu.addItem(lexicon)
+        let (selected, learningStatus, wholeEnabled) = MainActor.assumeIsolated {
+            (learningController?.mode ?? .rime, learningController?.statusText, learningController?.wholeEnabled ?? false)
+        }
+        let learning = NSMenuItem(title: "学习方式：\(selected.title)", action: nil, keyEquivalent: "")
+        let choices = NSMenu(title: "学习方式")
+        for mode in [LearningMode.zhixu, .rime] {
+            let item = NSMenuItem(title: mode.title, action: #selector(selectLearningMode(_:)), keyEquivalent: "")
+            item.target = self
+            item.tag = Int(mode.rawValue)
+            item.state = selected == mode ? .on : .off
+            choices.addItem(item)
+        }
+        if let status = learningStatus {
+            let item = NSMenuItem(title: status, action: nil, keyEquivalent: "")
+            item.isEnabled = false
+            choices.addItem(.separator())
+            choices.addItem(item)
+        }
+        learning.submenu = choices
+        menu.addItem(learning)
+        let whole = NSMenuItem(title: "全拼由知序拼（试用）", action: #selector(toggleZhixuWhole(_:)), keyEquivalent: "")
+        whole.target = self
+        whole.state = wholeEnabled ? .on : .off
+        whole.isEnabled = learningController != nil
+        whole.toolTip = learningStatus
+        menu.addItem(whole)
+        let personalModel = Self.makePersonalModelMenuItem(directory: personalModelDirectory, defaults: .standard)
+        if personalModel.isEnabled {
+            personalModel.action = #selector(togglePersonalModel(_:))
+            personalModel.target = self
+        }
+        menu.addItem(personalModel)
         menu.addItem(.separator())
         let preview = NSMenuItem(title: "诊断导出预览（不含输入文本）", action: #selector(previewDiagnostics(_:)), keyEquivalent: "")
         preview.target = self
@@ -705,6 +820,53 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
             menu.addItem(version)
         }
         return menu
+    }
+
+    static func makePersonalModelMenuItem(directory: URL?, defaults: UserDefaults) -> NSMenuItem {
+        var isDirectory: ObjCBool = false
+        let installed = directory.map {
+            FileManager.default.fileExists(atPath: $0.path, isDirectory: &isDirectory) && isDirectory.boolValue
+        } ?? false
+        let item = NSMenuItem(
+            title: installed ? "个人模型（只在本机）" : "个人模型（只在本机）· 未安装",
+            action: nil, keyEquivalent: ""
+        )
+        item.isEnabled = installed
+        item.toolTip = installed ? nil : "未安装"
+        item.state = PersonalContextModelSelection.isEnabled(defaults: defaults) ? .on : .off
+        return item
+    }
+
+    static func togglePersonalModelPreference(defaults: UserDefaults) {
+        defaults.set(!PersonalContextModelSelection.isEnabled(defaults: defaults), forKey: PersonalContextModelSelection.defaultsKey)
+    }
+
+    @objc private func togglePersonalModel(_ sender: NSMenuItem) {
+        callbackExecutor.sync {
+            guard !resourcesClosed,
+                  Self.makePersonalModelMenuItem(directory: personalModelDirectory, defaults: .standard).isEnabled else { return }
+            Self.togglePersonalModelPreference(defaults: .standard)
+            refreshStatusItemMenu()
+        }
+    }
+
+    @objc private func selectLearningMode(_ sender: NSMenuItem) {
+        callbackExecutor.sync {
+            guard !resourcesClosed, let mode = LearningMode(rawValue: UInt32(clamping: sender.tag)) else { return }
+            MainActor.assumeIsolated { learningController?.request(mode) }
+            refreshStatusItemMenu()
+        }
+    }
+
+    @objc private func toggleZhixuWhole(_ sender: NSMenuItem) {
+        callbackExecutor.sync {
+            guard !resourcesClosed else { return }
+            MainActor.assumeIsolated {
+                guard let learningController else { return }
+                learningController.requestZhixuWhole(!learningController.wholeEnabled)
+            }
+            refreshStatusItemMenu()
+        }
     }
 
     @objc private func openLexiconWindow(_ sender: NSMenuItem) {
@@ -965,6 +1127,36 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
     /// The menu's choice wins over the manager app's runtime.json when it names a built-in skin.
     private func selectedSkin(config: ProjectRuntimeConfiguration) -> CandidateThemeIdentifier {
         CandidateSkinChoice.current() ?? config.candidateTheme
+    }
+
+    /// Remembers which installed packs the engine of the session just created was built from. The deployed schema is
+    /// process-wide, so the first session of the process fixes what that is. Not private so tests can attach the
+    /// inventory to a performance-harness controller, whose creation path skips the production calls of this.
+    func notePackInventory(userDirectory: URL) {
+        let inventory = LexiconPackInventory(bundledRime: nil, userRime: userDirectory)
+        packInventory = inventory
+        appliedPackFingerprint = LexiconPackDeployment.shared.deployedFingerprint(current: inventory.fingerprint())
+    }
+
+    /// Professional dictionaries the management console downloaded while this process was running are compiled into the
+    /// engine by one more deploy. Only with no composition open: the deploy drops it. A failed attempt is not repeated
+    /// for the same files, so a broken download cannot make every app switch beep.
+    private func reloadPacksAtSafePoint() {
+        guard !hasActiveComposition, let core, let packInventory, let applied = appliedPackFingerprint else { return }
+        let current = packInventory.fingerprint()
+        guard current != applied, current != failedPackFingerprint else { return }
+        Self.fuzzyLock.lock()
+        let status = core.reloadDictionariesStatus()
+        Self.fuzzyLock.unlock()
+        if status == 0 {
+            appliedPackFingerprint = current
+            failedPackFingerprint = nil
+            LexiconPackDeployment.shared.record(current)
+            DiagnosticsRecorder.shared.recordSystem(eventKind: "lexicon-packs-reloaded")
+        } else {
+            failedPackFingerprint = current
+            DiagnosticsRecorder.shared.recordSystem(eventKind: "lexicon-packs-reload-failed-status-\(status)")
+        }
     }
 
     private func refreshProjectConfigurationAtSafePoint() {
@@ -1240,9 +1432,17 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
         // secure/unknown and lifecycle transitions must tear down our own
         // candidate surface even if the IMK client proxy has already vanished.
         // Client text mutation remains conditional on a valid proxy below.
+        applyStages = KeyStageTimings()
+        var mark = DispatchTime.now().uptimeNanoseconds
+        func lap() -> UInt64 {
+            let now = DispatchTime.now().uptimeNanoseconds
+            defer { mark = now }
+            return now &- mark
+        }
         if result.markedText.isEmpty {
             candidateGrid = nil
             MainActor.assumeIsolated { candidatePanel?.hide() }
+            applyStages.panel = lap()
         }
         guard let client else { return nil }
         var insertTextElapsed: UInt64?
@@ -1252,8 +1452,11 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
             insertTextElapsed = DispatchTime.now().uptimeNanoseconds &- insertStarted
             if !result.secureDegraded { recentCommitContext.append(result.commitText, app: appIdentifier) }
         }
+        _ = lap()
+        applyStages.insert = insertTextElapsed ?? 0
         if result.markedText.isEmpty {
             client.setMarkedText("", selectionRange: NSRange(location: 0, length: 0), replacementRange: NSRange(location: NSNotFound, length: NSNotFound))
+            applyStages.marked = lap()
         } else {
             let cursor = utf16CursorOffset(in: result.markedText, utf8Offset: result.markedCursorUTF8)
             client.setMarkedText(
@@ -1261,6 +1464,7 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
                 selectionRange: NSRange(location: cursor, length: 0),
                 replacementRange: NSRange(location: NSNotFound, length: NSNotFound)
             )
+            applyStages.marked = lap()
             var lineRect = NSRect.zero
             // IMKTextInput.attributes(forCharacterIndex:) indexes into the
             // current inline session, not the client document. Anchoring on
@@ -1273,6 +1477,7 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
             // (owner 2026-10-09). The composition start stays put while typing.
             let anchorIndex = 0
             _ = client.attributes(forCharacterIndex: anchorIndex, lineHeightRectangle: &lineRect)
+            applyStages.caret = lap()
             MainActor.assumeIsolated {
                 candidatePanel?.update(
                     candidates: result.candidates,
@@ -1286,6 +1491,7 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
                     grid: candidateGrid
                 )
             }
+            applyStages.panel = lap()
         }
         return insertTextElapsed
     }

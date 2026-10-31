@@ -1,4 +1,5 @@
 import contextlib
+from datetime import datetime, timezone
 import hashlib
 import io
 import json
@@ -31,6 +32,8 @@ class TierTests(unittest.TestCase):
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_bytes(b'x' * 2048)
         (self.source / 'itos.json').write_text(json.dumps(['<pad>', '<bos>', '<unk>', '字']))
+        (self.source / 'model_card.json').write_text(json.dumps({'checkpoint': 'fixture-v3',
+                                                               'training_source': 'synthetic'}))
         self.manifest = self.root / 'official'
         self.public = self.root / 'public'
         lines = {n: f'{hashlib.sha256((self.source/n).read_bytes()).hexdigest()}  {n}\n' for n in self.names}
@@ -44,13 +47,22 @@ class TierTests(unittest.TestCase):
         self.patches.start()
         self.addCleanup(self.patches.stop)
 
-    def run_model(self, tier=None):
+    def run_model(self, tier=None, **kwargs):
         if tier is not None:
             os.environ['ZHIZI_MODEL_TIER'] = tier
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
-            status = model.copy_model(self.dest, self.source, self.manifest)
+            status = model.copy_model(self.dest, self.source, self.manifest, **kwargs)
         return status, output.getvalue()
+
+    def assert_bundle_manifest(self):
+        entries = {}
+        for line in (self.dest / 'SHA256SUMS').read_text().splitlines():
+            digest, name = line.split('  ', 1)
+            self.assertNotIn(name, entries)
+            entries[name] = digest
+            self.assertEqual(digest, hashlib.sha256((self.dest / name).read_bytes()).hexdigest())
+        self.assertEqual(set(entries), set(self.names))
 
     def test_default_byte_identical_to_frozen_implementation(self):
         namespace = {'__file__': str(Path(model.__file__)), '__name__': 'frozen_model'}
@@ -104,9 +116,11 @@ class TierTests(unittest.TestCase):
         (self.source / 'zhizi30m_v2.mlmodelc/coremldata.bin').write_bytes(b'y' * 2048)
         status, output = self.run_model('public')
         self.assertTrue(status['available'])
-        self.assertTrue(status['official'])
+        self.assertFalse(status['official'])
         self.assertIn('PASS tier=public sha256=verified-partial', output)
-        self.assertEqual((self.dest / 'model_card.json').read_bytes(), model.MODEL_CARD.read_bytes())
+        self.assertEqual((self.dest / 'model_card.json').read_bytes(),
+                         (self.source / 'model_card.json').read_bytes())
+        self.assert_bundle_manifest()
         for line in self.public.read_text().splitlines():
             n = line.split(None, 1)[1]
             p = self.source / n
@@ -126,6 +140,62 @@ class TierTests(unittest.TestCase):
         self.assertTrue(status['available'])
         self.assertFalse(status['official'])
         self.assertIn('WARN tier=custom unofficial-model', output)
+        self.assertEqual((self.dest / 'model_card.json').read_bytes(),
+                         (self.source / 'model_card.json').read_bytes())
+        self.assert_bundle_manifest()
+
+    def test_missing_card_generates_minimal_card_and_complete_manifest(self):
+        (self.source / 'model_card.json').unlink()
+        os.environ['ZHIZI_MODEL_DIR'] = str(self.source)
+        for tier in ('public', 'custom'):
+            with self.subTest(tier=tier):
+                before = datetime.now(timezone.utc)
+                status, output = self.run_model(tier)
+                self.assertTrue(status['available'], output)
+                self.assertEqual(status['tier'], tier)
+                self.assertFalse(status['official'])
+                card = json.loads((self.dest / 'model_card.json').read_text())
+                self.assertEqual(card['weights_sha256'], hashlib.sha256(
+                    (self.source / 'zhizi30m_v2.mlmodelc/weights/weight.bin').read_bytes()).hexdigest())
+                self.assertEqual(card['tier'], tier)
+                self.assertEqual(card['training_source'], '未知')
+                self.assertEqual(card['metrics'], '未知')
+                built_at = datetime.fromisoformat(card['built_at'].replace('Z', '+00:00'))
+                self.assertEqual(built_at.utcoffset(), timezone.utc.utcoffset(built_at))
+                self.assertLessEqual(before, built_at)
+                self.assertLessEqual(built_at, datetime.now(timezone.utc))
+                self.assertNotIn('checkpoint', card)
+                self.assert_bundle_manifest()
+
+    def test_explicit_card_overrides_source_card(self):
+        card = self.root / 'actual-card.json'
+        card.write_text('{"checkpoint": "actual-weights", "metrics": {"synthetic": 0.5}}\n')
+        os.environ['ZHIZI_MODEL_DIR'] = str(self.source)
+        for tier in ('public', 'custom'):
+            with self.subTest(tier=tier):
+                status, output = self.run_model(tier, model_card=card)
+                self.assertTrue(status['available'], output)
+                self.assertEqual((self.dest / 'model_card.json').read_bytes(), card.read_bytes())
+                self.assert_bundle_manifest()
+
+    def test_official_explicit_card_must_match_pinned_hash(self):
+        card = self.root / 'actual-card.json'
+        card.write_bytes((self.source / 'model_card.json').read_bytes())
+        self.assertTrue(self.run_model('official', model_card=card)[0]['available'])
+        card.write_text('{"checkpoint": "unattested"}')
+        self.assertFalse(self.run_model('official', model_card=card)[0]['available'])
+
+    def test_cli_accepts_model_card_path(self):
+        card = self.root / 'actual-card.json'
+        card.write_text('{"checkpoint": "cli-weights"}\n')
+        result = subprocess.run([sys.executable, model.__file__, str(self.dest), '--model-card', str(card)],
+                                capture_output=True, text=True,
+                                env={'ZHIZI_MODEL_TIER': 'custom', 'ZHIZI_MODEL_DIR': str(self.source),
+                                     'PYTHONDONTWRITEBYTECODE': '1'})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(json.loads((self.dest / 'availability.json').read_text())['available'])
+        self.assertEqual((self.dest / 'model_card.json').read_bytes(), card.read_bytes())
+        self.assert_bundle_manifest()
 
     def test_custom_invalid_vocab_symlink_size(self):
         os.environ['ZHIZI_MODEL_DIR'] = str(self.source)
@@ -167,10 +237,20 @@ class TierTests(unittest.TestCase):
         self.assertIn('symlink', output)
 
     def test_public_invalid_card(self):
+        card = self.source / 'model_card.json'
+        for content in ('[]', '{broken'):
+            with self.subTest(content=content):
+                card.write_text(content)
+                self.assertFalse(self.run_model('public')[0]['available'])
+
+    def test_explicit_invalid_or_missing_card_disables_bundle(self):
         card = self.root / 'bad-card.json'
-        card.write_text('{}')
-        with patch.object(model, 'MODEL_CARD', card):
-            self.assertIn('invalid repository model card', self.run_model('public')[1])
+        for content in (None, '[]', '{broken'):
+            with self.subTest(content=content):
+                if content is not None:
+                    card.write_text(content)
+                self.assertFalse(self.run_model('public', model_card=card)[0]['available'])
+                self.assertEqual([p.name for p in self.dest.iterdir()], ['availability.json'])
 
     def test_custom_missing_compiled_file(self):
         os.environ['ZHIZI_MODEL_DIR'] = str(self.source)

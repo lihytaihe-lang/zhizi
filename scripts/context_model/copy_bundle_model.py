@@ -1,9 +1,10 @@
 """Copy only checksum-attested local model files; unavailable is a build success."""
+import argparse
+from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
 import shutil
-import sys
 import os
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -11,7 +12,6 @@ WORK_DIR = Path(os.environ.get("ZHIZI_WORK", ROOT / "ime_context_model"))
 
 SOURCE = WORK_DIR / 'release/zhizi-30m-v3'
 PUBLIC_MANIFEST = ROOT / 'native/resources/ContextModel/SHA256SUMS.public'
-MODEL_CARD = ROOT / 'native/resources/ContextModel/model_card.json'
 MAX_CUSTOM_BYTES = 512 * 1024 * 1024
 # Observed 372 B in three local compiles and in the maintainer's pinned copy;
 # bounds are loose sanity limits, not an integrity check (integrity of weights
@@ -22,7 +22,7 @@ PUBLIC_COREMLDATA_MAX_BYTES = 64 * 1024
 MANIFEST = Path(__file__).resolve().parents[2] / 'native/resources/ContextModel/SHA256SUMS'
 
 
-def copy_model(destination, source=SOURCE, manifest=MANIFEST):
+def copy_model(destination, source=SOURCE, manifest=MANIFEST, model_card=None):
     destination = Path(destination)
     shutil.rmtree(destination, ignore_errors=True)
     destination.mkdir(parents=True)
@@ -38,6 +38,9 @@ def copy_model(destination, source=SOURCE, manifest=MANIFEST):
             source = Path(os.environ['ZHIZI_MODEL_DIR'])
         else:
             source = Path(source)
+        card_path = Path(model_card) if model_card is not None else source / 'model_card.json'
+        if model_card is not None and any(p.is_symlink() for p in (card_path, *card_path.parents)):
+            raise ValueError('symlink in model card')
         if tier != 'official':
             # Check every ancestor and descendant before following or copying files.
             if any(p.is_symlink() for p in (source, *source.parents)):
@@ -57,12 +60,6 @@ def copy_model(destination, source=SOURCE, manifest=MANIFEST):
             if (not isinstance(vocab, list) or not all(isinstance(v, str) for v in vocab)
                     or vocab[:3] != ['<pad>', '<bos>', '<unk>'] or len(set(vocab)) != len(vocab)):
                 raise ValueError('invalid itos vocabulary')
-            card = json.loads(MODEL_CARD.read_text())
-            if (not isinstance(card, dict) or not {'checkpoint', 'input', 'output', 'pad', 'bos', 'unk'} <= card.keys()
-                    or card['input'] != 'tokens Int32[8,40]'
-                    or card['output'] not in ('logprobs Float16[8,39]', 'logprobs Float32[8,39]')
-                    or [card['pad'], card['bos'], card['unk']] != [0, 1, 2]):
-                raise ValueError('invalid repository model card interface')
             if tier == 'public':
                 size = (source / required[1]).stat().st_size
                 if not PUBLIC_COREMLDATA_MIN_BYTES <= size <= PUBLIC_COREMLDATA_MAX_BYTES:
@@ -77,7 +74,7 @@ def copy_model(destination, source=SOURCE, manifest=MANIFEST):
             path = Path(relative)
             if path.is_absolute() or '..' in path.parts or not path.parts:
                 raise ValueError('invalid checksum manifest')
-            original = source / path
+            original = card_path if relative == 'model_card.json' else source / path
             if any((source / Path(*path.parts[:i])).is_symlink() for i in range(1, len(path.parts)+1)):
                 raise ValueError('symlink in model artifact')
             data = original.read_bytes()
@@ -95,17 +92,41 @@ def copy_model(destination, source=SOURCE, manifest=MANIFEST):
                 'zhizi30m_v2.mlmodelc/model.mil', 'zhizi30m_v2.mlmodelc/weights/weight.bin'} <= set(entries):
             raise ValueError('incomplete model manifest')
         if tier != 'official':
-            (stage / 'model_card.json').write_bytes(MODEL_CARD.read_bytes())
+            if model_card is not None or card_path.exists():
+                card_bytes = card_path.read_bytes()
+                card = json.loads(card_bytes)
+                if not isinstance(card, dict):
+                    raise ValueError('invalid model card; expected a JSON object')
+                # A card that states the interface must state the one the IME feeds.
+                if ('input' in card and card['input'] != 'tokens Int32[8,40]'
+                        or 'output' in card and card['output'] not in ('logprobs Float16[8,39]', 'logprobs Float32[8,39]')):
+                    raise ValueError('model card interface does not match the IME')
+            else:
+                card = {
+                    'weights_sha256': hashlib.sha256(
+                        (stage / 'zhizi30m_v2.mlmodelc/weights/weight.bin').read_bytes()).hexdigest(),
+                    'tier': tier,
+                    'built_at': datetime.now(timezone.utc).isoformat(),
+                    'training_source': '未知',
+                    'metrics': '未知',
+                }
+                card_bytes = (json.dumps(card, ensure_ascii=False, indent=2) + '\n').encode()
+            (stage / 'model_card.json').write_bytes(card_bytes)
             if tier == 'public':
                 shutil.copy2(source / 'zhizi30m_v2.mlmodelc/coremldata.bin',
                              stage / 'zhizi30m_v2.mlmodelc/coremldata.bin')
-        if tier != 'custom':
+            # This manifest attests to the packaged bytes, not official weights.
+            files = sorted(p for p in stage.rglob('*') if p.is_file())
+            (stage / 'SHA256SUMS').write_text(''.join(
+                f'{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.relative_to(stage).as_posix()}\n'
+                for p in files))
+        else:
             (stage / 'SHA256SUMS').write_bytes(manifest.read_bytes())
         for item in stage.iterdir():
             item.rename(destination / item.name)
         status = {'available': True, 'reason': None}
         if tier != 'official':
-            status.update(tier=tier, official=tier == 'public')
+            status.update(tier=tier, official=False)
     except (OSError, ValueError) as error:
         for item in destination.iterdir():
             if item.is_dir():
@@ -128,4 +149,8 @@ def copy_model(destination, source=SOURCE, manifest=MANIFEST):
 
 
 if __name__ == '__main__':
-    copy_model(sys.argv[1])
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('destination')
+    parser.add_argument('--model-card', type=Path, help='model card for the actual weights')
+    args = parser.parse_args()
+    copy_model(args.destination, model_card=args.model_card)

@@ -1,0 +1,1012 @@
+# Fixed ASCII test fixture: layer, text, reading, weight.
+agent_project_terms	ABI	abi	486
+agent_project_terms	ACCEPTED	accepted	520
+agent_project_terms	accepted-joint-batch	accepted-joint-batch	300
+agent_project_terms	ADR	adr	520
+agent_project_terms	ADR_PLAN	adr_plan	446
+agent_project_terms	agent_actions	agent_actions	355
+agent_project_terms	agent_cancel	agent_cancel	335
+agent_project_terms	agent_error	agent_error	335
+agent_project_terms	agent_ime_session_new	agent_ime_session_new	335
+agent_project_terms	agent_pinyin	agent_pinyin	500
+agent_project_terms	agent_progress	agent_progress	335
+agent_project_terms	agent_request	agent_request	355
+agent_project_terms	agent_result	agent_result	335
+agent_project_terms	AgentAction	agentaction	355
+agent_project_terms	AgentIMEProductCommit	agentimeproductcommit	460
+agent_project_terms	AgentInputController	agentinputcontroller	489
+agent_project_terms	AgentInputMethod	agentinputmethod	520
+agent_project_terms	AgentProbe	agentprobe	335
+agent_project_terms	AIM_USERDB_PROCESS_SKIP_CODESIGN	aim_userdb_process_skip_codesign	370
+agent_project_terms	AIMIPC	aimipc	433
+agent_project_terms	allowed	allowed	504
+agent_project_terms	API	api	520
+agent_project_terms	APP	app	520
+agent_project_terms	app_class	app_class	480
+agent_project_terms	app_id	app_id	508
+agent_project_terms	APP_MATRIX	app_matrix	390
+agent_project_terms	appIdentifier	appidentifier	355
+agent_project_terms	AppKit	appkit	506
+agent_project_terms	apply_lexicon	apply_lexicon	463
+agent_project_terms	apply_personal_profile_auto_update	apply_personal_profile_auto_update	430
+agent_project_terms	approved_knowledge_snapshot_entries	approved_knowledge_snapshot_entries	421
+agent_project_terms	artifact_checksum	artifact_checksum	520
+agent_project_terms	ASCII	ascii	520
+agent_project_terms	attach	attach	440
+agent_project_terms	attributesForCharacterIndex	attributesforcharacterindex	335
+agent_project_terms	backend-unavailable	backend-unavailable	300
+agent_project_terms	BAD	bad	468
+agent_project_terms	BASELINE	baseline	520
+agent_project_terms	blocked_entries	blocked_entries	335
+agent_project_terms	BOOT_TIME	boot_time	335
+agent_project_terms	bootstrap_native	bootstrap_native	416
+agent_project_terms	browser	browser	480
+agent_project_terms	BSD	bsd	501
+agent_project_terms	build_and_run	build_and_run	405
+agent_project_terms	build_manager	build_manager	458
+agent_project_terms	build_native	build_native	478
+agent_project_terms	bundleIdentifier	bundleidentifier	390
+agent_project_terms	CAPTURE	capture	486
+agent_project_terms	CFBundleShortVersionString	cfbundleshortversionstring	443
+agent_project_terms	CFBundleVersion	cfbundleversion	470
+agent_project_terms	CGEvent	cgevent	390
+agent_project_terms	ChatGPT	chatgpt	421
+agent_project_terms	check_core_network_boundary	check_core_network_boundary	473
+agent_project_terms	CLI	cli	475
+agent_project_terms	CMake	cmake	405
+agent_project_terms	code	code	520
+agent_project_terms	COM	com	520
+agent_project_terms	CommitByPolicy	commitbypolicy	335
+agent_project_terms	composition_alternatives	composition_alternatives	421
+agent_project_terms	configure_candidate_context	configure_candidate_context	468
+agent_project_terms	configure_context_profile	configure_context_profile	425
+agent_project_terms	configure_fuzzy	configure_fuzzy	446
+agent_project_terms	configure_typo	configure_typo	440
+agent_project_terms	contains	contains	520
+agent_project_terms	CONTEXT	context	520
+agent_project_terms	create_lexicon_entry	create_lexicon_entry	446
+agent_project_terms	CRUD	crud	433
+agent_project_terms	CryptoKit	cryptokit	335
+agent_project_terms	data_sources	data_sources	335
+agent_project_terms	delete	delete	520
+agent_project_terms	deliveryID	deliveryid	390
+agent_project_terms	DEPENDENCY_REGISTRY	dependency_registry	497
+agent_project_terms	dev_install_ime	dev_install_ime	430
+agent_project_terms	Developer	developer	466
+agent_project_terms	DEVELOPMENT_ONLY	development_only	381
+agent_project_terms	DirectEnglish	directenglish	446
+agent_project_terms	directory	directory	520
+agent_project_terms	directory_checksum	directory_checksum	446
+agent_project_terms	effective_user_id	effective_user_id	449
+agent_project_terms	entities	entities	370
+agent_project_terms	entitlement	entitlement	494
+agent_project_terms	entry_count	entry_count	508
+agent_project_terms	EVIDENCE	evidence	520
+agent_project_terms	EVIDENCE_PROTOCOL	evidence_protocol	486
+agent_project_terms	EvidenceCommit	evidencecommit	443
+agent_project_terms	facts	facts	416
+agent_project_terms	FAIL	fail	520
+agent_project_terms	FAULT	fault	520
+agent_project_terms	FAULT_MATRIX	fault_matrix	370
+agent_project_terms	fcitx5	fcitx5	390
+agent_project_terms	FFI	ffi	482
+agent_project_terms	file	file	520
+agent_project_terms	FLAG	flag	437
+agent_project_terms	flock	flock	433
+agent_project_terms	forget	forget	425
+agent_project_terms	FREEZE	freeze	501
+agent_project_terms	freeze_golden_set	freeze_golden_set	425
+agent_project_terms	Fresh	fresh	507
+agent_project_terms	from_json	from_json	430
+agent_project_terms	from_u32	from_u32	433
+agent_project_terms	fsync	fsync	430
+agent_project_terms	FTS	fts	449
+agent_project_terms	fuzzy_config	fuzzy_config	440
+agent_project_terms	getpeereid	getpeereid	370
+agent_project_terms	GitHub	github	520
+agent_project_terms	GPL	gpl	451
+agent_project_terms	HCI	hci	335
+agent_project_terms	HEAD	head	520
+agent_project_terms	health	health	456
+agent_project_terms	hello	hello	433
+agent_project_terms	HOME	home	520
+agent_project_terms	IBus	ibus	405
+agent_project_terms	IDE	ide	355
+agent_project_terms	IME	ime	520
+agent_project_terms	ime_preferences	ime_preferences	421
+agent_project_terms	IMK	imk	425
+agent_project_terms	IMKInputController	imkinputcontroller	433
+agent_project_terms	IMKServer	imkserver	405
+agent_project_terms	IncompatibleUserDB	incompatibleuserdb	335
+agent_project_terms	ingest_hotword_feed	ingest_hotword_feed	446
+agent_project_terms	ingest_knowledge_source	ingest_knowledge_source	446
+agent_project_terms	ingestion_runs	ingestion_runs	335
+agent_project_terms	InputMethodKit	inputmethodkit	486
+agent_project_terms	insert	insert	520
+agent_project_terms	insertText	inserttext	390
+agent_project_terms	install_input_method	install_input_method	456
+agent_project_terms	iOS	ios	449
+agent_project_terms	IPC	ipc	520
+agent_project_terms	is_managed_fuzzy_config	is_managed_fuzzy_config	425
+agent_project_terms	iTerm	iterm	381
+agent_project_terms	JetBrains	jetbrains	405
+agent_project_terms	JOINT_EVIDENCE	joint_evidence	421
+agent_project_terms	JSON	json	520
+agent_project_terms	Key	key	520
+agent_project_terms	KiB	kib	497
+agent_project_terms	knowledge_chunks	knowledge_chunks	443
+agent_project_terms	LABEL	label	520
+agent_project_terms	LaunchServices	launchservices	433
+agent_project_terms	letter	letter	520
+agent_project_terms	LevelDB	leveldb	475
+agent_project_terms	lexicon_entries	lexicon_entries	478
+agent_project_terms	lexicon_sources	lexicon_sources	411
+agent_project_terms	LGPL	lgpl	465
+agent_project_terms	libc++	libc++	300
+agent_project_terms	librime	librime	520
+agent_project_terms	libSystem	libsystem	355
+agent_project_terms	license_registry	license_registry	381
+agent_project_terms	lipo	lipo	405
+agent_project_terms	list_hotword_items	list_hotword_items	451
+agent_project_terms	list_knowledge_terms	list_knowledge_terms	458
+agent_project_terms	list_lexicon_entries	list_lexicon_entries	477
+agent_project_terms	load_app_state	load_app_state	449
+agent_project_terms	load_current	load_current	443
+agent_project_terms	LocalFallback	localfallback	335
+agent_project_terms	localStorage	localstorage	416
+agent_project_terms	lock_connection	lock_connection	514
+agent_project_terms	lookup	lookup	458
+agent_project_terms	macOS	macos	520
+agent_project_terms	MACOSX_DEPLOYMENT_TARGET	macosx_deployment_target	335
+agent_project_terms	MANIFEST	manifest	520
+agent_project_terms	MiB	mib	509
+agent_project_terms	mine_profile_introspection	mine_profile_introspection	430
+agent_project_terms	MISSING	missing	520
+agent_project_terms	MIT	mit	520
+agent_project_terms	MixerDecoder	mixerdecoder	520
+agent_project_terms	MOD_CONTROL	mod_control	440
+agent_project_terms	MOD_SHIFT	mod_shift	425
+agent_project_terms	MVP	mvp	416
+agent_project_terms	NATIVE_LICENSE_ASSETS	native_license_assets	437
+agent_project_terms	needs-fix	needs-fix	300
+agent_project_terms	NFKC	nfkc	433
+agent_project_terms	NOT	not	520
+agent_project_terms	now_ms	now_ms	520
+agent_project_terms	NSRange	nsrange	381
+agent_project_terms	NSSecureTextField	nssecuretextfield	370
+agent_project_terms	NSTextField	nstextfield	381
+agent_project_terms	NSTextView	nstextview	355
+agent_project_terms	NSWorkspace	nsworkspace	355
+agent_project_terms	O_NOFOLLOW	o_nofollow	468
+agent_project_terms	O_NONBLOCK	o_nonblock	440
+agent_project_terms	open_or_create	open_or_create	449
+agent_project_terms	open_or_create_owned_leaf_directory	open_or_create_owned_leaf_directory	449
+agent_project_terms	open_with_provider_keychain	open_with_provider_keychain	433
+agent_project_terms	OpenAI	openai	488
+agent_project_terms	OpenCC	opencc	465
+agent_project_terms	OpenWorkspace	openworkspace	335
+agent_project_terms	pack_entries	pack_entries	335
+agent_project_terms	package_public_mac	package_public_mac	421
+agent_project_terms	page_size	page_size	520
+agent_project_terms	PageDown	pagedown	470
+agent_project_terms	PageUp	pageup	446
+agent_project_terms	PASS	pass	520
+agent_project_terms	PassThrough	passthrough	335
+agent_project_terms	peek_following_pages	peek_following_pages	449
+agent_project_terms	PENDING	pending	520
+agent_project_terms	physical_runtime_path	physical_runtime_path	465
+agent_project_terms	pinyin_simp	pinyin_simp	520
+agent_project_terms	prepare_generation_payload	prepare_generation_payload	443
+agent_project_terms	previous_text_was_ascii_digit	previous_text_was_ascii_digit	355
+agent_project_terms	private_regular_file	private_regular_file	425
+agent_project_terms	proc_pidinfo	proc_pidinfo	355
+agent_project_terms	process	process	520
+agent_project_terms	PRODUCT_SPEC	product_spec	489
+agent_project_terms	ProductCommit	productcommit	520
+agent_project_terms	ProductInputs	productinputs	520
+agent_project_terms	ProductInputsSHA256	productinputssha256	486
+agent_project_terms	professional_packs	professional_packs	511
+agent_project_terms	project_profiles	project_profiles	440
+agent_project_terms	project_runtime_configuration	project_runtime_configuration	466
+agent_project_terms	proposed	proposed	411
+agent_project_terms	prose	prose	488
+agent_project_terms	provisional	provisional	473
+agent_project_terms	publish_lexicon	publish_lexicon	446
+agent_project_terms	RapidJSON	rapidjson	454
+agent_project_terms	rc_gate_support	rc_gate_support	458
+agent_project_terms	README	readme	520
+agent_project_terms	READY	ready	482
+agent_project_terms	REG	reg	425
+agent_project_terms	relations	relations	381
+agent_project_terms	remove	remove	503
+agent_project_terms	RenderCandidates	rendercandidates	335
+agent_project_terms	replace	replace	510
+agent_project_terms	REPLAY_BATCH_ID	replay_batch_id	468
+agent_project_terms	REPLAY_SOURCE_KIND	replay_source_kind	430
+agent_project_terms	restore	restore	520
+agent_project_terms	retire_if_present	retire_if_present	430
+agent_project_terms	review_knowledge_term	review_knowledge_term	425
+agent_project_terms	rime-ice	rime-ice	300
+agent_project_terms	rime-luna-pinyin	rime-luna-pinyin	300
+agent_project_terms	rime-prelude	rime-prelude	300
+agent_project_terms	rlib	rlib	355
+agent_project_terms	RSS	rss	504
+agent_project_terms	run_id	run_id	451
+agent_project_terms	run_joint_rc_gates	run_joint_rc_gates	416
+agent_project_terms	RuntimeRecovery	runtimerecovery	335
+agent_project_terms	rusqlite	rusqlite	443
+agent_project_terms	save_app_state	save_app_state	425
+agent_project_terms	save_dynamic_source	save_dynamic_source	451
+agent_project_terms	save_knowledge_source	save_knowledge_source	437
+agent_project_terms	scratch	scratch	475
+agent_project_terms	search_knowledge	search_knowledge	478
+agent_project_terms	secure	secure	520
+agent_project_terms	secureDegraded	securedegraded	355
+agent_project_terms	SecurityState	securitystate	492
+agent_project_terms	select_secondary_candidate	select_secondary_candidate	430
+agent_project_terms	selectedRange	selectedrange	381
+agent_project_terms	selectionEventID	selectioneventid	355
+agent_project_terms	set_dynamic_source_enabled	set_dynamic_source_enabled	433
+agent_project_terms	SHA	sha	520
+agent_project_terms	shared	shared	520
+agent_project_terms	SIGKILL	sigkill	411
+agent_project_terms	SIGSTOP	sigstop	370
+agent_project_terms	snapshot_available	snapshot_available	335
+agent_project_terms	snapshot-unavailable	snapshot-unavailable	300
+agent_project_terms	SnapshotReader	snapshotreader	421
+agent_project_terms	snapshots	snapshots	473
+agent_project_terms	SPEC_AUDIT_2026	spec_audit_2026	390
+agent_project_terms	SQLite	sqlite	520
+agent_project_terms	stableCases	stablecases	475
+agent_project_terms	staticlib	staticlib	381
+agent_project_terms	STATUS	status	520
+agent_project_terms	superseded	superseded	355
+agent_project_terms	SwiftKey	swiftkey	335
+agent_project_terms	SwiftPM	swiftpm	449
+agent_project_terms	sync_directory	sync_directory	430
+agent_project_terms	tauri	tauri	520
+agent_project_terms	TCP	tcp	370
+agent_project_terms	TEAM_ID	team_id	416
+agent_project_terms	TECHNICAL_SPEC	technical_spec	433
+agent_project_terms	TextEdit	textedit	481
+agent_project_terms	THIRD_PARTY_NOTICES	third_party_notices	519
+agent_project_terms	TIS	tis	509
+agent_project_terms	TIS-REG-001	tis-reg-001	300
+agent_project_terms	TISRegisterInputSource	tisregisterinputsource	335
+agent_project_terms	TSF	tsf	515
+agent_project_terms	TypeScript	typescript	478
+agent_project_terms	UID	uid	491
+agent_project_terms	UInt64	uint64	335
+agent_project_terms	unclean-recovery	unclean-recovery	300
+agent_project_terms	unknown	unknown	520
+agent_project_terms	URL	url	520
+agent_project_terms	usage_events	usage_events	370
+agent_project_terms	user-text	user-text	300
+agent_project_terms	UserConfirm	userconfirm	335
+agent_project_terms	UserDB	userdb	520
+agent_project_terms	UserDBManager	userdbmanager	390
+agent_project_terms	UTF	utf	520
+agent_project_terms	validate_native_license_assets	validate_native_license_assets	416
+agent_project_terms	validate_owned_directory	validate_owned_directory	430
+agent_project_terms	ViewModel	viewmodel	416
+agent_project_terms	VoiceOver	voiceover	465
+agent_project_terms	WAL	wal	416
+agent_project_terms	WebView	webview	425
+agent_project_terms	WeChat	wechat	381
+agent_project_terms	WhatsApp	whatsapp	398
+agent_project_terms	XcodeGen	xcodegen	335
+agent_project_terms	XPC	xpc	433
+agent_project_terms	YES	yes	440
+agent_project_terms	ZHIZI_TEST_INVITE	zhizi_test_invite	466
+agent_english	api	api	100000
+agent_english	claude	claude	100000
+agent_english	codex	codex	100000
+agent_english	github	github	100000
+agent_english	python	python	100000
+agent_english	token	token	100000
+agent_tech_terms	AMD	amd	500
+agent_tech_terms	API	api	500
+agent_tech_terms	AWS	aws	500
+agent_tech_terms	AirPods	airpods	500
+agent_tech_terms	Android	android	500
+agent_tech_terms	Angular	angular	500
+agent_tech_terms	Ansible	ansible	500
+agent_tech_terms	Apple	apple	500
+agent_tech_terms	Azure	azure	500
+agent_tech_terms	Bitbucket	bitbucket	500
+agent_tech_terms	Bun	bun	500
+agent_tech_terms	CD	cd	500
+agent_tech_terms	CI	ci	500
+agent_tech_terms	CLI	cli	500
+agent_tech_terms	ChatGPT	chatgpt	500
+agent_tech_terms	Claude	claude	500
+agent_tech_terms	ClickHouse	clickhouse	500
+agent_tech_terms	Cloudflare	cloudflare	500
+agent_tech_terms	Codex	codex	500
+agent_tech_terms	Copilot	copilot	500
+agent_tech_terms	Cursor	cursor	500
+agent_tech_terms	Deno	deno	500
+agent_tech_terms	Docker	docker	500
+agent_tech_terms	DynamoDB	dynamodb	500
+agent_tech_terms	Elasticsearch	elasticsearch	500
+agent_tech_terms	Figma	figma	500
+agent_tech_terms	Gemini	gemini	500
+agent_tech_terms	GPT	gpt	500
+agent_tech_terms	GitHub	github	500
+agent_tech_terms	GitLab	gitlab	500
+agent_tech_terms	Go	go	500
+agent_tech_terms	GraphQL	graphql	500
+agent_tech_terms	Grafana	grafana	500
+agent_tech_terms	Hugging Face	huggingface	500
+agent_tech_terms	HTTP	http	500
+agent_tech_terms	HTTPS	https	500
+agent_tech_terms	Intel	intel	500
+agent_tech_terms	Java	java	500
+agent_tech_terms	JavaScript	javascript	500
+agent_tech_terms	Jira	jira	500
+agent_tech_terms	JSON	json	500
+agent_tech_terms	Kafka	kafka	500
+agent_tech_terms	Kotlin	kotlin	500
+agent_tech_terms	Kubernetes	kubernetes	500
+agent_tech_terms	LangChain	langchain	500
+agent_tech_terms	Linux	linux	500
+agent_tech_terms	Llama	llama	500
+agent_tech_terms	MCP	mcp	500
+agent_tech_terms	MacBook	macbook	500
+agent_tech_terms	MacBookPro	macbookpro	500
+agent_tech_terms	MariaDB	mariadb	500
+agent_tech_terms	Markdown	markdown	500
+agent_tech_terms	MongoDB	mongodb	500
+agent_tech_terms	MySQL	mysql	500
+agent_tech_terms	NVIDIA	nvidia	500
+agent_tech_terms	Netlify	netlify	500
+agent_tech_terms	Next.js	nextjs	500
+agent_tech_terms	Node.js	nodejs	500
+agent_tech_terms	Notion	notion	500
+agent_tech_terms	Nuxt	nuxt	500
+agent_tech_terms	OpenAI	openai	500
+agent_tech_terms	PostgreSQL	postgres	500
+agent_tech_terms	Postgres	postgres	500
+agent_tech_terms	Python	python	500
+agent_tech_terms	REST	rest	500
+agent_tech_terms	React	react	500
+agent_tech_terms	Redis	redis	500
+agent_tech_terms	Rust	rust	500
+agent_tech_terms	Safari	safari	500
+agent_tech_terms	SDK	sdk	500
+agent_tech_terms	SQLite	sqlite	500
+agent_tech_terms	Slack	slack	500
+agent_tech_terms	Supabase	supabase	500
+agent_tech_terms	Svelte	svelte	500
+agent_tech_terms	Swift	swift	500
+agent_tech_terms	Tailwind CSS	tailwindcss	500
+agent_tech_terms	Terraform	terraform	500
+agent_tech_terms	TypeScript	typescript	500
+agent_tech_terms	TypeScript	ts	500
+agent_tech_terms	Ubuntu	ubuntu	500
+agent_tech_terms	VS Code	vscode	500
+agent_tech_terms	Vercel	vercel	500
+agent_tech_terms	Vite	vite	500
+agent_tech_terms	Vue	vue	500
+agent_tech_terms	WebAssembly	webassembly	500
+agent_tech_terms	Webpack	webpack	500
+agent_tech_terms	Windows	windows	500
+agent_tech_terms	Xcode	xcode	500
+agent_tech_terms	XML	xml	500
+agent_tech_terms	YAML	yaml	500
+agent_tech_terms	gRPC	grpc	500
+agent_tech_terms	iCloud	icloud	500
+agent_tech_terms	iPad	ipad	500
+agent_tech_terms	iPhone	iphone	500
+agent_tech_terms	iOS	ios	500
+agent_tech_terms	macOS	macos	500
+agent_tech_terms	nginx	nginx	500
+agent_tech_terms	npm	npm	500
+agent_tech_terms	embedding	embedding	500
+agent_tech_terms	prompt	prompt	500
+agent_tech_terms	token	token	500
+agent_ai_terms	Adobe Firefly	adobefirefly	500
+agent_ai_terms	Agent Client Protocol	agentclientprotocol	500
+agent_ai_terms	Agent Development Kit	agentdevelopmentkit	500
+agent_ai_terms	Agent Payments Protocol	agentpaymentsprotocol	500
+agent_ai_terms	Agent Skills	agentskills	500
+agent_ai_terms	AGENTS.md	agentsmd	500
+agent_ai_terms	AI agent	aiagent	500
+agent_ai_terms	Aider	aider	500
+agent_ai_terms	AI hallucination	aihallucination	500
+agent_ai_terms	AI SDK	aisdk	500
+agent_ai_terms	AlphaEvolve	alphaevolve	500
+agent_ai_terms	AlphaFold	alphafold	500
+agent_ai_terms	Amazon Bedrock	amazonbedrock	500
+agent_ai_terms	Amazon Bedrock AgentCore	amazonbedrockagentcore	500
+agent_ai_terms	Amazon Q Developer	amazonqdeveloper	500
+agent_ai_terms	Anthropic	anthropic	500
+agent_ai_terms	Antigravity CLI	antigravitycli	500
+agent_ai_terms	Anysphere	anysphere	500
+agent_ai_terms	AppBuilder	appbuilder	500
+agent_ai_terms	Aqua Voice	aquavoice	500
+agent_ai_terms	Arize Phoenix	arizephoenix	500
+agent_ai_terms	Auggie CLI	auggiecli	500
+agent_ai_terms	Augment Code	augmentcode	500
+agent_ai_terms	AutoGen	autogen	500
+agent_ai_terms	Baidu Comate	baiducomate	500
+agent_ai_terms	BigModel	bigmodel	500
+agent_ai_terms	Black Forest Labs	blackforestlabs	500
+agent_ai_terms	Capacities	capacities	500
+agent_ai_terms	CapCut	capcut	500
+agent_ai_terms	CatPaw	catpaw	500
+agent_ai_terms	chain of thought	chainofthought	500
+agent_ai_terms	Character.AI	characterai	500
+agent_ai_terms	Chatbox AI	chatboxai	500
+agent_ai_terms	ChatGLM	chatglm	500
+agent_ai_terms	Cherry Studio	cherrystudio	500
+agent_ai_terms	Civitai	civitai	500
+agent_ai_terms	Claude Agent SDK	claudeagentsdk	500
+agent_ai_terms	Claude Code	claudecode	500
+agent_ai_terms	Claude Haiku	claudehaiku	500
+agent_ai_terms	Claude Opus	claudeopus	500
+agent_ai_terms	Claude Sonnet	claudesonnet	500
+agent_ai_terms	Cline	cline	500
+agent_ai_terms	CodeArts IDE	codeartside	500
+agent_ai_terms	CodeBuddy	codebuddy	500
+agent_ai_terms	CodeBuddy Code	codebuddycode	500
+agent_ai_terms	Codebuff	codebuff	500
+agent_ai_terms	CodeGeeX	codegeex	500
+agent_ai_terms	Code Llama	codellama	500
+agent_ai_terms	CodeRabbit	coderabbit	500
+agent_ai_terms	Codestral	codestral	500
+agent_ai_terms	Codex CLI	codexcli	500
+agent_ai_terms	Codex Cloud	codexcloud	500
+agent_ai_terms	Cohere	cohere	500
+agent_ai_terms	context window	contextwindow	500
+agent_ai_terms	Copilot cloud agent	copilotcloudagent	500
+agent_ai_terms	Core ML	coreml	500
+agent_ai_terms	CosyVoice	cosyvoice	500
+agent_ai_terms	Coze	coze	500
+agent_ai_terms	CrewAI	crewai	500
+agent_ai_terms	Cursor Agent	cursoragent	500
+agent_ai_terms	Cursor CLI	cursorcli	500
+agent_ai_terms	Deep Agents	deepagents	500
+agent_ai_terms	DeepSeek	deepseek	500
+agent_ai_terms	DeepSeek Coder	deepseekcoder	500
+agent_ai_terms	DeepSeek Harness	deepseekharness	500
+agent_ai_terms	DeepSpeed	deepspeed	500
+agent_ai_terms	Devin	devin	500
+agent_ai_terms	Devin CLI	devincli	500
+agent_ai_terms	Devin Desktop	devindesktop	500
+agent_ai_terms	Devstral	devstral	500
+agent_ai_terms	Dify	dify	500
+agent_ai_terms	Droid	droid	500
+agent_ai_terms	DSPy	dspy	500
+agent_ai_terms	ElevenLabs	elevenlabs	500
+agent_ai_terms	ERNIE Bot	erniebot	500
+agent_ai_terms	FastGPT	fastgpt	500
+agent_ai_terms	Figma Make	figmamake	500
+agent_ai_terms	fine-tuning	finetuning	500
+agent_ai_terms	Firebase Studio	firebasestudio	500
+agent_ai_terms	Fireflies.ai	firefliesai	500
+agent_ai_terms	Flowise	flowise	500
+agent_ai_terms	FLUX	flux	500
+agent_ai_terms	function calling	functioncalling	500
+agent_ai_terms	Gemini CLI	geminicli	500
+agent_ai_terms	Gemini Code Assist	geminicodeassist	500
+agent_ai_terms	Gemini Enterprise Agent Platform	geminienterpriseagentplatform	500
+agent_ai_terms	Gemini Notebook	gemininotebook	500
+agent_ai_terms	Gemini Robotics	geminirobotics	500
+agent_ai_terms	Gemma	gemma	500
+agent_ai_terms	Genspark	genspark	500
+agent_ai_terms	GGUF	gguf	500
+agent_ai_terms	GitHub Copilot	githubcopilot	500
+agent_ai_terms	GitHub Copilot CLI	githubcopilotcli	500
+agent_ai_terms	GitHub Spark	githubspark	500
+agent_ai_terms	GLM Coding Plan	glmcodingplan	500
+agent_ai_terms	Google AI Studio	googleaistudio	500
+agent_ai_terms	Google Antigravity	googleantigravity	500
+agent_ai_terms	Google DeepMind	googledeepmind	500
+agent_ai_terms	gpt-oss	gptoss	500
+agent_ai_terms	Grammarly	grammarly	500
+agent_ai_terms	Granola	granola	500
+agent_ai_terms	Greptile	greptile	500
+agent_ai_terms	Grok	grok	500
+agent_ai_terms	Grok Build	grokbuild	500
+agent_ai_terms	Grok Imagine	grokimagine	500
+agent_ai_terms	GRPO	grpo	500
+agent_ai_terms	Heptabase	heptabase	500
+agent_ai_terms	HeyGen	heygen	500
+agent_ai_terms	Higgsfield AI	higgsfieldai	500
+agent_ai_terms	Ideogram	ideogram	500
+agent_ai_terms	iFlow CLI	iflowcli	500
+agent_ai_terms	iFlyCode	iflycode	500
+agent_ai_terms	iFlytek Spark	iflytekspark	500
+agent_ai_terms	Immersive Translate	immersivetranslate	500
+agent_ai_terms	inclusionAI	inclusionai	500
+agent_ai_terms	Inference Providers	inferenceproviders	500
+agent_ai_terms	InternLM	internlm	500
+agent_ai_terms	InternVL	internvl	500
+agent_ai_terms	Jamba	jamba	500
+agent_ai_terms	JoyCode	joycode	500
+agent_ai_terms	Kilo Code	kilocode	500
+agent_ai_terms	Kimi	kimi	500
+agent_ai_terms	Kimi CLI	kimicli	500
+agent_ai_terms	Kimi Code	kimicode	500
+agent_ai_terms	Kiro	kiro	500
+agent_ai_terms	Kling AI	klingai	500
+agent_ai_terms	knowledge distillation	knowledgedistillation	500
+agent_ai_terms	Krea	krea	500
+agent_ai_terms	LanceDB	lancedb	500
+agent_ai_terms	Langflow	langflow	500
+agent_ai_terms	LangGraph	langgraph	500
+agent_ai_terms	LangSmith	langsmith	500
+agent_ai_terms	Le Chat	lechat	500
+agent_ai_terms	LiblibAI	liblibai	500
+agent_ai_terms	Lindy	lindy	500
+agent_ai_terms	LiteLLM	litellm	500
+agent_ai_terms	LlamaCloud	llamacloud	500
+agent_ai_terms	llama.cpp	llamacpp	500
+agent_ai_terms	LlamaFactory	llamafactory	500
+agent_ai_terms	Llama Guard	llamaguard	500
+agent_ai_terms	LlamaIndex	llamaindex	500
+agent_ai_terms	llms.txt	llmstxt	500
+agent_ai_terms	LM Studio	lmstudio	500
+agent_ai_terms	LobeHub	lobehub	500
+agent_ai_terms	LongCat	longcat	500
+agent_ai_terms	LoRA	lora	500
+agent_ai_terms	Lovable	lovable	500
+agent_ai_terms	Lovart	lovart	500
+agent_ai_terms	Lyria	lyria	500
+agent_ai_terms	Magic Patterns	magicpatterns	500
+agent_ai_terms	Magistral	magistral	500
+agent_ai_terms	Manus	manus	500
+agent_ai_terms	MarsCode	marscode	500
+agent_ai_terms	Mastra	mastra	500
+agent_ai_terms	MedGemma	medgemma	500
+agent_ai_terms	Microsoft Agent Framework	microsoftagentframework	500
+agent_ai_terms	Microsoft Copilot	microsoftcopilot	500
+agent_ai_terms	Microsoft Foundry	microsoftfoundry	500
+agent_ai_terms	Midjourney	midjourney	500
+agent_ai_terms	Milvus	milvus	500
+agent_ai_terms	MindSpore	mindspore	500
+agent_ai_terms	MiniCPM	minicpm	500
+agent_ai_terms	MiniMax	minimax	500
+agent_ai_terms	MiniMax Agent	minimaxagent	500
+agent_ai_terms	MiniMax Music	minimaxmusic	500
+agent_ai_terms	MiniMax Speech	minimaxspeech	500
+agent_ai_terms	Ministral	ministral	500
+agent_ai_terms	Mistral AI	mistralai	500
+agent_ai_terms	Mistral Large	mistrallarge	500
+agent_ai_terms	Mistral Medium	mistralmedium	500
+agent_ai_terms	Mistral Small	mistralsmall	500
+agent_ai_terms	Mistral Vibe	mistralvibe	500
+agent_ai_terms	Mixtral	mixtral	500
+agent_ai_terms	MLX	mlx	500
+agent_ai_terms	ModelArts	modelarts	500
+agent_ai_terms	ModelBest	modelbest	500
+agent_ai_terms	Model Context Protocol	modelcontextprotocol	500
+agent_ai_terms	ModelScope	modelscope	500
+agent_ai_terms	Model Studio	modelstudio	500
+agent_ai_terms	Moonshot AI	moonshotai	500
+agent_ai_terms	multi-agent system	multiagentsystem	500
+agent_ai_terms	multimodal AI	multimodalai	500
+agent_ai_terms	Muse Code	musecode	500
+agent_ai_terms	Muse Glimmer	museglimmer	500
+agent_ai_terms	Muse Spark	musespark	500
+agent_ai_terms	Muse Wonder	musewonder	500
+agent_ai_terms	Nemotron	nemotron	500
+agent_ai_terms	NotebookLM	notebooklm	500
+agent_ai_terms	Notion AI	notionai	500
+agent_ai_terms	Notta	notta	500
+agent_ai_terms	NVIDIA Dynamo	nvidiadynamo	500
+agent_ai_terms	NVIDIA NIM	nvidianim	500
+agent_ai_terms	Obsidian	obsidian	500
+agent_ai_terms	Ollama	ollama	500
+agent_ai_terms	Olmo	olmo	500
+agent_ai_terms	ONNX Runtime	onnxruntime	500
+agent_ai_terms	OpenAI Agents SDK	openaiagentssdk	500
+agent_ai_terms	OpenBMB	openbmb	500
+agent_ai_terms	OpenClaw	openclaw	500
+agent_ai_terms	OpenCode	opencode	500
+agent_ai_terms	OpenHands	openhands	500
+agent_ai_terms	OpenRouter	openrouter	500
+agent_ai_terms	OpenTelemetry	opentelemetry	500
+agent_ai_terms	Open WebUI	openwebui	500
+agent_ai_terms	OpusClip	opusclip	500
+agent_ai_terms	Otter.ai	otterai	500
+agent_ai_terms	PaddlePaddle	paddlepaddle	500
+agent_ai_terms	PagedAttention	pagedattention	500
+agent_ai_terms	PaliGemma	paligemma	500
+agent_ai_terms	Perplexity	perplexity	500
+agent_ai_terms	Pinecone	pinecone	500
+agent_ai_terms	Pixtral	pixtral	500
+agent_ai_terms	PixVerse	pixverse	500
+agent_ai_terms	prompt caching	promptcaching	500
+agent_ai_terms	prompt engineering	promptengineering	500
+agent_ai_terms	Promptfoo	promptfoo	500
+agent_ai_terms	Pydantic AI	pydanticai	500
+agent_ai_terms	PyTorch	pytorch	500
+agent_ai_terms	Qdrant	qdrant	500
+agent_ai_terms	QLoRA	qlora	500
+agent_ai_terms	Qoder	qoder	500
+agent_ai_terms	Qoder CLI	qodercli	500
+agent_ai_terms	QoderWake	qoderwake	500
+agent_ai_terms	QoderWork	qoderwork	500
+agent_ai_terms	Qodo	qodo	500
+agent_ai_terms	Qwen	qwen	500
+agent_ai_terms	Qwen Code	qwencode	500
+agent_ai_terms	Qwen-Image	qwenimage	500
+agent_ai_terms	Qwen-Plus	qwenplus	500
+agent_ai_terms	RAG	rag	500
+agent_ai_terms	RAGFlow	ragflow	500
+agent_ai_terms	Raycast	raycast	500
+agent_ai_terms	Readwise Reader	readwisereader	500
+agent_ai_terms	Replit	replit	500
+agent_ai_terms	Replit Agent	replitagent	500
+agent_ai_terms	RLHF	rlhf	500
+agent_ai_terms	Roo Code	roocode	500
+agent_ai_terms	Roomote	roomote	500
+agent_ai_terms	Rork	rork	500
+agent_ai_terms	Seedream	seedream	500
+agent_ai_terms	Semantic Kernel	semantickernel	500
+agent_ai_terms	SenseChat	sensechat	500
+agent_ai_terms	SenseCore	sensecore	500
+agent_ai_terms	SenseNova	sensenova	500
+agent_ai_terms	SGLang	sglang	500
+agent_ai_terms	SiliconFlow	siliconflow	500
+agent_ai_terms	SillyTavern	sillytavern	500
+agent_ai_terms	SkyReels	skyreels	500
+agent_ai_terms	Skywork	skywork	500
+agent_ai_terms	smolagents	smolagents	500
+agent_ai_terms	Sora	sora	500
+agent_ai_terms	Sourcegraph	sourcegraph	500
+agent_ai_terms	Stable Audio	stableaudio	500
+agent_ai_terms	Stable Diffusion	stablediffusion	500
+agent_ai_terms	StepFun	stepfun	500
+agent_ai_terms	Superwhisper	superwhisper	500
+agent_ai_terms	Synthesia	synthesia	500
+agent_ai_terms	Tencent Yuanbao	tencentyuanbao	500
+agent_ai_terms	TensorRT-LLM	tensorrtllm	500
+agent_ai_terms	TimesFM	timesfm	500
+agent_ai_terms	Together AI	togetherai	500
+agent_ai_terms	tool calling	toolcalling	500
+agent_ai_terms	TRAE	trae	500
+agent_ai_terms	TraeCode	traecode	500
+agent_ai_terms	TRAE SOLO	traesolo	500
+agent_ai_terms	TraeWork	traework	500
+agent_ai_terms	Transformers	transformers	500
+agent_ai_terms	TRL	trl	500
+agent_ai_terms	Typeless	typeless	500
+agent_ai_terms	Udio	udio	500
+agent_ai_terms	Unsloth	unsloth	500
+agent_ai_terms	vector database	vectordatabase	500
+agent_ai_terms	Veo	veo	500
+agent_ai_terms	vibe coding	vibecoding	500
+agent_ai_terms	Vidu	vidu	500
+agent_ai_terms	vLLM	vllm	500
+agent_ai_terms	Voxtral	voxtral	500
+agent_ai_terms	Weaviate	weaviate	500
+agent_ai_terms	Whisper	whisper	500
+agent_ai_terms	Windsurf	windsurf	500
+agent_ai_terms	Wispr Flow	wisprflow	500
+agent_ai_terms	WorkBuddy	workbuddy	500
+agent_ai_terms	Workers AI	workersai	500
+agent_ai_terms	xAI	xai	500
+agent_ai_terms	Yi-Lightning	yilightning	500
+agent_ai_terms	Zencoder	zencoder	500
+agent_pack_terms	Abaqus	abaqus	400
+agent_pack_terms	ABViewer	abviewer	400
+agent_pack_terms	ACIS	acis	400
+agent_pack_terms	AEDT	aedt	400
+agent_pack_terms	Alembic	alembic	400
+agent_pack_terms	Alibre Design	alibredesign	400
+agent_pack_terms	Allplan	allplan	400
+agent_pack_terms	Altair SimSolid	altairsimsolid	400
+agent_pack_terms	Altium Designer	altiumdesigner	400
+agent_pack_terms	AMOLED	amoled	400
+agent_pack_terms	Ansys	ansys	400
+agent_pack_terms	APQP	apqp	400
+agent_pack_terms	Archicad	archicad	400
+agent_pack_terms	ArtiosCAD	artioscad	400
+agent_pack_terms	ASIC	asic	400
+agent_pack_terms	AS-Interface	asinterface	400
+agent_pack_terms	ASME	asme	400
+agent_pack_terms	ASTM	astm	400
+agent_pack_terms	AutoCAD	autocad	400
+agent_pack_terms	AutoCAD Architecture	autocadarchitecture	400
+agent_pack_terms	AutoCAD Electrical	autocadelectrical	400
+agent_pack_terms	Autodesk Alias	autodeskalias	400
+agent_pack_terms	Autodesk Fusion	autodeskfusion	400
+agent_pack_terms	Autodesk Inventor	autodeskinventor	400
+agent_pack_terms	Autodesk Maya	autodeskmaya	400
+agent_pack_terms	Autodesk Navisworks	autodesknavisworks	400
+agent_pack_terms	Autodesk Revit	autodeskrevit	400
+agent_pack_terms	Autodesk Vault	autodeskvault	400
+agent_pack_terms	AutoLISP	autolisp	400
+agent_pack_terms	Automotive SPICE	automotivespice	400
+agent_pack_terms	AutoTURN	autoturn	400
+agent_pack_terms	AWG	awg	400
+agent_pack_terms	BASIC	basic	400
+agent_pack_terms	Beijer Electronics	beijerelectronics	400
+agent_pack_terms	Bentley Systems	bentleysystems	400
+agent_pack_terms	BIM	bim	400
+agent_pack_terms	Blender	blender	400
+agent_pack_terms	Blender CAM	blendercam	400
+agent_pack_terms	BOM	bom	400
+agent_pack_terms	B-Rep	brep	400
+agent_pack_terms	BREP	brep	400
+agent_pack_terms	BrickLink Studio	bricklinkstudio	400
+agent_pack_terms	BricsCAD	bricscad	400
+agent_pack_terms	BricsCAD Shape	bricscadshape	400
+agent_pack_terms	Bricsys	bricsys	400
+agent_pack_terms	BRL-CAD	brlcad	400
+agent_pack_terms	Bureau Veritas	bureauveritas	400
+agent_pack_terms	CAD	cad	400
+agent_pack_terms	CAD/CAM	cadcam	400
+agent_pack_terms	CADSoftTools	cadsofttools	400
+agent_pack_terms	CADSTAR	cadstar	400
+agent_pack_terms	cadwork	cadwork	400
+agent_pack_terms	CAM	cam	400
+agent_pack_terms	CAMWorks	camworks	400
+agent_pack_terms	CAN bus	canbus	400
+agent_pack_terms	CAN FD	canfd	400
+agent_pack_terms	Carbide Create	carbidecreate	400
+agent_pack_terms	CATDrawing	catdrawing	400
+agent_pack_terms	CATPart	catpart	400
+agent_pack_terms	CATProcess	catprocess	400
+agent_pack_terms	CATProduct	catproduct	400
+agent_pack_terms	CFD	cfd	400
+agent_pack_terms	Cimatron	cimatron	400
+agent_pack_terms	CircuitMaker	circuitmaker	400
+agent_pack_terms	CityEngine	cityengine	400
+agent_pack_terms	Clearpath Robotics	clearpathrobotics	400
+agent_pack_terms	CMOS	cmos	400
+agent_pack_terms	CNC	cnc	400
+agent_pack_terms	CoaXPress	coaxpress	400
+agent_pack_terms	COBie	cobie	400
+agent_pack_terms	CODESYS	codesys	400
+agent_pack_terms	COLLADA	collada	400
+agent_pack_terms	Comau	comau	400
+agent_pack_terms	COMOS	comos	400
+agent_pack_terms	CompactRIO	compactrio	400
+agent_pack_terms	COMSOL Multiphysics	comsolmultiphysics	400
+agent_pack_terms	ControlNet	controlnet	400
+agent_pack_terms	CPU	cpu	400
+agent_pack_terms	Creo Elements/View	creoelementsview	400
+agent_pack_terms	Creo Parametric	creoparametric	400
+agent_pack_terms	Critical Manufacturing	criticalmanufacturing	400
+agent_pack_terms	DataCAD	datacad	400
+agent_pack_terms	DELMIA	delmia	400
+agent_pack_terms	DesignSpark Mechanical	designsparkmechanical	400
+agent_pack_terms	DesignSpark PCB	designsparkpcb	400
+agent_pack_terms	DeviceNet	devicenet	400
+agent_pack_terms	DFMEA	dfmea	400
+agent_pack_terms	DGN	dgn	400
+agent_pack_terms	Digital Project	digitalproject	400
+agent_pack_terms	DIN	din	400
+agent_pack_terms	DipTrace	diptrace	400
+agent_pack_terms	DirectLOGIC	directlogic	400
+agent_pack_terms	DirectNET Protocol	directnetprotocol	400
+agent_pack_terms	DisplayPort	displayport	400
+agent_pack_terms	DRAM	dram	400
+agent_pack_terms	DriveWorks	driveworks	400
+agent_pack_terms	DWG	dwg	400
+agent_pack_terms	DXF	dxf	400
+agent_pack_terms	EAGLE	eagle	400
+agent_pack_terms	EasyEDA	easyeda	400
+agent_pack_terms	EEPROM	eeprom	400
+agent_pack_terms	EEVEE	eevee	400
+agent_pack_terms	EFQM	efqm	400
+agent_pack_terms	ERP	erp	400
+agent_pack_terms	ESD	esd	400
+agent_pack_terms	EtherCAT	ethercat	400
+agent_pack_terms	Ethernet APL	ethernetapl	400
+agent_pack_terms	EtherNet/IP	ethernetip	400
+agent_pack_terms	Ethernet Powerlink	ethernetpowerlink	400
+agent_pack_terms	FANUC	fanuc	400
+agent_pack_terms	FBX	fbx	400
+agent_pack_terms	FCStd	fcstd	400
+agent_pack_terms	FEATool Multiphysics	featoolmultiphysics	400
+agent_pack_terms	Femap	femap	400
+agent_pack_terms	FIFO	fifo	400
+agent_pack_terms	FINE MEP	finemep	400
+agent_pack_terms	FireWire	firewire	400
+agent_pack_terms	FlexCAN	flexcan	400
+agent_pack_terms	FMEA	fmea	400
+agent_pack_terms	FMECA	fmeca	400
+agent_pack_terms	Foundation Fieldbus	foundationfieldbus	400
+agent_pack_terms	FPGA	fpga	400
+agent_pack_terms	FreeCAD	freecad	400
+agent_pack_terms	G-code	gcode	400
+agent_pack_terms	GCODE	gcode	400
+agent_pack_terms	GD&T	gdt	400
+agent_pack_terms	GLB	glb	400
+agent_pack_terms	Glodon	glodon	400
+agent_pack_terms	glTF	gltf	400
+agent_pack_terms	Gmsh	gmsh	400
+agent_pack_terms	GPU	gpu	400
+agent_pack_terms	GRAITEC	graitec	400
+agent_pack_terms	Graphisoft	graphisoft	400
+agent_pack_terms	GstarCAD	gstarcad	400
+agent_pack_terms	HDMI	hdmi	400
+agent_pack_terms	HDPE	hdpe	400
+agent_pack_terms	HiCAD	hicad	400
+agent_pack_terms	HMI	hmi	400
+agent_pack_terms	Houdini Karma	houdinikarma	400
+agent_pack_terms	HPGL	hpgl	400
+agent_pack_terms	ICEM Surf	icemsurf	400
+agent_pack_terms	IEEE	ieee	400
+agent_pack_terms	IFC	ifc	400
+agent_pack_terms	IGBT	igbt	400
+agent_pack_terms	IGES	iges	400
+agent_pack_terms	Industrial Ethernet	industrialethernet	400
+agent_pack_terms	Inovance	inovance	400
+agent_pack_terms	IntelliCAD	intellicad	400
+agent_pack_terms	IO-Link	iolink	400
+agent_pack_terms	IRONCAD	ironcad	400
+agent_pack_terms	ISO	iso	400
+agent_pack_terms	JIS	jis	400
+agent_pack_terms	JPEG	jpeg	400
+agent_pack_terms	JTAG	jtag	400
+agent_pack_terms	KeyCreator	keycreator	400
+agent_pack_terms	KiCad	kicad	400
+agent_pack_terms	LeoCAD	leocad	400
+agent_pack_terms	LibreCAD	librecad	400
+agent_pack_terms	LightWave	lightwave	400
+agent_pack_terms	LIMS	lims	400
+agent_pack_terms	LinuxCNC	linuxcnc	400
+agent_pack_terms	MapleSim	maplesim	400
+agent_pack_terms	Marmoset Toolbag	marmosettoolbag	400
+agent_pack_terms	MAVLink	mavlink	400
+agent_pack_terms	MazaCAM	mazacam	400
+agent_pack_terms	MECHATROLINK	mechatrolink	400
+agent_pack_terms	MelsecNet	melsecnet	400
+agent_pack_terms	MEMS	mems	400
+agent_pack_terms	MES	mes	400
+agent_pack_terms	Metasequoia	metasequoia	400
+agent_pack_terms	MicroStation	microstation	400
+agent_pack_terms	MindSphere	mindsphere	400
+agent_pack_terms	Mitsubishi Electric	mitsubishielectric	400
+agent_pack_terms	Modbus	modbus	400
+agent_pack_terms	ModelSim	modelsim	400
+agent_pack_terms	Moldflow	moldflow	400
+agent_pack_terms	MOSFET	mosfet	400
+agent_pack_terms	Motor-CAD	motorcad	400
+agent_pack_terms	MQTT	mqtt	400
+agent_pack_terms	MSC Software	mscsoftware	400
+agent_pack_terms	MTConnect	mtconnect	400
+agent_pack_terms	Multi-Point Interface	multipointinterface	400
+agent_pack_terms	Nastran	nastran	400
+agent_pack_terms	Navisworks	navisworks	400
+agent_pack_terms	NURBS	nurbs	400
+agent_pack_terms	OBJ	obj	400
+agent_pack_terms	Octane Render	octanerender	400
+agent_pack_terms	OLED	oled	400
+agent_pack_terms	Omron	omron	400
+agent_pack_terms	Onshape	onshape	400
+agent_pack_terms	OPC UA	opcua	400
+agent_pack_terms	OpenBuilds CAM	openbuildscam	400
+agent_pack_terms	OpenFlight	openflight	400
+agent_pack_terms	OpenFOAM	openfoam	400
+agent_pack_terms	OpenSafety	opensafety	400
+agent_pack_terms	OpenSCAD	openscad	400
+agent_pack_terms	OpenStudio	openstudio	400
+agent_pack_terms	OpenVSP	openvsp	400
+agent_pack_terms	OptiSLang	optislang	400
+agent_pack_terms	OrCAD	orcad	400
+agent_pack_terms	PackML	packml	400
+agent_pack_terms	Panel PC	panelpc	400
+agent_pack_terms	Parasolid	parasolid	400
+agent_pack_terms	PCB	pcb	400
+agent_pack_terms	PCIe	pcie	400
+agent_pack_terms	PDCA	pdca	400
+agent_pack_terms	PDF	pdf	400
+agent_pack_terms	PDM	pdm	400
+agent_pack_terms	PDMS	pdms	400
+agent_pack_terms	PFMEA	pfmea	400
+agent_pack_terms	PID	pid	400
+agent_pack_terms	PID controller	pidcontroller	400
+agent_pack_terms	Plant Simulation	plantsimulation	400
+agent_pack_terms	PLC	plc	400
+agent_pack_terms	PLCopen	plcopen	400
+agent_pack_terms	PLM	plm	400
+agent_pack_terms	PNG	png	400
+agent_pack_terms	POV-Ray	povray	400
+agent_pack_terms	PPAP	ppap	400
+agent_pack_terms	PROFIBUS	profibus	400
+agent_pack_terms	PROFINET	profinet	400
+agent_pack_terms	PROFIsafe	profisafe	400
+agent_pack_terms	PTC Creo	ptccreo	400
+agent_pack_terms	PTFE	ptfe	400
+agent_pack_terms	Pulsonix	pulsonix	400
+agent_pack_terms	PunchCAD	punchcad	400
+agent_pack_terms	PVC	pvc	400
+agent_pack_terms	PWM	pwm	400
+agent_pack_terms	QA/QC	qaqc	400
+agent_pack_terms	QCAD	qcad	400
+agent_pack_terms	RapidIO	rapidio	400
+agent_pack_terms	RAPIEnet	rapienet	400
+agent_pack_terms	Redshift	redshift	400
+agent_pack_terms	Reis Robotics	reisrobotics	400
+agent_pack_terms	RenderMan	renderman	400
+agent_pack_terms	RFA	rfa	400
+agent_pack_terms	RFEM	rfem	400
+agent_pack_terms	RFID	rfid	400
+agent_pack_terms	RhinoCAM	rhinocam	400
+agent_pack_terms	RISC	risc	400
+agent_pack_terms	RTOS	rtos	400
+agent_pack_terms	RVT	rvt	400
+agent_pack_terms	SafetyBUS p	safetybusp	400
+agent_pack_terms	SafetyNET p	safetynetp	400
+agent_pack_terms	SCADA	scada	400
+agent_pack_terms	SCSI	scsi	400
+agent_pack_terms	SDC Verifier	sdcverifier	400
+agent_pack_terms	SDRAM	sdram	400
+agent_pack_terms	SECS-II	secsii	400
+agent_pack_terms	SERCOS interface	sercosinterface	400
+agent_pack_terms	Serial FPDP	serialfpdp	400
+agent_pack_terms	ShapeManager	shapemanager	400
+agent_pack_terms	Siemens NX	siemensnx	400
+agent_pack_terms	SIMATIC	simatic	400
+agent_pack_terms	Simcenter Amesim	simcenteramesim	400
+agent_pack_terms	SimScale	simscale	400
+agent_pack_terms	SimulationX	simulationx	400
+agent_pack_terms	Simulink	simulink	400
+agent_pack_terms	Six Sigma	sixsigma	400
+agent_pack_terms	SketchUp	sketchup	400
+agent_pack_terms	SketchUp Desktop	sketchupdesktop	400
+agent_pack_terms	SKP	skp	400
+agent_pack_terms	SLDASM	sldasm	400
+agent_pack_terms	SLDDRW	slddrw	400
+agent_pack_terms	SLDPRT	sldprt	400
+agent_pack_terms	SmartCAM	smartcam	400
+agent_pack_terms	SMT	smt	400
+agent_pack_terms	SolidCAM	solidcam	400
+agent_pack_terms	Solid Edge	solidedge	400
+agent_pack_terms	SOLIDWORKS	solidworks	400
+agent_pack_terms	SolveSpace	solvespace	400
+agent_pack_terms	SpaceClaim	spaceclaim	400
+agent_pack_terms	SPC	spc	400
+agent_pack_terms	SprutCAM	sprutcam	400
+agent_pack_terms	SRAM	sram	400
+agent_pack_terms	STEP	step	400
+agent_pack_terms	STEP-NC	stepnc	400
+agent_pack_terms	STL	stl	400
+agent_pack_terms	Structured text	structuredtext	400
+agent_pack_terms	Substance Designer	substancedesigner	400
+agent_pack_terms	SVG	svg	400
+agent_pack_terms	SynqNet	synqnet	400
+agent_pack_terms	Tebis	tebis	400
+agent_pack_terms	Tecnomatix	tecnomatix	400
+agent_pack_terms	Tekla Structures	teklastructures	400
+agent_pack_terms	T-FLEX CAD	tflexcad	400
+agent_pack_terms	TIFF	tiff	400
+agent_pack_terms	Tinkercad	tinkercad	400
+agent_pack_terms	TopSolid	topsolid	400
+agent_pack_terms	Triconex	triconex	400
+agent_pack_terms	TTEthernet	ttethernet	400
+agent_pack_terms	TTP/A	ttpa	400
+agent_pack_terms	TurboCAD	turbocad	400
+agent_pack_terms	UART	uart	400
+agent_pack_terms	UBtech Robotics	ubtechrobotics	400
+agent_pack_terms	UNEF	unef	400
+agent_pack_terms	UniPro	unipro	400
+agent_pack_terms	Universal Robots	universalrobots	400
+agent_pack_terms	USD	usd	400
+agent_pack_terms	USDA	usda	400
+agent_pack_terms	USDC	usdc	400
+agent_pack_terms	USDZ	usdz	400
+agent_pack_terms	VariCAD	varicad	400
+agent_pack_terms	V-block	vblock	400
+agent_pack_terms	Vectorworks	vectorworks	400
+agent_pack_terms	Visi CAD/CAM	visicadcam	400
+agent_pack_terms	VisualARQ	visualarq	400
+agent_pack_terms	VisualCAD/CAM	visualcadcam	400
+agent_pack_terms	Vivado	vivado	400
+agent_pack_terms	VLSI	vlsi	400
+agent_pack_terms	VoluMill	volumill	400
+agent_pack_terms	V-Ray	vray	400
+agent_pack_terms	VRML	vrml	400
+agent_pack_terms	WLAN	wlan	400
+agent_pack_terms	WorkNC	worknc	400
+agent_pack_terms	WorkPLAN	workplan	400
+agent_pack_terms	Xpedition	xpedition	400
+agent_pack_terms	ZBrush	zbrush	400
+agent_pack_terms	ZWCAD	zwcad	400

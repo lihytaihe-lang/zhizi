@@ -210,6 +210,7 @@ verify_exact_inventory \
   Contents/Resources/Rime/agent_pack_poetry.dict.yaml \
   Contents/Resources/Rime/agent_pack_cad.dict.yaml \
   Contents/Resources/Rime/agent_pack_industry.dict.yaml \
+  Contents/Resources/Rime/agent_owner_words.dict.yaml \
   Contents/Resources/Rime/agent_exact_readings.tsv \
   Contents/Resources/Rime/agent_pinyin.dict.yaml \
   Contents/Resources/Rime/agent_pinyin.schema.yaml \

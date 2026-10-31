@@ -131,20 +131,12 @@ PY
 # from --no-default-features builds. The invite env-var name is NOT a marker:
 # layer2.rs embeds the project-terms dictionary, which carries that name as an
 # ordinary term row in every build.
-FORBIDDEN_STRINGS=('zhizi.ihongui' 'test-upload' 'personalProfileV1Seeded')
+source "$ROOT_DIR/script/public_mac_manager_checks.sh"
 while IFS= read -r executable; do
-  for pattern in "${FORBIDDEN_STRINGS[@]}"; do
-    # No grep -q here: with pipefail, grep -q's early exit SIGPIPEs strings and
-    # turns a hit into a non-zero pipeline status.
-    if strings "$executable" | grep -F -- "$pattern" >/dev/null; then
-      echo "selfcheck FAILED: '$pattern' found in $executable" >&2
-      echo "the manager looks like a default-features (test-upload) build; rebuild with:" >&2
-      echo "  ZHIZI_MANAGER_CARGO_FLAGS=--no-default-features script/build_manager.sh" >&2
-      exit 1
-    fi
-  done
+  assert_manager_binary_clean "$executable" || exit 1
+  assert_manager_has_legacy_cleanup "$executable" || exit 1
 done < <(find "$APP/Contents/MacOS" -type f | LC_ALL=C sort)
-echo "selfcheck manager binaries clean: no ${FORBIDDEN_STRINGS[*]}"
+echo "selfcheck manager binaries clean: no ${FORBIDDEN_STRINGS[*]}; legacy upload-task cleanup present"
 
 sign() {
   if [[ "$SIGN_IDENTITY" == "-" ]]; then

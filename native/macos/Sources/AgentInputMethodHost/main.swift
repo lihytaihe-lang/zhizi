@@ -7,6 +7,9 @@ if ProcessInfo.processInfo.environment["AIM_COLD_START_PROBE_DIR"] != nil {
     setenv("AIM_COLD_START_PROCESS_ENTRY_NS", String(processEntryNanoseconds), 1)
 }
 _ = umask(S_IRWXG | S_IRWXO)
+if let status = LearningMigrationProcess.workerExitStatus(arguments: CommandLine.arguments) {
+    exit(status)
+}
 let app = NSApplication.shared
 let delegate = InputMethodAppDelegate()
 app.delegate = delegate

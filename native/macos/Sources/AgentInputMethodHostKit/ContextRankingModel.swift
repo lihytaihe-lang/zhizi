@@ -2,6 +2,115 @@ import AgentIMECoreBridge
 import CoreML
 import Foundation
 
+struct PersonalContextModelSelection {
+    static let defaultsKey = "personalModelEnabled"
+    private static let modelName = "zhizi30m_v2.mlmodelc"
+    private static let weights = "zhizi30m_v2.mlmodelc/weights/weight.bin"
+    let directory: URL
+    let reason: String
+
+    static func isEnabled(defaults: UserDefaults) -> Bool {
+        defaults.object(forKey: defaultsKey) == nil || defaults.bool(forKey: defaultsKey)
+    }
+
+    static func personalDirectory(userDirectory: URL) -> URL {
+        userDirectory.deletingLastPathComponent().appendingPathComponent("PersonalModel", isDirectory: true)
+    }
+
+    /// Run on the loader queue: hashing the compiled weights must never block a key callback.
+    static func resolve(baseDirectory: URL, personalDirectory: URL, enabled: Bool) -> Self {
+        guard enabled else { return Self(directory: baseDirectory, reason: "disabled") }
+        guard FileManager.default.fileExists(atPath: personalDirectory.path) else {
+            return Self(directory: baseDirectory, reason: "not-installed")
+        }
+        do {
+            try requireDirectory(personalDirectory)
+            try requireDirectory(personalDirectory.appendingPathComponent(modelName))
+            let manifestURL = personalDirectory.appendingPathComponent("personal_model.json")
+            _ = try RuntimeArtifactHasher.fileChecksum(at: manifestURL)
+            let manifest = try JSONDecoder().decode(Manifest.self, from: Data(contentsOf: manifestURL))
+            let date = ISO8601DateFormatter()
+            date.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            guard manifest.strength.isFinite, (0...1).contains(manifest.strength),
+                  date.date(from: manifest.createdAt) != nil || ISO8601DateFormatter().date(from: manifest.createdAt) != nil,
+                  validDigest(manifest.baseWeightsSha256),
+                  manifest.files["itos.json"] != nil, manifest.files[weights] != nil else {
+                throw ValidationError.metadata
+            }
+            var files = Set<String>()
+            var enumerationFailed = false
+            let canonicalPersonal = personalDirectory.standardizedFileURL.resolvingSymlinksInPath()
+            guard let enumerator = FileManager.default.enumerator(at: canonicalPersonal,
+                includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey, .isSymbolicLinkKey],
+                errorHandler: { _, _ in enumerationFailed = true; return false }) else {
+                throw ValidationError.manifest
+            }
+            for case let file as URL in enumerator {
+                let values = try file.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey, .isSymbolicLinkKey])
+                guard values.isSymbolicLink != true else { throw ValidationError.manifest }
+                if values.isDirectory == true { continue }
+                guard values.isRegularFile == true else { throw ValidationError.manifest }
+                let canonicalFile = file.standardizedFileURL.resolvingSymlinksInPath()
+                let prefix = canonicalPersonal.path + "/"
+                guard canonicalFile.path.hasPrefix(prefix) else { throw ValidationError.manifest }
+                let relative = String(canonicalFile.path.dropFirst(prefix.count))
+                if relative != "personal_model.json" { files.insert(relative) }
+            }
+            guard !enumerationFailed, files == Set(manifest.files.keys) else { throw ValidationError.fileList }
+            for (name, digest) in manifest.files {
+                let parts = name.split(separator: "/", omittingEmptySubsequences: false)
+                guard !parts.contains(where: { $0.isEmpty || $0 == "." || $0 == ".." }),
+                      name == "itos.json" || name.hasPrefix(modelName + "/"), validDigest(digest),
+                      try RuntimeArtifactHasher.fileChecksum(at: personalDirectory.appendingPathComponent(name)) == digest else {
+                    throw ValidationError.checksum
+                }
+            }
+            guard try Data(contentsOf: personalDirectory.appendingPathComponent("itos.json"))
+                == Data(contentsOf: baseDirectory.appendingPathComponent("itos.json")) else {
+                throw ValidationError.vocabulary
+            }
+            guard try RuntimeArtifactHasher.fileChecksum(at: baseDirectory.appendingPathComponent(weights))
+                == manifest.baseWeightsSha256 else { throw ValidationError.baseWeights }
+            return Self(directory: personalDirectory, reason: "verified")
+        } catch let error as ValidationError {
+            return Self(directory: baseDirectory, reason: error.rawValue)
+        } catch {
+            return Self(directory: baseDirectory, reason: "invalid")
+        }
+    }
+
+    // Atomic installation changes the directory identity. Base updates and manifest edits
+    // also invalidate the cached decision without rehashing large weights on every key.
+    static func fingerprint(baseDirectory: URL, personalDirectory: URL) -> String {
+        [personalDirectory, personalDirectory.appendingPathComponent("personal_model.json"),
+         baseDirectory.appendingPathComponent("itos.json"), baseDirectory.appendingPathComponent(weights)].map { url in
+            guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path) else { return "missing" }
+            let modified = (attributes[.modificationDate] as? Date)?.timeIntervalSinceReferenceDate
+            return "\(String(describing: attributes[.systemFileNumber])):\(String(describing: attributes[.size])):\(String(describing: modified))"
+        }.joined(separator: "|")
+    }
+
+    private static func requireDirectory(_ directory: URL) throws {
+        let values = try directory.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+        guard values.isDirectory == true, values.isSymbolicLink != true else { throw ValidationError.manifest }
+    }
+
+    private static func validDigest(_ value: String) -> Bool {
+        value.utf8.count == 64 && value.utf8.allSatisfy { (48...57).contains($0) || (97...102).contains($0) }
+    }
+
+    private struct Manifest: Decodable {
+        let baseWeightsSha256: String
+        let strength: Double
+        let createdAt: String
+        let files: [String: String]
+    }
+
+    private enum ValidationError: String, Error {
+        case manifest, metadata, checksum, fileList = "file-list", vocabulary, baseWeights = "base-weights"
+    }
+}
+
 public enum ContextModelOutcome: String, Codable, Sendable {
     case disabled, unavailable, noGroup = "no_group", timeout, suspended, error, unchanged, reordered
     /// C3: the model led with a whole-reading composition the decoder did not show first.
@@ -188,31 +297,169 @@ public final class ContextRankingScorer: @unchecked Sendable {
     }
 }
 
+/// In-flight bookkeeping for the loader's asynchronous loads, so exit-bound
+/// callers can drain an unfinished load (its ANE compilation) before the
+/// process teardown starts dismantling global state underneath it. The group
+/// is the only state: `wait` blocks on it without ever holding a caller lock.
+final class ModelLoadDrain: @unchecked Sendable {
+    private let group = DispatchGroup()
+
+    /// Registers one load as in flight; call before the load's work starts.
+    func begin() { group.enter() }
+
+    /// Marks one load finished; call on the failure path too.
+    func end() { group.leave() }
+
+    /// True when nothing is in flight or every in-flight load ended before the
+    /// timeout; false when the timeout expired first.
+    func wait(timeout: TimeInterval) -> Bool {
+        group.wait(timeout: .now() + timeout) == .success
+    }
+}
+
 /// Process-shared asynchronous load and warm-up. No model loading or first
 /// prediction is performed on the IMK callback lane.
 final class ContextRankingModelLoader: @unchecked Sendable {
     static let shared = ContextRankingModelLoader()
+    /// A failed load is tried again once this long has passed, on the next key that wants the model.
+    /// 2026-10-28: the system relaunched the IME while an install was still copying the bundle; the
+    /// one load found no model and, never retried, left the owner without it until a restart.
+    static let retryAfterFailureNanoseconds: UInt64 = 10_000_000_000
     private let lock = NSLock()
-    private var attempted = Set<String>()
+    private var loading = Set<String>()
+    private var failedAt: [String: UInt64] = [:]
     private var models: [String: ContextRankingScorer] = [:]
     private let queue = DispatchQueue(label: "com.agentinputlayer.context-model.load", qos: .userInitiated)
+    private let drain = ModelLoadDrain()
+    private struct SelectionRequest: Equatable {
+        let base: URL
+        let personal: URL
+        let enabled: Bool
+        let fingerprint: String
 
-    func prepare(directory: URL) {
+        var filesUnchanged: Bool {
+            !enabled || fingerprint == PersonalContextModelSelection.fingerprint(baseDirectory: base, personalDirectory: personal)
+        }
+    }
+    private var selectionRequest: SelectionRequest?
+    private var selectionDirectory: URL?
+    private var selectionGeneration = 0
+    var diagnostic: @Sendable (String) -> Void = { DiagnosticsRecorder.shared.recordSystem(eventKind: $0) }
+    var loadScorer: @Sendable (URL) throws -> ContextRankingScorer = { directory in
+        let model = try ContextRankingScorer(directory: directory)
+        for _ in 0..<3 { _ = try model.score(context: "", candidates: ["在", "再"]) }
+        return model
+    }
+
+    /// Returns the last verified directory while validation/loading runs asynchronously.
+    /// A preference change takes effect at this next request, across all sessions.
+    func directory(baseDirectory: URL, personalDirectory: URL, enabled: Bool) -> URL {
+        let request = SelectionRequest(base: baseDirectory, personal: personalDirectory, enabled: enabled,
+            fingerprint: enabled ? PersonalContextModelSelection.fingerprint(baseDirectory: baseDirectory, personalDirectory: personalDirectory) : "")
         lock.lock()
-        let fresh = attempted.insert(directory.path).inserted
+        guard request != selectionRequest else {
+            let directory = selectionDirectory ?? baseDirectory
+            lock.unlock()
+            return directory
+        }
+        selectionRequest = request
+        selectionGeneration += 1
+        let generation = selectionGeneration
+        failedAt[personalDirectory.path] = nil
+        selectionDirectory = baseDirectory
+        retainModelLocked(directory: baseDirectory)
+        drain.begin()
         lock.unlock()
-        guard fresh else { return }
         queue.async { [self] in
-            do {
-                let model = try ContextRankingScorer(directory: directory)
-                for _ in 0..<3 { _ = try model.score(context: "", candidates: ["在", "再"]) }
-                lock.lock()
-                models[directory.path] = model
+            defer { drain.end() }
+            var selection = request.filesUnchanged
+                ? PersonalContextModelSelection.resolve(baseDirectory: baseDirectory, personalDirectory: personalDirectory, enabled: enabled)
+                : PersonalContextModelSelection(directory: baseDirectory, reason: "changed")
+            if !request.filesUnchanged { selection = PersonalContextModelSelection(directory: baseDirectory, reason: "changed") }
+            lock.lock()
+            guard generation == selectionGeneration else { lock.unlock(); return }
+            if selection.reason == "changed" { selectionRequest = nil; selectionGeneration += 1 }
+            selectionDirectory = selection.directory
+            retainModelLocked(directory: selection.directory)
+            lock.unlock()
+            let model = selection.directory == personalDirectory ? "personal" : "base"
+            diagnostic("context-model-selection model=\(model) reason=\(selection.reason)")
+            prepare(directory: selection.directory)
+        }
+        return baseDirectory
+    }
+
+    private func retainModelLocked(directory: URL) {
+        models = models.filter { $0.key == directory.path }
+        timer?.cancel()
+        timer = nil
+        warmDirectory = nil
+    }
+
+    /// Starts a load unless the model is loaded, loading, or failed less than
+    /// `retryAfterFailureNanoseconds` ago. Cheap enough for every key.
+    func prepare(directory: URL) {
+        let path = directory.path
+        let now = clock()
+        lock.lock()
+        let start = models[path] == nil && !loading.contains(path)
+            && failedAt[path].map { now &- $0 >= Self.retryAfterFailureNanoseconds } ?? true
+        if start {
+            loading.insert(path)
+            drain.begin()
+        }
+        let load = loadScorer
+        let generation = selectionGeneration
+        let request = selectionRequest
+        lock.unlock()
+        guard start else { return }
+        queue.async { [self] in
+            defer { drain.end() }
+            let unchangedBeforeLoad = request?.filesUnchanged ?? true
+            let model = unchangedBeforeLoad ? try? load(directory) : nil
+            let unchanged = unchangedBeforeLoad && (request?.filesUnchanged ?? true)
+            lock.lock()
+            loading.remove(path)
+            let current = generation == selectionGeneration
+                && (selectionDirectory == nil || selectionDirectory?.path == path)
+            if current, !unchanged, let request {
+                selectionRequest = nil
+                selectionGeneration += 1
+                selectionDirectory = request.base
+                retainModelLocked(directory: request.base)
                 lock.unlock()
-            } catch {
-                DiagnosticsRecorder.shared.recordSystem(eventKind: "context-model-load-unavailable")
+                diagnostic("context-model-selection model=base reason=changed")
+                prepare(directory: request.base)
+                return
+            }
+            if let model, current {
+                models[path] = model
+                failedAt[path] = nil
+            } else if model == nil, current {
+                failedAt[path] = clock()
+            }
+            let fallback = model == nil && current && selectionRequest?.personal.path == path
+                ? selectionRequest?.base : nil
+            if let fallback {
+                selectionDirectory = fallback
+                retainModelLocked(directory: fallback)
+            }
+            lock.unlock()
+            if model == nil, current {
+                let name = fallback == nil ? "base" : "personal"
+                diagnostic("context-model-load-unavailable model=\(name)")
+            }
+            if let fallback {
+                diagnostic("context-model-selection model=base reason=load-failed")
+                prepare(directory: fallback)
             }
         }
+    }
+
+    /// Waits for loads started by `prepare` that are still in flight. True when
+    /// none is pending or every one finished within `timeout`; false on timeout.
+    func waitForPendingLoad(timeout: TimeInterval) -> Bool {
+        drain.wait(timeout: timeout)
     }
 
     func ready(directory: URL) -> ContextRankingScorer? {
@@ -234,6 +481,12 @@ final class ContextRankingModelLoader: @unchecked Sendable {
     private var lastInference: UInt64 = 0
     private var lastKey: UInt64 = 0
     private var timer: DispatchSourceTimer?
+    private var warmDirectory: URL?
+    var warmingDirectoryForTesting: URL? {
+        lock.lock()
+        defer { lock.unlock() }
+        return timer == nil ? nil : warmDirectory
+    }
     var clock: () -> UInt64 = { DispatchTime.now().uptimeNanoseconds }
 
     func noteInference() {
@@ -256,25 +509,36 @@ final class ContextRankingModelLoader: @unchecked Sendable {
     func keepWarm(directory: URL) {
         let now = clock()
         lock.lock()
+        guard selectionDirectory == nil || selectionDirectory == directory else { lock.unlock(); return }
         lastKey = now
+        warmDirectory = directory
         let needsTimer = timer == nil
         lock.unlock()
         guard needsTimer else { return }
         let source = DispatchSource.makeTimerSource(queue: queue)
         source.schedule(deadline: .now(), repeating: .nanoseconds(Int(Self.pingIntervalNanoseconds)),
                         leeway: .milliseconds(100))
-        source.setEventHandler { [weak self] in self?.ping(directory: directory) }
+        source.setEventHandler { [weak self] in self?.ping() }
         lock.lock()
-        if timer == nil { timer = source; lock.unlock(); source.resume() } else { lock.unlock() }
+        if timer == nil, selectionDirectory == nil || selectionDirectory == directory {
+            timer = source
+            warmDirectory = directory
+            lock.unlock()
+            source.resume()
+        } else {
+            lock.unlock()
+            source.cancel()
+            source.resume()
+        }
     }
 
-    private func ping(directory: URL) {
+    private func ping() {
         let now = clock()
         lock.lock()
         let idle = now &- lastKey > Self.keepWarmForNanoseconds
         let recent = lastInference != 0 && now &- lastInference < Self.pingIntervalNanoseconds
-        let model = models[directory.path]
-        if idle { timer?.cancel(); timer = nil }
+        let model = warmDirectory.flatMap { models[$0.path] }
+        if idle { timer?.cancel(); timer = nil; warmDirectory = nil }
         lock.unlock()
         guard !idle, !recent, let model else { return }
         _ = try? model.score(context: "", candidates: ["在", "再"])
@@ -294,7 +558,18 @@ struct ContextRankingSession {
     private(set) var slowCalls = 0
     private(set) var errors = 0
     private(set) var consecutiveTimeouts = 0
-    private(set) var disabledForSession = false
+    /// Twenty slow warm calls in a row pause the model, then it tries again. Until
+    /// 0.3.3 the pause lasted until the IME restarted: one slow stretch (10-29, see
+    /// docs/current/evidence/zhizi-suspended/) switched the model off for days.
+    /// Each pause in a row doubles, from one minute to ten; twenty calls inside the
+    /// budget start the doubling over.
+    static let slowCallsBeforePause = 20
+    static let firstPauseNanoseconds: UInt64 = 60_000_000_000
+    static let longestPauseNanoseconds: UInt64 = 600_000_000_000
+    private(set) var pauses = 0
+    private(set) var pausedUntil: UInt64?
+    private var callsInBudget = 0
+    var suspended: Bool { pausedUntil.map { now() < $0 } ?? false }
     private(set) var lastElapsedNanoseconds: UInt64 = 0
     private(set) var lastOutcome: ContextModelOutcome = .disabled
     var now: () -> UInt64 = { DispatchTime.now().uptimeNanoseconds }
@@ -302,10 +577,14 @@ struct ContextRankingSession {
 
     /// `cold` marks a call that starts on a clocked-down engine (no inference for over a
     /// second). Its slowness says nothing about the machine, so it never moves the
-    /// consecutive counter that suspends the model for the session.
+    /// consecutive counter that pauses the model.
     mutating func order(context: String, candidates: [String], startedNanoseconds: UInt64? = nil, cold: Bool = false, homophone: [Bool]? = nil, apply: ([Int]) -> Bool = { _ in true }, score: (String, [String]) throws -> [Double]) -> [Int]? {
         guard enabled else { lastOutcome = .disabled; return nil }
-        guard !disabledForSession else { lastOutcome = .suspended; return nil }
+        if let until = pausedUntil {
+            guard now() >= until else { lastOutcome = .suspended; return nil }
+            pausedUntil = nil
+            diagnostic("context-model-session-resumed")
+        }
         guard candidates.count >= 2 else { lastOutcome = .noGroup; return nil }
         let started = startedNanoseconds ?? now()
         calls += 1
@@ -343,6 +622,8 @@ struct ContextRankingSession {
             if !cold { countSlow() }
         } else {
             consecutiveTimeouts = 0
+            callsInBudget += 1
+            if callsInBudget >= Self.slowCallsBeforePause { pauses = 0 }
         }
         guard apply(order) else { lastOutcome = .error; errors += 1; diagnostic("context-model-core-order-rejected"); return nil }
         lastOutcome = order == Array(candidates.indices) ? .unchanged : .reordered
@@ -350,11 +631,14 @@ struct ContextRankingSession {
     }
 
     private mutating func countSlow() {
+        callsInBudget = 0
         consecutiveTimeouts += 1
-        if consecutiveTimeouts >= 20 {
-            disabledForSession = true
-            diagnostic("context-model-session-disabled")
-        }
+        guard consecutiveTimeouts >= Self.slowCallsBeforePause else { return }
+        consecutiveTimeouts = 0
+        let pause = min(Self.firstPauseNanoseconds << min(pauses, 4), Self.longestPauseNanoseconds)
+        pauses += 1
+        pausedUntil = now() &+ pause
+        diagnostic("context-model-session-paused seconds=\(pause / 1_000_000_000)")
     }
 }
 

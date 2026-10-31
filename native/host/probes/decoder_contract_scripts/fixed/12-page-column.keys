@@ -1,0 +1,10 @@
+# 非零高亮翻页及翻回，观察是否保持列。
+clear
+type s
+type h
+type i
+next
+next
+pagedown
+pageup
+clear

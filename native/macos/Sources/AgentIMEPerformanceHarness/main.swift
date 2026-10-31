@@ -29,10 +29,15 @@ struct ContextModelPerformanceReport: Codable {
     let asyncLoadAndWarmupMilliseconds: Double
     let coldStartMilliseconds: [Double]
     let coldStartP95Milliseconds: Double
+    /// Cold-start probes that returned no timing (a crash, a non-zero exit or a missing line); the run needs every probe to count.
+    let coldStartProbeFailures: Int
+    let coldStartProbeStatuses: [Int32]
     let measurementPath: String
 }
 
 struct PerformanceReport: Codable {
+    /// Every condition of the pass/fail verdict, by name, so a failed run says which one failed.
+    let gateConditions: [String: Bool]
     let contextModel: ContextModelPerformanceReport
     let artifactVersion: String
     let artifactChecksum: String
@@ -678,26 +683,29 @@ let resourceGatePassed = rssBaseline > 0
     && growth.fileDescriptors <= 2
     && growth.threads <= 2
 let sampleCountGatePassed = sequences >= 10_000 && keyEvents >= 100_000
-let commonGatePassed = keyEvents > 0
-    && latencies.count == UInt64(keyEvents)
-    && insertTextLatencies.count > 0
-    && localCandidateQueryLatencies.count == UInt64(keyEvents)
-    && currentCandidatePipelineLatencies.count == UInt64(keyEvents)
-    && localCandidateQueryLatencies.percentile(0.95) <= 2.5
-    && localCandidateQueryLatencies.percentile(0.99) <= 5
-    && currentCandidatePipelineLatencies.percentile(0.95) <= 20
-    && composingBackspaceLatencies.count == UInt64(sequences)
-    && composingBackspaceLatencies.percentile(0.95) <= 2.5
-    && composingBackspaceLatencies.percentile(0.99) <= 5
-    && latencies.percentile(0.50) <= 0.5
-    && latencies.percentile(0.95) <= 2.5
-    && latencies.percentile(0.99) <= 5
-    && coldStartContractPassed
-    && percentile(coldLatencies, 0.95) <= 300
-    && warmupMainRunLoopDrainedBetweenSequences
-    && resourceGatePassed
-    && liveBefore == liveAfter
-    && failures == 0
+let commonConditions: [(String, Bool)] = [
+    ("keyEvents>0", keyEvents > 0),
+    ("latencySamples==keyEvents", latencies.count == UInt64(keyEvents)),
+    ("insertTextSamples>0", insertTextLatencies.count > 0),
+    ("localQuerySamples==keyEvents", localCandidateQueryLatencies.count == UInt64(keyEvents)),
+    ("pipelineSamples==keyEvents", currentCandidatePipelineLatencies.count == UInt64(keyEvents)),
+    ("localQueryP95<=2.5", localCandidateQueryLatencies.percentile(0.95) <= 2.5),
+    ("localQueryP99<=5", localCandidateQueryLatencies.percentile(0.99) <= 5),
+    ("pipelineP95<=20", currentCandidatePipelineLatencies.percentile(0.95) <= 20),
+    ("backspaceSamples==sequences", composingBackspaceLatencies.count == UInt64(sequences)),
+    ("backspaceP95<=2.5", composingBackspaceLatencies.percentile(0.95) <= 2.5),
+    ("backspaceP99<=5", composingBackspaceLatencies.percentile(0.99) <= 5),
+    ("keyP50<=0.5", latencies.percentile(0.50) <= 0.5),
+    ("keyP95<=2.5", latencies.percentile(0.95) <= 2.5),
+    ("keyP99<=5", latencies.percentile(0.99) <= 5),
+    ("coldStartContract", coldStartContractPassed),
+    ("coldStartP95<=300", percentile(coldLatencies, 0.95) <= 300),
+    ("warmupRunLoopDrained", warmupMainRunLoopDrainedBetweenSequences),
+    ("resourceGate", resourceGatePassed),
+    ("liveHandlesEqual", liveBefore == liveAfter),
+    ("failures==0", failures == 0),
+]
+let commonGatePassed = commonConditions.allSatisfy { $0.1 }
 let officialDurationGatePassed = measurementMode == .official
     && stressSeconds >= 1_800
     && stressElapsed >= 1_800
@@ -719,6 +727,7 @@ func measureContextModel() -> ContextModelPerformanceReport {
     let present = FileManager.default.fileExists(atPath: directory.appendingPathComponent("zhizi30m_v2.mlmodelc/coremldata.bin").path)
         && FileManager.default.fileExists(atPath: directory.appendingPathComponent("itos.json").path)
     var keys: [UInt64] = [], reranks: [UInt64] = [], cold: [UInt64] = []
+    var coldStatuses: [Int32] = []
     let loading = DispatchTime.now().uptimeNanoseconds
     var ready = false
     if present {
@@ -747,6 +756,7 @@ func measureContextModel() -> ContextModelPerformanceReport {
         on.close()
         for _ in 0..<coldStartCount {
             let probe = launchColdProbe(executable: inputMethodExecutable, directory: coldStartDirectory, contextModelEnabled: true)
+            coldStatuses.append(probe.status)
             if probe.status == 0, let latency = probe.latency { cold.append(latency) }
         }
     }
@@ -759,13 +769,25 @@ func measureContextModel() -> ContextModelPerformanceReport {
         rerankCalls: reranks.count, rerankP50Milliseconds: percentile(reranks, 0.5), rerankP95Milliseconds: percentile(reranks, 0.95),
         rerankP99Milliseconds: percentile(reranks, 0.99), asyncLoadAndWarmupMilliseconds: Double(loaded) / 1_000_000,
         coldStartMilliseconds: cold.map { Double($0) / 1_000_000 }, coldStartP95Milliseconds: percentile(cold, 0.95),
+        coldStartProbeFailures: ready ? coldStartCount - cold.count : 0, coldStartProbeStatuses: coldStatuses,
         measurementPath: "production IMKInputController.handle with model enabled, tensor assembly + Core ML .all + blend beta=2 + atomic core order; independent model-on cold processes"
     )
 }
 let contextModelReport = measureContextModel()
 let runPassed = modelOffPassed && contextModelReport.status != "FAIL"
 print("context_model_controller_performance=\(contextModelReport.status) key_p50_ms=\(contextModelReport.keyP50Milliseconds) key_p95_ms=\(contextModelReport.keyP95Milliseconds) key_p99_ms=\(contextModelReport.keyP99Milliseconds) rerank_p95_ms=\(contextModelReport.rerankP95Milliseconds) cold_p95_ms=\(contextModelReport.coldStartP95Milliseconds) reason=\(contextModelReport.reason ?? "none")")
+var gateConditions = Dictionary(uniqueKeysWithValues: commonConditions)
+gateConditions["modelOffPassed"] = modelOffPassed
+gateConditions["contextModelNotFail"] = contextModelReport.status != "FAIL"
+gateConditions["contextModelColdProbesAllReturned"] = contextModelReport.coldStartProbeFailures == 0
+gateConditions["resourceRssWithin120Percent"] = rssBaseline > 0 && Double(rssEnding) <= Double(rssBaseline) * 1.20
+gateConditions["resourceNoMonotonicGrowth"] = !hasThreeMonotonicGrowthWindows
+gateConditions["resourceFileDescriptorGrowth<=2"] = growth.fileDescriptors <= 2
+gateConditions["resourceThreadGrowth<=2"] = growth.threads <= 2
+let failedConditions = gateConditions.filter { !$0.value }.keys.sorted()
+if !runPassed { print("performance_gate_failed_conditions=\(failedConditions.joined(separator: ","))") }
 let report = PerformanceReport(
+    gateConditions: gateConditions,
     contextModel: contextModelReport,
     artifactVersion: ReleaseVersion.current,
     artifactChecksum: artifactChecksum,

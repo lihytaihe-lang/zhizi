@@ -140,6 +140,8 @@ public final class CoreSession: @unchecked Sendable {
     private var displayedRankingCandidates: [IMECandidate] = []
     /// This key's composition offered in the last first-page slot when none leads.
     private var pendingOffer: String?
+    /// Context model time inside the latest `process` call; 0 when it did not run.
+    public private(set) var lastModelNanoseconds: UInt64 = 0
     private var rankingContext = ""
     private var isComposing = false
     var contextRankingScoreForTesting: ((String, [String]) throws -> [Double])?
@@ -148,7 +150,13 @@ public final class CoreSession: @unchecked Sendable {
         get { contextRanking.now }
         set { contextRanking.now = newValue }
     }
-    private let contextModelDirectory: URL
+    private let baseContextModelDirectory: URL
+    private let personalContextModelDirectory: URL
+    private var contextModelDirectory: URL {
+        ContextRankingModelLoader.shared.directory(baseDirectory: baseContextModelDirectory,
+            personalDirectory: personalContextModelDirectory,
+            enabled: PersonalContextModelSelection.isEnabled(defaults: .standard))
+    }
     public var contextRankingElapsedNanoseconds: UInt64 { contextRanking.lastElapsedNanoseconds }
     public var contextRankingCalls: Int { contextRanking.calls }
     public static func contextRankingReady(sharedDirectory: URL) -> Bool {
@@ -165,7 +173,8 @@ public final class CoreSession: @unchecked Sendable {
     }
 
     public init?(sharedDirectory: URL, userDirectory: URL, appIdentifier: String) {
-        contextModelDirectory = sharedDirectory.deletingLastPathComponent().appendingPathComponent("ContextModel")
+        baseContextModelDirectory = sharedDirectory.deletingLastPathComponent().appendingPathComponent("ContextModel")
+        personalContextModelDirectory = PersonalContextModelSelection.personalDirectory(userDirectory: userDirectory)
         Self.runtimeLock.lock()
         defer { Self.runtimeLock.unlock() }
         let shared = Array(sharedDirectory.path.utf8)
@@ -211,6 +220,7 @@ public final class CoreSession: @unchecked Sendable {
     ) -> IMEViewModel? {
         Self.runtimeLock.lock()
         defer { Self.runtimeLock.unlock() }
+        lastModelNanoseconds = 0
         guard let handle else { return nil }
         if security != .nonSecure || [.focusLost, .deactivate, .sleep, .resume].contains(kind) { rankingContext = "" }
         let utf8 = Array(text.utf8)
@@ -264,8 +274,8 @@ public final class CoreSession: @unchecked Sendable {
             displayedContextModel = ContextModelObservation(outcome: .unavailable, groupSize: 0)
         } else if changesPage {
             displayedContextModel = ContextModelObservation(
-                outcome: contextRanking.disabledForSession ? .suspended : .unavailable,
-                groupSize: contextRanking.disabledForSession ? (aim_session_context_complete_mask(handle) | aim_session_context_group_mask(handle)).nonzeroBitCount : 0
+                outcome: contextRanking.suspended ? .suspended : .unavailable,
+                groupSize: contextRanking.suspended ? (aim_session_context_complete_mask(handle) | aim_session_context_group_mask(handle)).nonzeroBitCount : 0
             )
         } else if candidates != displayedRankingCandidates {
             // Caret movement and candidate deletion can clear the core's
@@ -274,7 +284,7 @@ public final class CoreSession: @unchecked Sendable {
             // an earlier page's permutation to the newly returned candidates.
             let groupSize = (aim_session_context_complete_mask(handle) | aim_session_context_group_mask(handle)).nonzeroBitCount
             let outcome: ContextModelOutcome
-            if contextRanking.disabledForSession { outcome = .suspended }
+            if contextRanking.suspended { outcome = .suspended }
             else if groupSize < 2 { outcome = .noGroup }
             else if displayedContextModel.outcome == .reordered { outcome = .unchanged }
             else { outcome = displayedContextModel.outcome }
@@ -300,22 +310,27 @@ public final class CoreSession: @unchecked Sendable {
         )
         // Selection/navigation-only callbacks retain the stored core order.
         // Input, backspace and paging invalidate it in the Mixer before here.
-        guard contextRanking.enabled, !contextRanking.disabledForSession, security == .nonSecure, changesPage,
+        guard contextRanking.enabled, !contextRanking.suspended, security == .nonSecure, changesPage,
               !original.markedText.isEmpty, original.commitText.isEmpty else { return original }
         let loader = ContextRankingModelLoader.shared
+        let contextModelDirectory = contextRankingScoreForTesting == nil ? self.contextModelDirectory : baseContextModelDirectory
         let scorer = contextRankingScoreForTesting
             ?? loader.ready(directory: contextModelDirectory).map { model in { try model.score(context: $0, candidates: $1) } }
         // Read the engine state before this key's own inference, then keep it awake for the next keys.
         let cold = contextRankingColdForTesting ?? loader.isCold()
         if contextRankingScoreForTesting == nil { loader.keepWarm(directory: contextModelDirectory) }
         guard let scorer else {
+            // Not loaded (yet, or the last load failed): ask again; the loader limits retries.
+            loader.prepare(directory: contextModelDirectory)
             displayedContextModel = ContextModelObservation(outcome: .unavailable,
                 groupSize: (aim_session_context_complete_mask(handle) | aim_session_context_group_mask(handle)).nonzeroBitCount)
             return original.withContextModel(displayedContextModel)
         }
         let compositionStarted = contextRanking.now()
         pendingOffer = nil
-        if !cold, let composed = leadWithComposition(original, scorer: scorer) {
+        let composedResult = cold ? nil : leadWithComposition(original, scorer: scorer)
+        lastModelNanoseconds = contextRanking.now() &- compositionStarted
+        if let composed = composedResult {
             displayedContextModel = ContextModelObservation(
                 outcome: .composed, groupSize: displayedContextModel.groupSize,
                 latencyMs: Double(contextRanking.now() &- compositionStarted) / 1_000_000, cold: false)
@@ -323,7 +338,6 @@ public final class CoreSession: @unchecked Sendable {
             displayedRankingCandidates = composed.candidates
             return composed
         }
-        let rerankStarted = contextRanking.now()
         // Model first (C2): score every candidate that covers the whole input; the
         // homophone group (C1) is a subset and keeps its own swap rule.
         let homophoneMask = aim_session_context_group_mask(handle)
@@ -333,6 +347,10 @@ public final class CoreSession: @unchecked Sendable {
             displayedContextModel = ContextModelObservation(outcome: .noGroup, groupSize: slots.count)
             return withOffer(original.withContextModel(displayedContextModel))
         }
+        // The budget times the model alone. The masks above are core work that runs
+        // whether or not the model scores, so pausing the model cannot save it; counting
+        // it here paused the model for the core's cost.
+        let rerankStarted = contextRanking.now()
         var order = Array(candidates.indices)
         var stored = false
         let groupOrder = contextRanking.order(context: Self.contextWithPickedText(rankingContext, markedText: original.markedText), candidates: slots.map { candidates[$0].text }, startedNanoseconds: rerankStarted, cold: cold, homophone: slots.map { homophoneMask & (1 << $0) != 0 }, apply: { groupOrder in
@@ -342,6 +360,7 @@ public final class CoreSession: @unchecked Sendable {
             stored = order.withUnsafeBufferPointer { aim_session_reorder_context_candidates(handle, $0.baseAddress, $0.count) == 0 }
             return stored
         }, score: scorer)
+        lastModelNanoseconds &+= contextRanking.now() &- rerankStarted
         displayedContextModel = ContextModelObservation(
             outcome: contextRanking.lastOutcome,
             baseOrder: contextRanking.lastOutcome == .reordered ? order : nil,
@@ -540,6 +559,15 @@ public final class CoreSession: @unchecked Sendable {
         return aim_session_set_fuzzy(handle, mask)
     }
 
+    /// Deploys again so dictionaries added to the user directory since the session started (downloaded packs) take effect.
+    /// Drops any composition: call it only when none is active. Returns 0 on success.
+    public func reloadDictionariesStatus() -> Int32 {
+        Self.runtimeLock.lock()
+        defer { Self.runtimeLock.unlock() }
+        guard let handle else { return -1 }
+        return aim_session_reload_dictionaries(handle)
+    }
+
     public func setContextProfile(appClassOverride: UInt32, punctuationPolicy: UInt32) -> Bool {
         Self.runtimeLock.lock()
         defer { Self.runtimeLock.unlock() }
@@ -607,6 +635,20 @@ public final class CoreSession: @unchecked Sendable {
         defer { Self.runtimeLock.unlock() }
         guard let handle, let snapshot = prepared.handle else { return false }
         return aim_session_apply_lexicon(handle, snapshot) == 0
+    }
+
+    func setLearningMode(_ mode: LearningMode) -> Int32 {
+        Self.runtimeLock.lock()
+        defer { Self.runtimeLock.unlock() }
+        guard let handle else { return -1 }
+        return aim_session_set_learning(handle, mode.rawValue)
+    }
+
+    func setZhixuWholeEnabled(_ enabled: Bool) -> Int32 {
+        Self.runtimeLock.lock()
+        defer { Self.runtimeLock.unlock() }
+        guard let handle else { return -1 }
+        return aim_session_set_zhixu_whole(handle, enabled ? 1 : 0)
     }
 
     public func setTypoCorrectionEnabled(_ enabled: Bool) -> Bool {

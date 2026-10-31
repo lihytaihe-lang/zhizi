@@ -25,7 +25,11 @@ REPORT="$TEMP_ROOT/report.json"
 USER_DIR="$TEMP_ROOT/user"
 ARTIFACT_SHA="$($ROOT_DIR/script/artifact_checksum.sh "$BUNDLE")"
 HARNESS_EXIT=0
-DYLD_LIBRARY_PATH="$BUNDLE/Contents/Frameworks" "$HARNESS" \
+# Use the same opt-in as aim_session_create, including the cold-start child.
+ZHIXU_WHOLE_TRIAL=0
+[[ "${ZHIZI_ZHIXU_WHOLE:-0}" != "1" ]] || ZHIXU_WHOLE_TRIAL=1
+echo "zhixu_whole_trial=$ZHIXU_WHOLE_TRIAL"
+ZHIZI_ZHIXU_WHOLE="$ZHIXU_WHOLE_TRIAL" DYLD_LIBRARY_PATH="$BUNDLE/Contents/Frameworks" "$HARNESS" \
   "$BUNDLE/Contents/Resources/Rime" "$USER_DIR" \
   "$ROOT_DIR/quality/corpus/base-500.json" "$REPORT" "$ARTIFACT_SHA" \
   "$BUNDLE/Contents/MacOS/AgentInputMethod" 1 --smoke >/dev/null || HARNESS_EXIT=$?

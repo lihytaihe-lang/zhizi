@@ -264,6 +264,7 @@ verify_exact_file_inventory "$BUNDLE" input \
   Contents/Resources/Rime/agent_pack_poetry.dict.yaml \
   Contents/Resources/Rime/agent_pack_cad.dict.yaml \
   Contents/Resources/Rime/agent_pack_industry.dict.yaml \
+  Contents/Resources/Rime/agent_owner_words.dict.yaml \
   Contents/Resources/Rime/agent_exact_readings.tsv \
   Contents/Resources/Rime/agent_pinyin.dict.yaml \
   Contents/Resources/Rime/agent_pinyin.schema.yaml \
@@ -558,6 +559,7 @@ assert_same_file agent-ai-names-dictionary "$ROOT_DIR/native/resources/Rime/agen
 assert_same_file agent-pack-poetry-dictionary "$ROOT_DIR/native/resources/Rime/agent_pack_poetry.dict.yaml" "$RIME/agent_pack_poetry.dict.yaml"
 assert_same_file agent-pack-cad-dictionary "$ROOT_DIR/native/resources/Rime/agent_pack_cad.dict.yaml" "$RIME/agent_pack_cad.dict.yaml"
 assert_same_file agent-pack-industry-dictionary "$ROOT_DIR/native/resources/Rime/agent_pack_industry.dict.yaml" "$RIME/agent_pack_industry.dict.yaml"
+assert_same_file agent-owner-words-dictionary "$ROOT_DIR/native/resources/Rime/agent_owner_words.dict.yaml" "$RIME/agent_owner_words.dict.yaml"
 assert_same_file exact-reading-index "$ROOT_DIR/native/resources/Rime/agent_exact_readings.tsv" "$RIME/agent_exact_readings.tsv"
 assert_same_file context-disambiguation-table "$ROOT_DIR/third_party/context-disambig/disambig-table-v1.json" "$BUNDLE/Contents/Resources/ContextDisambig.json"
 assert_same_file input-notices "$ROOT_DIR/THIRD_PARTY_NOTICES.md" "$BUNDLE/Contents/Resources/THIRD_PARTY_NOTICES.md"
@@ -1057,6 +1059,7 @@ HARNESS_BUILD_REPORT="$RESULTS/V03-06/$HARNESS_BUILD_NAME"
     "$ROOT_DIR/native/resources/Rime/agent_pack_poetry.dict.yaml" "$RIME/agent_pack_poetry.dict.yaml" \
     "$ROOT_DIR/native/resources/Rime/agent_pack_cad.dict.yaml" "$RIME/agent_pack_cad.dict.yaml" \
     "$ROOT_DIR/native/resources/Rime/agent_pack_industry.dict.yaml" "$RIME/agent_pack_industry.dict.yaml" \
+    "$ROOT_DIR/native/resources/Rime/agent_owner_words.dict.yaml" "$RIME/agent_owner_words.dict.yaml" \
     "$ROOT_DIR/native/resources/Rime/agent_exact_readings.tsv" "$RIME/agent_exact_readings.tsv" \
     "$ROOT_DIR/third_party/context-disambig/disambig-table-v1.json" "$BUNDLE/Contents/Resources/ContextDisambig.json" \
     "$PINNED_PINYIN_DIR/pinyin_simp.dict.yaml" "$RIME/pinyin_simp.dict.yaml" \

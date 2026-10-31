@@ -339,7 +339,7 @@ export function MaintenanceManager() {
           })}
           type="button"
         >
-          <Download size={14} />导出完整备份
+          <Download size={14} />导出备份（配置与词库）
         </button>
         <label className="secondary-button file-button">
           <ArchiveRestore size={14} />选择备份预览
@@ -362,6 +362,12 @@ export function MaintenanceManager() {
             词 {backupPreview.lexiconCount} · 项目 {backupPreview.projectCount}
             · 动态源 {backupPreview.dynamicSourceCount} · 知识源 {backupPreview.knowledgeSourceCount}
           </span>
+          <span>
+            知识源：新建 {backupPreview.knowledgeSourceNewCount}
+            · 更新配置 {backupPreview.knowledgeSourceUpdatedCount}
+            · 保留 {backupPreview.knowledgeSourceKeptCount}
+          </span>
+          <small>备份不含知识文档本身；恢复不会删除现有知识内容。</small>
           <button
             onClick={() => void run("restore", async () => {
               await restoreMaintenanceBackup(backupDocument);

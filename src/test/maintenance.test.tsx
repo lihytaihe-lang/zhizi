@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { act } from "react";
 import { MaintenanceManager } from "../components/MaintenanceManager";
 import type { LearningCleanupItem, LearningCleanupList } from "../lib/maintenance";
-import { findButton, installMiniDom, MiniMouseEvent, type MiniElement } from "./support/miniDom";
+import { findButton, installMiniDom, MiniEvent, MiniMouseEvent, type MiniElement } from "./support/miniDom";
 
 const modelItem: LearningCleanupItem = {
   id: "synthetic-learned", text: "清茶", pinyin: "qing cha", source: "rime_userdb",
@@ -35,6 +35,13 @@ async function mountMaintenance(
           return { entryCount: 1, entryIds: [modelItem.id], texts: [modelItem.text] };
         case "apply_learning_cleanup": return { batchId: "synthetic-batch", deletedCount: 1 };
         case "undo_learning_cleanup": return 1;
+        case "preview_maintenance_backup":
+          return {
+            formatVersion: 1, createdAtMs: 0, lexiconCount: 3, projectCount: 1,
+            dynamicSourceCount: 0, knowledgeSourceCount: 2,
+            knowledgeSourceNewCount: 1, knowledgeSourceUpdatedCount: 1, knowledgeSourceKeptCount: 3,
+            containsSecrets: false,
+          };
         default: throw new Error(`Unexpected command: ${command}`);
       }
     },
@@ -89,6 +96,31 @@ test("unmatched model pairs render in a folded read-only list without selection 
     assert.equal(details.querySelectorAll("input").length, 0);
     assert.equal(details.querySelectorAll("button").length, 0);
     assert.ok(calls.every((call) => !/preview_|apply_|undo_/.test(call.command)));
+  });
+});
+
+test("backup preview shows merge counts and the no-document disclaimer", async () => {
+  await mountMaintenance({ items: [], unmatchedModelAuditPairs: [] }, async (container, calls) => {
+    assert.ok(findButton(container, "导出备份（配置与词库）"));
+    assert.equal(findButton(container, "导出完整备份"), null);
+    const input = container
+      .querySelectorAll("input")
+      .find((element) => (element as unknown as { type?: string }).type === "file");
+    assert.ok(input);
+    const file = { text: async () => "{\"formatVersion\":1}" };
+    (input as unknown as { files: unknown[] }).files = [file];
+    await act(async () => {
+      input.dispatchEvent(new MiniEvent("change", { bubbles: true }));
+    });
+    const preview = container.querySelector(".backup-preview");
+    assert.ok(preview);
+    assert.match(preview.textContent, /知识源：新建 1\s*·\s*更新配置 1\s*·\s*保留 3/);
+    assert.match(preview.textContent, /备份不含知识文档本身；恢复不会删除现有知识内容。/);
+    assert.deepEqual(
+      calls.find((call) => call.command === "preview_maintenance_backup")?.args,
+      { document: "{\"formatVersion\":1}" },
+    );
+    assert.ok(findButton(preview, "确认原子恢复"));
   });
 });
 

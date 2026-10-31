@@ -383,6 +383,9 @@ pub struct BackupPreview {
     pub project_count: usize,
     pub dynamic_source_count: usize,
     pub knowledge_source_count: usize,
+    pub knowledge_source_new_count: usize,
+    pub knowledge_source_updated_count: usize,
+    pub knowledge_source_kept_count: usize,
     pub contains_secrets: bool,
 }
 
@@ -675,6 +678,22 @@ impl AppStorage {
 
     pub fn preview_maintenance_backup(&self, document: &str) -> Result<BackupPreview, String> {
         let backup = parse_backup(document)?;
+        let existing_ids = {
+            let connection = self.lock_connection()?;
+            let mut statement = connection
+                .prepare("SELECT id FROM knowledge_sources")
+                .map_err(|error| format!("无法准备知识源预览：{error}"))?;
+            let rows = statement
+                .query_map([], |row| row.get::<_, String>(0))
+                .map_err(|error| format!("无法读取知识源预览：{error}"))?;
+            rows.collect::<Result<HashSet<_>, _>>()
+                .map_err(|error| format!("无法解析知识源预览：{error}"))?
+        };
+        let backup_ids = backup
+            .knowledge_sources
+            .iter()
+            .map(|source| source.id.clone())
+            .collect::<HashSet<_>>();
         Ok(BackupPreview {
             format_version: backup.format_version,
             created_at_ms: backup.created_at_ms,
@@ -682,6 +701,9 @@ impl AppStorage {
             project_count: backup.project_profiles.len(),
             dynamic_source_count: backup.dynamic_sources.len(),
             knowledge_source_count: backup.knowledge_sources.len(),
+            knowledge_source_new_count: backup_ids.difference(&existing_ids).count(),
+            knowledge_source_updated_count: backup_ids.intersection(&existing_ids).count(),
+            knowledge_source_kept_count: existing_ids.difference(&backup_ids).count(),
             contains_secrets: false,
         })
     }
@@ -717,15 +739,13 @@ impl AppStorage {
                     .map_err(|error| format!("无法恢复项目词包：{error}"))?;
             }
         }
-        transaction
-            .execute("DELETE FROM dynamic_sources", [])
-            .map_err(|error| format!("无法清理旧动态源：{error}"))?;
+        // 动态源按备份逐条 upsert：hotword_item_sources 对 dynamic_sources 有
+        // 级联删除，整表替换会丢掉热词与源的关联，而这些关联不在备份里。
         for source in &backup.dynamic_sources {
             restore_dynamic_source(&transaction, source)?;
         }
-        transaction
-            .execute("DELETE FROM knowledge_sources", [])
-            .map_err(|error| format!("无法清理旧知识源：{error}"))?;
+        // 知识源只合并配置：文档、分块、术语、审核与检索状态都不在备份里，
+        // 不能删除重建；备份里没有的现有知识源保留不动。
         for source in &backup.knowledge_sources {
             restore_knowledge_source(&transaction, source)?;
         }
@@ -807,7 +827,7 @@ fn restore_dynamic_source(
     {
         return Err("备份包含未登记授权或许可证的动态源。".into());
     }
-    transaction.execute("INSERT INTO dynamic_sources (id,display_name,source_type,refresh_interval_minutes,authorization,terms_url,license,cache_policy,ownership,distribution,disable_policy,endpoint,enabled,opt_in,last_refresh_ms,last_error,created_at_ms,updated_at_ms) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)", params![source.id,source.display_name,source.source_type,source.refresh_interval_minutes,source.authorization,source.terms_url,source.license,source.cache_policy,source.ownership,source.distribution,source.disable_policy,source.endpoint,source.enabled as i64,source.opt_in as i64,source.last_refresh_ms,source.last_error,source.created_at_ms,source.updated_at_ms]).map_err(|error| format!("无法恢复动态源：{error}"))?;
+    transaction.execute("INSERT INTO dynamic_sources (id,display_name,source_type,refresh_interval_minutes,authorization,terms_url,license,cache_policy,ownership,distribution,disable_policy,endpoint,enabled,opt_in,last_refresh_ms,last_error,created_at_ms,updated_at_ms) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18) ON CONFLICT(id) DO UPDATE SET display_name=excluded.display_name,source_type=excluded.source_type,refresh_interval_minutes=excluded.refresh_interval_minutes,authorization=excluded.authorization,terms_url=excluded.terms_url,license=excluded.license,cache_policy=excluded.cache_policy,ownership=excluded.ownership,distribution=excluded.distribution,disable_policy=excluded.disable_policy,endpoint=excluded.endpoint,enabled=excluded.enabled,opt_in=excluded.opt_in,last_refresh_ms=excluded.last_refresh_ms,last_error=excluded.last_error,created_at_ms=excluded.created_at_ms,updated_at_ms=excluded.updated_at_ms", params![source.id,source.display_name,source.source_type,source.refresh_interval_minutes,source.authorization,source.terms_url,source.license,source.cache_policy,source.ownership,source.distribution,source.disable_policy,source.endpoint,source.enabled as i64,source.opt_in as i64,source.last_refresh_ms,source.last_error,source.created_at_ms,source.updated_at_ms]).map_err(|error| format!("无法恢复动态源：{error}"))?;
     Ok(())
 }
 
@@ -821,15 +841,26 @@ fn restore_knowledge_source(
     {
         return Err("备份包含无效知识源。".into());
     }
-    let status = if source.source_type == "notion" {
-        "deferred"
-    } else {
-        "authorized"
-    };
     let project_id = if source.project_id.trim().is_empty() {
         source.id.trim()
     } else {
         source.project_id.trim()
+    };
+    let updated = transaction
+        .execute(
+            "UPDATE knowledge_sources SET name=?1,authorized_scope=?2,authorization=?3,project_id=?4,sensitive_enabled=?5,updated_at_ms=?6 WHERE id=?7",
+            params![source.name, source.authorized_scope, source.authorization, project_id, if source.sensitive_enabled { 1 } else { 0 }, source.updated_at_ms, source.id],
+        )
+        .map_err(|error| format!("无法恢复知识源：{error}"))?;
+    if updated > 0 {
+        // 已存在的知识源只更新配置；status、last_error、created_at_ms、
+        // retrieval_status 以及文档、分块、术语全部保留现状。
+        return Ok(());
+    }
+    let status = if source.source_type == "notion" {
+        "deferred"
+    } else {
+        "authorized"
     };
     transaction.execute("INSERT INTO knowledge_sources (id,name,source_type,authorized_scope,authorization,status,last_error,created_at_ms,updated_at_ms,project_id,retrieval_status,sensitive_enabled) VALUES (?1,?2,?3,?4,?5,?6,NULL,?7,?7,?8,'pending',?9)", params![source.id,source.name,source.source_type,source.authorized_scope,source.authorization,status,source.updated_at_ms,project_id,if source.sensitive_enabled { 1 } else { 0 }]).map_err(|error| format!("无法恢复知识源：{error}"))?;
     Ok(())
@@ -1461,6 +1492,178 @@ mod tests {
         drop(target);
         cleanup(&a);
         cleanup(&b);
+    }
+
+    fn insert_knowledge_source_with_content(storage: &AppStorage, id: &str, name: &str) {
+        let connection = storage.lock_connection().unwrap();
+        connection.execute(
+            "INSERT INTO knowledge_sources (id,name,source_type,authorized_scope,authorization,status,last_error,created_at_ms,updated_at_ms,project_id,retrieval_status,sensitive_enabled) VALUES (?1,?2,'local_path','/synthetic/kb','owner-authorized','ready',NULL,1,1,?1,'approved',1)",
+            params![id, name],
+        ).unwrap();
+        connection.execute(
+            "INSERT INTO knowledge_documents (id,source_id,relative_path,format,content_hash,byte_count,updated_at_ms) VALUES (?1,?2,'notes.md','markdown','doc-hash',10,1)",
+            params![format!("{id}-doc"), id],
+        ).unwrap();
+        connection.execute(
+            "INSERT INTO knowledge_chunks (id,document_id,ordinal,content_hash,content) VALUES (?1,?2,0,'chunk-hash','已审核知识内容')",
+            params![format!("{id}-chunk"), format!("{id}-doc")],
+        ).unwrap();
+        connection.execute(
+            "INSERT INTO knowledge_terms (id,source_id,chunk_id,text,pinyin,kind,relation,confidence_millis,review_state,fixed,last_verified_ms) VALUES (?1,?2,?3,'术语甲','shu yu jia','generated_hotword','generated',950,'approved',1,2)",
+            params![format!("{id}-term"), id, format!("{id}-chunk")],
+        ).unwrap();
+    }
+
+    #[test]
+    fn restore_keeps_documents_chunks_and_reviewed_terms() {
+        let a = path("backup-keep-content");
+        cleanup(&a);
+        let storage = AppStorage::open(a.clone()).unwrap();
+        insert_knowledge_source_with_content(&storage, "kb", "知识库");
+        let document = storage.export_maintenance_backup(5).unwrap();
+        // 配置在导出后被改动；恢复应按备份更新配置，同时保留知识内容与审核状态。
+        storage.lock_connection().unwrap().execute(
+            "UPDATE knowledge_sources SET name='改名后',sensitive_enabled=0,updated_at_ms=99 WHERE id='kb'",
+            [],
+        ).unwrap();
+        storage.restore_maintenance_backup(&document).unwrap();
+        let sources = storage.list_knowledge_sources().unwrap();
+        assert_eq!(sources.len(), 1);
+        let source = &sources[0];
+        assert_eq!(source.name, "知识库");
+        assert_eq!(source.authorized_scope, "/synthetic/kb");
+        assert_eq!(source.authorization, "owner-authorized");
+        assert_eq!(source.project_id, "kb");
+        assert!(source.sensitive_enabled);
+        assert_eq!(source.status, "ready");
+        assert_eq!(source.retrieval_status, "approved");
+        assert_eq!(source.document_count, 1);
+        assert_eq!(source.chunk_count, 1);
+        assert_eq!(source.term_count, 1);
+        let (review_state, fixed, chunk_id): (String, i64, String) = storage
+            .lock_connection()
+            .unwrap()
+            .query_row(
+                "SELECT review_state,fixed,chunk_id FROM knowledge_terms WHERE id='kb-term'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(review_state, "approved");
+        assert_eq!(fixed, 1);
+        assert_eq!(chunk_id, "kb-chunk");
+        drop(storage);
+        cleanup(&a);
+    }
+
+    #[test]
+    fn restore_keeps_sources_missing_from_backup() {
+        let a = path("backup-partial-src");
+        let b = path("backup-partial-target");
+        cleanup(&a);
+        cleanup(&b);
+        let source_storage = AppStorage::open(a.clone()).unwrap();
+        insert_knowledge_source_with_content(&source_storage, "in-backup", "备份内源");
+        let document = source_storage.export_maintenance_backup(4).unwrap();
+        let target = AppStorage::open(b.clone()).unwrap();
+        insert_knowledge_source_with_content(&target, "in-backup", "同名旧源");
+        insert_knowledge_source_with_content(&target, "local-only", "仅本机源");
+        target.restore_maintenance_backup(&document).unwrap();
+        let sources = target.list_knowledge_sources().unwrap();
+        assert_eq!(sources.len(), 2);
+        let in_backup = sources
+            .iter()
+            .find(|source| source.id == "in-backup")
+            .unwrap();
+        assert_eq!(in_backup.name, "备份内源");
+        assert_eq!(in_backup.document_count, 1);
+        assert_eq!(in_backup.chunk_count, 1);
+        assert_eq!(in_backup.term_count, 1);
+        let local_only = sources
+            .iter()
+            .find(|source| source.id == "local-only")
+            .unwrap();
+        assert_eq!(local_only.name, "仅本机源");
+        assert_eq!(local_only.status, "ready");
+        assert_eq!(local_only.retrieval_status, "approved");
+        assert_eq!(local_only.document_count, 1);
+        assert_eq!(local_only.term_count, 1);
+        drop(source_storage);
+        drop(target);
+        cleanup(&a);
+        cleanup(&b);
+    }
+
+    #[test]
+    fn preview_counts_new_updated_and_kept_sources() {
+        let a = path("backup-preview-src");
+        let b = path("backup-preview-target");
+        cleanup(&a);
+        cleanup(&b);
+        let source_storage = AppStorage::open(a.clone()).unwrap();
+        insert_knowledge_source_with_content(&source_storage, "shared", "共享源");
+        insert_knowledge_source_with_content(&source_storage, "fresh", "新源");
+        let document = source_storage.export_maintenance_backup(6).unwrap();
+        let target = AppStorage::open(b.clone()).unwrap();
+        insert_knowledge_source_with_content(&target, "shared", "本机共享源");
+        insert_knowledge_source_with_content(&target, "kept", "保留源");
+        let preview = target.preview_maintenance_backup(&document).unwrap();
+        assert_eq!(preview.knowledge_source_count, 2);
+        assert_eq!(preview.knowledge_source_new_count, 1);
+        assert_eq!(preview.knowledge_source_updated_count, 1);
+        assert_eq!(preview.knowledge_source_kept_count, 1);
+        let restored = target.restore_maintenance_backup(&document).unwrap();
+        assert_eq!(restored, preview);
+        let sources = target.list_knowledge_sources().unwrap();
+        assert_eq!(sources.len(), 3);
+        let fresh = sources.iter().find(|source| source.id == "fresh").unwrap();
+        assert_eq!(fresh.retrieval_status, "pending");
+        assert_eq!(fresh.document_count, 0);
+        let kept = sources.iter().find(|source| source.id == "kept").unwrap();
+        assert_eq!(kept.name, "保留源");
+        let shared = sources.iter().find(|source| source.id == "shared").unwrap();
+        assert_eq!(shared.name, "共享源");
+        drop(source_storage);
+        drop(target);
+        cleanup(&a);
+        cleanup(&b);
+    }
+
+    #[test]
+    fn restore_keeps_hotword_links_for_dynamic_sources() {
+        let a = path("backup-dynamic-links");
+        cleanup(&a);
+        let storage = AppStorage::open(a.clone()).unwrap();
+        let connection = storage.lock_connection().unwrap();
+        connection.execute(
+            "INSERT INTO dynamic_sources (id,display_name,source_type,refresh_interval_minutes,authorization,terms_url,license,cache_policy,ownership,distribution,disable_policy,endpoint,enabled,opt_in,last_refresh_ms,last_error,created_at_ms,updated_at_ms) VALUES ('feed','官方词库','official_json',60,'public-domain','https://example.invalid/terms','CC0','cached','bundled','open','auto','https://example.invalid/feed',1,0,NULL,NULL,1,1)",
+            [],
+        ).unwrap();
+        connection.execute(
+            "INSERT INTO hotword_items (id,text,pinyin,confidence_millis,freshness_millis,domain,expires_at_ms,review_required,state,created_at_ms,updated_at_ms) VALUES ('item-1','热词甲','re ci jia',800,700,'',NULL,0,'review',1,1)",
+            [],
+        ).unwrap();
+        connection.execute(
+            "INSERT INTO hotword_item_sources (item_id,source_id,source_record_id,fetched_at_ms) VALUES ('item-1','feed','record-1',1)",
+            [],
+        ).unwrap();
+        drop(connection);
+        let document = storage.export_maintenance_backup(7).unwrap();
+        storage.restore_maintenance_backup(&document).unwrap();
+        let connection = storage.lock_connection().unwrap();
+        let links: i64 = connection
+            .query_row("SELECT COUNT(*) FROM hotword_item_sources", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        let sources: i64 = connection
+            .query_row("SELECT COUNT(*) FROM dynamic_sources", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(sources, 1);
+        assert_eq!(links, 1);
+        drop(connection);
+        drop(storage);
+        cleanup(&a);
     }
 
     #[test]

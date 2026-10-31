@@ -157,17 +157,32 @@ def main():
     ap.add_argument("--nonfirst-weight", type=float, default=1.0, help="repeat non-first picks this many times")
     ap.add_argument("--keep-dirty", action="store_true", help="also train on events followed by redo/delete")
     ap.add_argument("--lm-weight", type=float, default=0.5)
-    ap.add_argument("--corpus", default=ROOT + "/ime_context_model/corpus/v2")
+    ap.add_argument("--corpus", default=str(WORK_DIR / "corpus/v2"))
     ap.add_argument("--device", default="auto")
+    ap.add_argument("--rows", help="rerank rows (make_rerank_set.py, cleaned): every candidate the core really offers the "
+                                   "model, not only homophones; the last --test-share of them (they are in time order) is the test")
+    ap.add_argument("--test-share", type=float, default=0.1)
     args = ap.parse_args()
 
     device = pick_device(args.device)
     model, vocab, ck = load(args.init, device)
-    events = load_events(EVENTS)
-    rows = make_rows(events, vocab)
-    train = [r for r in rows if r["day"] < args.cutoff and (r["ok"] or args.keep_dirty)]
-    # 07-xx days and 10-xx days compare as strings; "07-.." < "10-.." < cutoff keeps both eras in training
-    test = [r for r in rows if r["day"] >= args.cutoff and r["day"] >= "10-00"]
+    if args.rows:
+        rows = []
+        for line in open(args.rows, encoding="utf-8"):
+            r = json.loads(line)
+            cands = r["cands"][:8]  # score_table keeps the first eight; a gold beyond them teaches nothing
+            if r["gold"] >= len(cands):
+                continue
+            rows.append({"ctx": [vocab.bos] + vocab.encode(r["ctx"][-CTX_CHARS:]), "cands": [vocab.encode(c) for c in cands],
+                         "gold": r["gold"], "ok": True, "nonfirst": r["gold"] > 0})
+        cut = int(len(rows) * (1 - args.test_share))
+        train, test = rows[:cut], rows[cut:]
+    else:
+        events = load_events(EVENTS)
+        rows = make_rows(events, vocab)
+        train = [r for r in rows if r["day"] < args.cutoff and (r["ok"] or args.keep_dirty)]
+        # 07-xx days and 10-xx days compare as strings; "07-.." < "10-.." < cutoff keeps both eras in training
+        test = [r for r in rows if r["day"] >= args.cutoff and r["day"] >= "10-00"]
     train = [r for r in train]
     pool = []
     for r in train:
