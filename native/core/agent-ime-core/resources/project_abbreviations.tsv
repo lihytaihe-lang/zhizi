@@ -13,7 +13,6 @@ aws	assert_whole_snapshot	assert_whole_snapshot	agent_input_method
 bar	build_and_run	build_and_run	agent_input_method
 be	blocked_entries	blocked_entries	agent_input_method
 bi	bundleIdentifier	bundleidentifier	agent_input_method
-bm	build_manager	build_manager	agent_input_method
 bu	backend-unavailable	backend-unavailable	agent_input_method
 ca	composition_alternatives	composition_alternatives	agent_input_method
 cbp	CommitByPolicy	commitbypolicy	agent_input_method

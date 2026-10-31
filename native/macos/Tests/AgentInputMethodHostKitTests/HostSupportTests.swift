@@ -1783,6 +1783,11 @@ final class HostSupportTests: XCTestCase {
         XCTAssertEqual(session.activeAppIdentifierForTesting, "com.apple.TextEdit")
     }
 
+    func testMemorySampleIsNumbersOnly() throws {
+        let kind = try XCTUnwrap(MemorySampler.eventKind())
+        XCTAssertNotNil(kind.range(of: #"^memory footprintMB=\d+ residentMB=\d+$"#, options: .regularExpression))
+    }
+
     func testDiagnosticsRecordKeyStagesOnlyWhenGiven() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("agent-ime-diagnostics-\(UUID().uuidString)", isDirectory: true)

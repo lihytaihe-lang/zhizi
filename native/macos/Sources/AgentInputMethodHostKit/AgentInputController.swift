@@ -787,7 +787,7 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
         }
         learning.submenu = choices
         menu.addItem(learning)
-        let whole = NSMenuItem(title: "全拼由知序拼（试用）", action: #selector(toggleZhixuWhole(_:)), keyEquivalent: "")
+        let whole = NSMenuItem(title: "全拼由知序拼", action: #selector(toggleZhixuWhole(_:)), keyEquivalent: "")
         whole.target = self
         whole.state = wholeEnabled ? .on : .off
         whole.isEnabled = learningController != nil

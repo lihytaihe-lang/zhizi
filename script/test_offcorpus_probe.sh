@@ -7,7 +7,7 @@ CORPUS="$ROOT_DIR/quality/corpus/offcorpus-probe-v1.json"
 ASCII_PREFIX_CORPUS="$ROOT_DIR/quality/corpus/ascii-prefix-position-v1.json"
 PROJECT_TERMS="$ROOT_DIR/native/resources/Rime/agent_project_terms.dict.yaml"
 FROZEN_CORPUS_SHA="8bb635b0a6e12659c9fdef77ab6898f810e8ebc47d1d3f32f8227a106f0516c7"
-FROZEN_ASCII_PREFIX_SHA="4a25379dcdf1371a0aaed9152eed2b0ef9d70cd762c666a57eb00d7d6fc4f8d3"
+FROZEN_ASCII_PREFIX_SHA="40aadb2ab9c0da6749787998e174182f5bbc9e195266b2eb6aeedf55e1ac18b7"
 [[ -d "$BUNDLE" && ! -L "$BUNDLE" ]] || { echo "missing release input bundle: $BUNDLE" >&2; exit 2; }
 
 ACTUAL_CORPUS_SHA="$(shasum -a 256 "$CORPUS" | awk '{print $1}')"

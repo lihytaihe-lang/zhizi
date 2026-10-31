@@ -276,14 +276,13 @@ final class LearningModeControllerTests: XCTestCase {
     }
 
     @MainActor
-    func testWholeDefaultsOffAndUnknownPreferenceDoesNotEnableIt() {
+    func testWholeDefaultsOnAndUnknownPreferenceDoesNotDisableIt() {
         for savedWhole in [nil, "unsupported"] as [Any?] {
             let fixture = LearningModeFixture(savedWhole: savedWhole)
             defer { fixture.cleanUp() }
             XCTAssertFalse(fixture.controller.wholeEnabled)
-            XCTAssertFalse(fixture.session.wholeEnabled)
             XCTAssertTrue(fixture.session.wholeApplied.isEmpty)
-            XCTAssertEqual(fixture.migrationCalls, 0)
+            XCTAssertEqual(fixture.migrationCalls, 1)
         }
     }
 
@@ -305,6 +304,26 @@ final class LearningModeControllerTests: XCTestCase {
         XCTAssertEqual(fixture.session.events, ["learning-zhixu", "whole-on"])
         XCTAssertTrue(fixture.defaults.bool(forKey: LearningModeController.wholeDefaultsKey))
         XCTAssertEqual(fixture.diagnostics, ["zhixu-whole on reason=user"])
+    }
+
+    @MainActor
+    func testUnsetWholePreferenceDefaultsToOnAfterMigration() {
+        let fixture = LearningModeFixture(savedWhole: nil)
+        defer { fixture.cleanUp() }
+        XCTAssertEqual(fixture.migrationCalls, 1)
+        XCTAssertFalse(fixture.controller.wholeEnabled)
+        fixture.finishMigration(success: true)
+        XCTAssertEqual(fixture.controller.mode, .zhixu)
+        XCTAssertTrue(fixture.controller.wholeEnabled)
+        XCTAssertEqual(fixture.diagnostics, ["zhixu-whole on reason=restore"])
+    }
+
+    @MainActor
+    func testExplicitWholeOffStaysOff() {
+        let fixture = LearningModeFixture(savedWhole: false)
+        defer { fixture.cleanUp() }
+        XCTAssertEqual(fixture.migrationCalls, 0)
+        XCTAssertFalse(fixture.controller.wholeEnabled)
     }
 
     @MainActor
@@ -573,7 +592,7 @@ private final class LearningModeFixture {
     var completions: [@MainActor (Bool) -> Void] = []
     lazy var controller = makeController()
 
-    init(saved: String? = nil, libraryPresent: Bool = false, savedWhole: Any? = nil) {
+    init(saved: String? = nil, libraryPresent: Bool = false, savedWhole: Any? = false) {
         defaults = UserDefaults(suiteName: suiteName)!
         self.libraryPresent = libraryPresent
         if let saved { defaults.set(saved, forKey: LearningModeController.defaultsKey) }

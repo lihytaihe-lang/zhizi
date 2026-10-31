@@ -25,7 +25,7 @@ final class LearningMenuTests: XCTestCase {
         controller.bindLearningController(learning)
 
         func wholeItem() throws -> NSMenuItem {
-            try XCTUnwrap(controller.menu().items.first { $0.title == "全拼由知序拼（试用）" })
+            try XCTUnwrap(controller.menu().items.first { $0.title == "全拼由知序拼" })
         }
         func toggleWhole() throws {
             let item = try wholeItem()
@@ -41,7 +41,7 @@ final class LearningMenuTests: XCTestCase {
         }
         let titles = controller.menu().items.map(\.title)
         let learningIndex = try XCTUnwrap(titles.firstIndex { $0.hasPrefix("学习方式：") })
-        XCTAssertEqual(titles[learningIndex + 1], "全拼由知序拼（试用）")
+        XCTAssertEqual(titles[learningIndex + 1], "全拼由知序拼")
         XCTAssertEqual(try wholeItem().state, .off)
         try toggleWhole()
         XCTAssertEqual(migrations, 1)

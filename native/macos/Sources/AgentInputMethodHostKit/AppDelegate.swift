@@ -4,6 +4,7 @@ import InputMethodKit
 public final class InputMethodAppDelegate: NSObject, NSApplicationDelegate {
     private var server: IMKServer?
     private var recoveryMarker: RuntimeRecoveryMarker?
+    private let memorySampler = MemorySampler()
     private var runtimeStorageLease: RuntimeStorageLease?
     /// A windowless background-only app is App Napped and scheduled at low QoS, which puts key handling
     /// on efficiency cores: live core time per key ran ~10x the same replay. Held for the process lifetime;
@@ -120,6 +121,7 @@ public final class InputMethodAppDelegate: NSObject, NSApplicationDelegate {
         server = IMKServer(name: serverName, bundleIdentifier: bundleIdentifier)
         observeSkinGalleryRequests()
         observeLexiconWindowRequests()
+        memorySampler.start()
         runColdStartProbeIfRequested()
     }
 
@@ -194,6 +196,7 @@ public final class InputMethodAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func workspaceWillSleep(_ notification: Notification) {
+        memorySampler.record()
         DiagnosticsRecorder.shared.recordSystem(eventKind: "system-sleep")
         NotificationCenter.default.post(name: .agentInputWillSleep, object: nil)
     }

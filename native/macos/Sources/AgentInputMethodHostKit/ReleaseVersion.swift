@@ -2,5 +2,5 @@
 /// script/sync_version.sh; the test harnesses report it as artifactVersion and the regression
 /// gates compare it with the bundle's CFBundleShortVersionString.
 public enum ReleaseVersion {
-    public static let current = "0.3.8"
+    public static let current = "0.3.9"
 }

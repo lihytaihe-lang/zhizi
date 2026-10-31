@@ -201,6 +201,13 @@ fn run(arguments: &[String]) {
         empty_user_directory(std::path::Path::new(user)).expect("fresh sequential user directory");
         assert!(matches!(std::env::var("ZHIZI_LEARNING").as_deref(), Ok("zhixu" | "rime") | Err(_)), "ZHIZI_LEARNING must be zhixu or rime");
     }
+    // Name the inner decoder this run uses, and refuse a run that asked for another one (Q16: a
+    // comparison "against Zhixu" once ran Rime against Rime because Zhixu was never switched on).
+    let decoder = if std::env::var("ZHIZI_ZHIXU_WHOLE").as_deref() == Ok("1") { "zhixu" } else { "rime" };
+    if let Ok(required) = std::env::var("ZHIZI_EVAL_REQUIRE_DECODER") {
+        assert_eq!(required, decoder, "ZHIZI_EVAL_REQUIRE_DECODER={required} but this run uses {decoder}; set ZHIZI_ZHIXU_WHOLE=1 for zhixu");
+    }
+    eprintln!("eval decoder={decoder}");
     let mut host = Host::open(&HostConfig { shared_dir: shared.into(), user_dir: user.into(), app_id: "zhizi.eval".into() })
         .expect("open");
     // Host::open applies ZHIZI_ZHIXU_WHOLE through the same core entry point as the product.
@@ -354,7 +361,7 @@ fn run(arguments: &[String]) {
         memory_sample("quiescent");
     }
     let mut all = Tally::default();
-    println!("bucket\tcases\ttop1\ttop5\tmodel={model}");
+    println!("bucket\tcases\ttop1\ttop5\tmodel={model}\tdecoder={decoder}");
     for (bucket, tally) in &tallies {
         all.cases += tally.cases;
         all.first += tally.first;

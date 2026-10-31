@@ -74,7 +74,8 @@ final class LearningModeController {
         sessions.append(Session(id: id, isComposing: isComposing, apply: apply, applyZhixuWhole: applyZhixuWhole))
         if !restoredPreference {
             restoredPreference = true
-            if defaults.object(forKey: Self.wholeDefaultsKey) as? Bool == true {
+            // Zhixu handles whole input by default (2026-10-31); only an explicit off from the menu stays off.
+            if defaults.object(forKey: Self.wholeDefaultsKey) as? Bool != false {
                 requestZhixuWhole(true, reason: "restore")
             } else if defaults.string(forKey: Self.defaultsKey) == LearningMode.zhixu.preferenceValue {
                 request(.zhixu)

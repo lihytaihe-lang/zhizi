@@ -1,6 +1,6 @@
 [package]
 name = "agent-input-layer"
-version = "0.3.8"
+version = "0.3.9"
 description = "A task input layer for AI agents"
 authors = ["Agent Input Layer contributors"]
 edition = "2021"

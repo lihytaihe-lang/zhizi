@@ -167,7 +167,7 @@ Swift	swift	500
 SwiftKey	swiftkey	335
 SwiftPM	swiftpm	468
 TCP	tcp	370
-TIS	tis	510
+TIS	tis	512
 TISRegisterInputSource	tisregisterinputsource	335
 TSF	tsf	520
 Tailwind CSS	tailwindcss	500
@@ -202,6 +202,7 @@ XPC	xpc	433
 Xcode	xcode	500
 XcodeGen	xcodegen	335
 YAML	yaml	500
+YES	yes	458
 YIJIAN	yijian	520
 acquire	acquire	463
 allowed	allowed	509

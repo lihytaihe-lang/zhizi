@@ -50,7 +50,6 @@ bootstrap_native	bootstrap_native	433
 browser	browser	480
 BSD	bsd	504
 build_and_run	build_and_run	405
-build_manager	build_manager	458
 build_native	build_native	500
 bundleIdentifier	bundleidentifier	390
 CAPTURE	capture	494
@@ -272,7 +271,7 @@ terminal	terminal	510
 terminals	terminals	470
 TextEdit	textedit	481
 THIRD_PARTY_NOTICES	third_party_notices	520
-TIS	tis	510
+TIS	tis	512
 TIS-REG-001	tis-reg-001	300
 TISRegisterInputSource	tisregisterinputsource	335
 TSF	tsf	520
@@ -281,7 +280,7 @@ UID	uid	494
 UInt64	uint64	335
 unclean-recovery	unclean-recovery	300
 unknown	unknown	520
-unregister_dev_bundles	unregister_dev_bundles	460
+unregister_dev_bundles	unregister_dev_bundles	463
 URL	url	520
 usage_events	usage_events	370
 use_rime_order	use_rime_order	494
@@ -302,6 +301,7 @@ with_index	with_index	520
 XcodeGen	xcodegen	335
 XIAN	xian	509
 XPC	xpc	433
+YES	yes	458
 YIJIAN	yijian	520
 ZHIZI_TEST_INVITE	zhizi_test_invite	466
 ZHIZI_ZHIXU_WHOLE	zhizi_zhixu_whole	492
