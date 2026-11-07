@@ -1719,8 +1719,9 @@ mod tests {
         let oversized_path = path.clone();
         let oversized = thread::spawn(move || {
             let mut stream = UnixStream::connect(oversized_path).unwrap();
-            stream.write_all(&vec![b'x'; MAX_PAYLOAD + 1]).unwrap();
-            stream.shutdown(Shutdown::Write).unwrap();
+            // The server may answer and close before the client finishes writing or shutting down.
+            let _ = stream.write_all(&vec![b'x'; MAX_PAYLOAD + 1]);
+            let _ = stream.shutdown(Shutdown::Write);
             let mut response = String::new();
             stream.read_to_string(&mut response).unwrap();
             response
@@ -1731,8 +1732,8 @@ mod tests {
         let missing_path = path.clone();
         let missing = thread::spawn(move || {
             let mut stream = UnixStream::connect(missing_path).unwrap();
-            stream.write_all(b"AIMIPC/1 health no-newline").unwrap();
-            stream.shutdown(Shutdown::Write).unwrap();
+            let _ = stream.write_all(b"AIMIPC/1 health no-newline");
+            let _ = stream.shutdown(Shutdown::Write);
             let mut response = String::new();
             stream.read_to_string(&mut response).unwrap();
             response

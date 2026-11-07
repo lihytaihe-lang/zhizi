@@ -7,8 +7,8 @@
 - Rust：预装 Rust 工具链并准备依赖缓存。保留 `--offline --locked`，按下列命令使用可写的 `CARGO_TARGET_DIR` 目录。公开管理台测试须用 `--no-default-features`。
 - 前端：运行 `node scripts/run-frontend-tests.mjs` 前，预装项目 npm 依赖，包括 TypeScript。每份新克隆都需要自己的依赖。
 - Python：sprite-sheet 测试需要 numpy/Pillow。alignment batching 的 `zip(strict=True)` 需要 Python 3.10+；以下命令使用 Python 3.11 或更新版本。
-- Host：以下命令只构建。缺省 librime 特性编译 C shim，需要 librime 头文件、库和准备好的 `.build-deps` 缓存。
-- Swift：`swift_tests` 门需要 macOS/Xcode、`native/macos` 中的 Swift package、当前 Rust core、librime dylib 和 `codesign`。该门使用 `--disable-automatic-resolution` 运行 `swift build` 和 `swift test`；完整准备步骤见 `script/test_all.sh:82`。
+- Host：以下命令只构建。需要准备好的 `.build-deps` 缓存；构建已不再依赖 librime。
+- Swift：`swift_tests` 门需要 macOS/Xcode、`native/macos` 中的 Swift package、当前 Rust core 和 `codesign`。该门使用 `--disable-automatic-resolution` 运行 `swift build` 和 `swift test`；完整准备步骤见 `script/test_all.sh:82`。
 
 ```sh
 CARGO_TARGET_DIR=/tmp/zhizi-public-core cargo test --offline --locked --manifest-path native/core/Cargo.toml
@@ -71,7 +71,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v scripts.tools.test_build_sprite
 
 | 门 | 分类 | 依据与可用性 |
 | --- | --- | --- |
-| `bootstrap_native` | 4 | `script/test_all.sh:39; script/bootstrap_native.sh:257,296` — 空缓存时下载固定版本 librime 和 rime-pinyin-simp；macOS bootstrap。 |
+| `bootstrap_native` | 4 | `script/test_all.sh:39; script/bootstrap_native.sh:257,296` — 空缓存时下载固定版本的 rime-pinyin-simp 词库和 Rust 许可文件；macOS bootstrap。 |
 | `heavy_garble_words_check` | 1 | `script/test_all.sh:40; scripts/generate_heavy_garble_words.mjs:12-24` — 读取 .build-deps 中固定版本的拼音词典和仓库内 Rime 词典；需要准备缓存。 |
 | `context_disambig_check` | 1 | `script/test_all.sh:41; scripts/check_context_disambig.mjs:9-13` — 缺 third_party/context-disambig 与 quality/mined targets；尚不能认定全部为私有。 |
 | `freeze_corpus_check` | 1 | `script/test_all.sh:42; scripts/freeze_candidate_corpus.mjs:8-12` — 缺 base/fuzzy ground-truth 与 generalization corpus；未自动判为私有。 |
@@ -94,8 +94,8 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v scripts.tools.test_build_sprite
 | `cargo_test_core` | 1 | `script/test_all.sh:73; native/core/agent-ime-core/src/state.rs:1638,2254` — 包含合成嵌入夹具；218 项通过、6 项忽略。 |
 | `cargo_test_core_latency` | 1 | `script/test_all.sh:74; ` — 合成数据的 release 延迟门，取样敏感；未运行。 |
 | `cargo_test_ipc` | 1 | `script/test_all.sh:75; native/ipc/Cargo.toml:1` — Rust IPC crate 测试；需 Cargo 依赖缓存，没有单独运行记录。 |
-| `cargo_build_core_release` | 1 | `script/test_all.sh:76; native/core/agent-ime-core/src/rime.rs:1` — 需准备 librime 缓存和工具链；没有 release 构建记录。 |
-| `swift_tests` | 2 | `script/test_all.sh:82; ` — Swift package、librime dylib、codesign；需要 macOS/Xcode，没有运行记录。 |
+| `cargo_build_core_release` | 1 | `script/test_all.sh:76` — 需准备依赖缓存和工具链；没有 release 构建记录。 |
+| `swift_tests` | 2 | `script/test_all.sh:82; ` — Swift package、codesign；需要 macOS/Xcode，没有运行记录。 |
 | `build_release` | 2 | `script/test_all.sh:85; script/build_native.sh:33,47-60,100-101` — macOS bundle；模型可选；bootstrap 可能联网；当前缺第三方资产。 |
 | `core_network_boundary` | 2 | `script/test_all.sh:90; script/check_core_network_boundary.sh:125-142` — 检查构建后的 macOS bundle Mach-O 和源码，不发起实际网络请求；没有运行记录。 |
 | `artifact_checksum_equivalence` | 2 | `script/test_all.sh:97; script/test_artifact_checksum.sh:9` — 创建合成校验和夹具，同时需要真实 macOS bundle；没有运行记录。 |

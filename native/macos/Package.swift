@@ -6,7 +6,6 @@ let packageDirectory = URL(fileURLWithPath: #filePath).deletingLastPathComponent
 let repositoryRoot = packageDirectory.deletingLastPathComponent().deletingLastPathComponent()
 let coreLibraryDirectory = ProcessInfo.processInfo.environment["AIM_CORE_LIBRARY_DIR"]
     ?? repositoryRoot.appendingPathComponent("native/core/target/release").path
-let rimeRoot = repositoryRoot.appendingPathComponent(".build-deps/librime/1.16.1")
 
 let package = Package(
     name: "AgentInputMethodNative",
@@ -21,7 +20,6 @@ let package = Package(
         .executable(name: "AgentIMEPersonalReplayHarness", targets: ["AgentIMEPersonalReplayHarness"]),
         .executable(name: "AgentIMEFuzzyHarness", targets: ["AgentIMEFuzzyHarness"]),
         .executable(name: "AgentIMEUserDBHarness", targets: ["AgentIMEUserDBHarness"]),
-        .executable(name: "AgentIMEUserDBCtl", targets: ["AgentIMEUserDBCtl"]),
         .executable(name: "AgentIMEPerformanceHarness", targets: ["AgentIMEPerformanceHarness"]),
         .executable(name: "AgentIMESnapshotHarness", targets: ["AgentIMESnapshotHarness"]),
         .executable(name: "AgentIMECandidateHarness", targets: ["AgentIMECandidateHarness"]),
@@ -38,28 +36,8 @@ let package = Package(
             ]
         ),
         .target(
-            name: "RimeShim",
-            path: "Sources/RimeShim",
-            publicHeadersPath: "include",
-            cSettings: [.unsafeFlags(["-I", rimeRoot.appendingPathComponent("include").path])],
-            linkerSettings: [
-                .unsafeFlags(["-L", rimeRoot.appendingPathComponent("lib").path]),
-                .linkedLibrary("rime"),
-            ]
-        ),
-        .target(
-            name: "AgentIMEUserDBTestSupport",
-            path: "Sources/AgentIMEUserDBTestSupport",
-            publicHeadersPath: "include",
-            cSettings: [.unsafeFlags(["-I", rimeRoot.appendingPathComponent("include").path])],
-            linkerSettings: [
-                .unsafeFlags(["-L", rimeRoot.appendingPathComponent("lib").path]),
-                .linkedLibrary("rime"),
-            ]
-        ),
-        .target(
             name: "AgentInputMethodHostKit",
-            dependencies: ["AgentIMECoreBridge", "RimeShim"],
+            dependencies: ["AgentIMECoreBridge"],
             path: "Sources/AgentInputMethodHostKit",
             linkerSettings: [
                 .linkedFramework("AppKit"),
@@ -107,13 +85,8 @@ let package = Package(
         ),
         .executableTarget(
             name: "AgentIMEUserDBHarness",
-            dependencies: ["AgentInputMethodHostKit", "AgentIMEUserDBTestSupport"],
+            dependencies: ["AgentInputMethodHostKit"],
             path: "Sources/AgentIMEUserDBHarness"
-        ),
-        .executableTarget(
-            name: "AgentIMEUserDBCtl",
-            dependencies: ["AgentInputMethodHostKit", "RimeShim"],
-            path: "Sources/AgentIMEUserDBCtl"
         ),
         .executableTarget(
             name: "AgentIMEPerformanceHarness",

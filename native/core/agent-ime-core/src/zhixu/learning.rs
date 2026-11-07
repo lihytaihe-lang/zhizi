@@ -230,24 +230,11 @@ impl LearningStore {
         store
     }
 
-    /// Distinguishes a missing library from invalid existing data during migration.
-    pub(crate) fn existing_file_valid(user_dir: &Path) -> io::Result<bool> {
-        match fs::symlink_metadata(physical_runtime_path(user_dir).join(FILE_NAME)) {
-            Ok(_) => Self::read_current_validated(user_dir, true).map(|_| true),
-            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
-            Err(error) => Err(error),
-        }
-    }
-
     fn read_current(user_dir: &Path) -> io::Result<Self> {
-        Self::read_current_validated(user_dir, false)
-    }
-
-    fn read_current_validated(user_dir: &Path, strict: bool) -> io::Result<Self> {
         let path = physical_runtime_path(user_dir).join(FILE_NAME);
         let metadata = match fs::symlink_metadata(&path) {
             Ok(metadata) => metadata,
-            Err(error) if error.kind() == io::ErrorKind::NotFound && !strict => return Ok(Self::default()),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Self::default()),
             Err(error) => return Err(error),
         };
         if !private_regular_file(&metadata) || metadata.len() > MAX_BYTES {
@@ -278,12 +265,6 @@ impl LearningStore {
                 io::ErrorKind::InvalidData,
                 "unsupported or unbounded learning file",
             ));
-        }
-        if strict && (document.entries.iter().any(|entry| !valid_entry(entry)
-            || entry.rime.as_ref().is_some_and(|weight| weight.tick > document.rime_tick))
-            || document.choices.iter().any(|choice| !valid_choice(choice)))
-        {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid learning records"));
         }
         let mut store = Self {
             migrated: document.migrated,
@@ -325,37 +306,23 @@ impl LearningStore {
         self.save_before_replace(user_dir, || Ok(()))
     }
 
-    /// First migration must not merge or replace learning created by another writer.
-    pub(crate) fn save_new(&mut self, user_dir: &Path) -> io::Result<()> {
-        self.save_inner(user_dir, || Ok(()), true)
-    }
-
     fn save_before_replace(
         &mut self,
         user_dir: &Path,
         before_replace: impl FnOnce() -> io::Result<()>,
     ) -> io::Result<()> {
-        self.save_inner(user_dir, before_replace, false)
+        self.save_inner(user_dir, before_replace)
     }
 
     fn save_inner(
         &mut self,
         user_dir: &Path,
         before_replace: impl FnOnce() -> io::Result<()>,
-        require_new: bool,
     ) -> io::Result<()> {
         let user_dir = physical_runtime_path(user_dir);
         let directory = open_or_create_owned_leaf_directory(&user_dir, 0o700)?;
         validate_owned_directory(&directory, "Zhixu learning parent")?;
         let _lock = learning_lock::LearningLock::acquire(&user_dir)?;
-        if require_new {
-            match fs::symlink_metadata(user_dir.join(FILE_NAME)) {
-                Ok(_) => return Err(io::Error::new(io::ErrorKind::AlreadyExists,
-                    "migration requires a new learning file")),
-                Err(error) if error.kind() == io::ErrorKind::NotFound => {},
-                Err(error) => return Err(error),
-            }
-        }
         let current = Self::read_current(&user_dir).unwrap_or_else(|error| {
             // Do not log paths, learned text, or parser errors containing user data.
             eprintln!("zhixu_learning_merge_read_as_empty: {:?}", error.kind());
@@ -1053,7 +1020,9 @@ mod tests {
     }
 
     #[test]
-    fn migration_score_matches_librime_reference_and_stays_finite() {
+    // Expected values are the frozen reference scores inherited from the
+    // librime 1.16.1 UserDbValue formula this store's tick semantics follow.
+    fn migration_score_matches_the_frozen_reference_and_stays_finite() {
         for (commits, dynamic, tick, clock, expected) in [
             (37, 12.0, 1, 1000, -8.509056844386274),
             (7, 8.0, 999, 1000, -3.924521963740788),

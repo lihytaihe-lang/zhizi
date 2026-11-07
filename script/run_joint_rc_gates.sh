@@ -65,8 +65,7 @@ MANAGER_BUNDLE="$(cd "$(dirname "$MANAGER_BUNDLE")" && pwd -P)/$(basename "$MANA
 cd "$ROOT_DIR"
 RIME="$BUNDLE/Contents/Resources/Rime"
 HOST="$BUNDLE/Contents/MacOS/AgentInputMethod"
-LIBRARY="$BUNDLE/Contents/Frameworks"
-[[ -x "$HOST" && -d "$RIME" && -d "$LIBRARY" ]] || { echo "incomplete frozen RC input bundle" >&2; exit 2; }
+[[ -x "$HOST" && -d "$RIME" ]] || { echo "incomplete frozen RC input bundle" >&2; exit 2; }
 [[ -x "$INPUT_GUARD" ]] || { echo "missing RC input guard: $INPUT_GUARD" >&2; exit 2; }
 [[ -x "$FREEZE_TOOL" ]] || { echo "missing RC freeze verifier: $FREEZE_TOOL" >&2; exit 2; }
 "$FREEZE_TOOL" --verify-frozen "$BUNDLE" "$MANAGER_BUNDLE" >/dev/null
@@ -154,15 +153,6 @@ verify_arm64_only() {
         esac
         case "$dependency_path" in
           /System/Library/*|/usr/lib/*) ;;
-          @rpath/librime.1.dylib)
-            [[ "$relative_path" == "Contents/MacOS/AgentInputMethod" || \
-               "$relative_path" == "Contents/MacOS/AgentIMEPersonalReplayHarness" || \
-               "$relative_path" == "Contents/MacOS/AgentIMEUserDBCtl" || \
-               "$relative_path" == "Contents/Frameworks/librime.1.dylib" ]] || {
-              echo "librime dependency is undeclared for RC payload: $relative_path" >&2
-              return 3
-            }
-            ;;
           *)
             echo "undeclared absolute or tokenized dependency in RC Mach-O: $relative_path ($dependency_path)" >&2
             return 3
@@ -174,9 +164,9 @@ verify_arm64_only() {
         in_rpath && $1 == "path" { print $2; in_rpath=0 }
       ' | LC_ALL=C sort)"
       if [[ "$relative_path" == "Contents/MacOS/AgentInputMethod" || \
-            "$relative_path" == "Contents/MacOS/AgentIMEPersonalReplayHarness" || \
-            "$relative_path" == "Contents/MacOS/AgentIMEUserDBCtl" ]]; then
-        expected_rpaths=$'@executable_path/../Frameworks\n@loader_path'
+            "$relative_path" == "Contents/MacOS/AgentIMEPersonalReplayHarness" ]]; then
+        expected_rpaths=$'@executable_path/../Frameworks
+@loader_path'
         [[ "$rpaths" == "$expected_rpaths" ]] || {
           echo "input host has a missing or undeclared RPATH: $rpaths" >&2
           return 3
@@ -219,33 +209,22 @@ for plugin_path in Contents/PlugIns Contents/Resources/Rime/plugins Contents/Res
   }
 done
 verify_exact_file_inventory "$BUNDLE" input \
-  Contents/Frameworks/librime.1.dylib \
   Contents/Info.plist \
   Contents/MacOS/AgentIMEInputSourceCtl \
   Contents/MacOS/AgentIMEPersonalReplayHarness \
-  Contents/MacOS/AgentIMEUserDBCtl \
   Contents/MacOS/AgentInputMethod \
   Contents/PkgInfo \
   Contents/Resources/AgentInputMethod.icns \
   Contents/Resources/AgentInputMethodMenu.pdf \
   Contents/Resources/ContextDisambig.json \
-  Contents/Resources/Licenses/OpenCC-Apache-2.0.txt \
-  Contents/Resources/Licenses/RapidJSON-LICENSE.txt \
   Contents/Resources/Licenses/Rust-standard-library-Apache-2.0.txt \
   Contents/Resources/Licenses/Rust-standard-library-COPYRIGHT.txt \
   Contents/Resources/Licenses/Rust-standard-library-MIT.txt \
-  Contents/Resources/Licenses/boost-BSL-1.0.txt \
-  Contents/Resources/Licenses/darts-clone-COPYING.txt \
-  Contents/Resources/Licenses/glog-BSD-3-Clause.txt \
-  Contents/Resources/Licenses/leveldb-BSD-3-Clause.txt \
-  Contents/Resources/Licenses/librime-BSD-3-Clause.txt \
-  Contents/Resources/Licenses/marisa-trie-COPYING.txt \
   Contents/Resources/Licenses/rime-pinyin-simp-Apache-2.0.txt \
   Contents/Resources/Licenses/rime-pinyin-simp-AUTHORS.txt \
   Contents/Resources/Licenses/THUOCL-MIT.txt \
   Contents/Resources/Licenses/jieba-MIT.txt \
   Contents/Resources/Licenses/pypinyin-MIT.txt \
-  Contents/Resources/Licenses/yaml-cpp-MIT.txt \
   Contents/Resources/Rime/agent_common_fix.dict.yaml \
   Contents/Resources/Rime/agent_daily.dict.yaml \
   Contents/Resources/Rime/agent_english.dict.yaml \
@@ -515,8 +494,7 @@ EXECUTION_METADATA="$RUNTIME_ROOT/FROZEN_ARTIFACTS"
 /usr/bin/cmp -s "$(dirname "$BUNDLE")/FROZEN_ARTIFACTS" "$EXECUTION_METADATA"
 RIME="$EXECUTION_BUNDLE/Contents/Resources/Rime"
 HOST="$EXECUTION_BUNDLE/Contents/MacOS/AgentInputMethod"
-LIBRARY="$EXECUTION_BUNDLE/Contents/Frameworks"
-[[ -x "$HOST" && -d "$RIME" && -d "$LIBRARY" ]] || {
+[[ -x "$HOST" && -d "$RIME" ]] || {
   echo "incomplete frozen RC execution copy" >&2
   exit 3
 }
@@ -535,7 +513,6 @@ assert_same_file() {
   }
 }
 
-PINNED_RIME_DIR="$ROOT_DIR/.build-deps/librime/1.16.1"
 PINNED_PINYIN_DIR="$ROOT_DIR/.build-deps/rime-pinyin-simp/0c6861ef7420ee780270ca6d993d18d4101049d0"
 assert_same_file dictionary "$PINNED_PINYIN_DIR/pinyin_simp.dict.yaml" "$RIME/pinyin_simp.dict.yaml"
 assert_same_file default-schema "$ROOT_DIR/native/resources/Rime/default.yaml" "$RIME/default.yaml"
@@ -563,20 +540,11 @@ assert_same_file agent-owner-words-dictionary "$ROOT_DIR/native/resources/Rime/a
 assert_same_file exact-reading-index "$ROOT_DIR/native/resources/Rime/agent_exact_readings.tsv" "$RIME/agent_exact_readings.tsv"
 assert_same_file context-disambiguation-table "$ROOT_DIR/third_party/context-disambig/disambig-table-v1.json" "$BUNDLE/Contents/Resources/ContextDisambig.json"
 assert_same_file input-notices "$ROOT_DIR/THIRD_PARTY_NOTICES.md" "$BUNDLE/Contents/Resources/THIRD_PARTY_NOTICES.md"
-assert_same_file librime-license "$PINNED_RIME_DIR/licenses/LICENSE.librime" "$BUNDLE/Contents/Resources/Licenses/librime-BSD-3-Clause.txt"
 assert_same_file pinyin-license "$PINNED_PINYIN_DIR/LICENSE" "$BUNDLE/Contents/Resources/Licenses/rime-pinyin-simp-Apache-2.0.txt"
 assert_same_file pinyin-authors "$PINNED_PINYIN_DIR/AUTHORS" "$BUNDLE/Contents/Resources/Licenses/rime-pinyin-simp-AUTHORS.txt"
 assert_same_file thuocl-license "$ROOT_DIR/third_party/licenses/THUOCL-MIT.txt" "$BUNDLE/Contents/Resources/Licenses/THUOCL-MIT.txt"
 assert_same_file jieba-license "$ROOT_DIR/third_party/licenses/jieba-MIT.txt" "$BUNDLE/Contents/Resources/Licenses/jieba-MIT.txt"
 assert_same_file pypinyin-license "$ROOT_DIR/third_party/licenses/pypinyin-MIT.txt" "$BUNDLE/Contents/Resources/Licenses/pypinyin-MIT.txt"
-assert_same_file boost-license "$ROOT_DIR/third_party/licenses/boost-BSL-1.0.txt" "$BUNDLE/Contents/Resources/Licenses/boost-BSL-1.0.txt"
-assert_same_file glog-license "$ROOT_DIR/third_party/licenses/glog-BSD-3-Clause.txt" "$BUNDLE/Contents/Resources/Licenses/glog-BSD-3-Clause.txt"
-assert_same_file leveldb-license "$ROOT_DIR/third_party/licenses/leveldb-BSD-3-Clause.txt" "$BUNDLE/Contents/Resources/Licenses/leveldb-BSD-3-Clause.txt"
-assert_same_file marisa-license "$ROOT_DIR/third_party/licenses/marisa-trie-COPYING.txt" "$BUNDLE/Contents/Resources/Licenses/marisa-trie-COPYING.txt"
-assert_same_file opencc-license "$ROOT_DIR/third_party/licenses/OpenCC-Apache-2.0.txt" "$BUNDLE/Contents/Resources/Licenses/OpenCC-Apache-2.0.txt"
-assert_same_file darts-license "$ROOT_DIR/third_party/licenses/darts-clone-COPYING.txt" "$BUNDLE/Contents/Resources/Licenses/darts-clone-COPYING.txt"
-assert_same_file rapidjson-license "$ROOT_DIR/third_party/licenses/RapidJSON-LICENSE.txt" "$BUNDLE/Contents/Resources/Licenses/RapidJSON-LICENSE.txt"
-assert_same_file yaml-cpp-license "$ROOT_DIR/third_party/licenses/yaml-cpp-MIT.txt" "$BUNDLE/Contents/Resources/Licenses/yaml-cpp-MIT.txt"
 assert_same_file rust-apache-license "$ROOT_DIR/.build-deps/rust/1.94.1/licenses/LICENSE-APACHE" \
   "$BUNDLE/Contents/Resources/Licenses/Rust-standard-library-Apache-2.0.txt"
 assert_same_file rust-mit-license "$ROOT_DIR/.build-deps/rust/1.94.1/licenses/LICENSE-MIT" \
@@ -595,12 +563,6 @@ assert_same_file manager-license-registry "$ROOT_DIR/docs/current/licenses/LOCKE
   "$MANAGER_BUNDLE/Contents/Resources/_up_/docs/current/licenses/LOCKED_DEPENDENCIES.json"
 assert_same_file manager-native-license-assets "$ROOT_DIR/docs/current/licenses/NATIVE_LICENSE_ASSETS.json" \
   "$MANAGER_BUNDLE/Contents/Resources/_up_/docs/current/licenses/NATIVE_LICENSE_ASSETS.json"
-cp "$PINNED_RIME_DIR/lib/librime.1.dylib" "$RUNTIME_ROOT/pinned-librime-unsigned.dylib"
-cp "$BUNDLE/Contents/Frameworks/librime.1.dylib" "$RUNTIME_ROOT/bundled-librime-unsigned.dylib"
-chmod u+w "$RUNTIME_ROOT/pinned-librime-unsigned.dylib" "$RUNTIME_ROOT/bundled-librime-unsigned.dylib"
-codesign --remove-signature "$RUNTIME_ROOT/pinned-librime-unsigned.dylib" 2>/dev/null || true
-codesign --remove-signature "$RUNTIME_ROOT/bundled-librime-unsigned.dylib" 2>/dev/null || true
-assert_same_file librime-code "$RUNTIME_ROOT/pinned-librime-unsigned.dylib" "$RUNTIME_ROOT/bundled-librime-unsigned.dylib"
 
 PUBLISHING=0
 COMMITTED=0
@@ -672,9 +634,8 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 OFFLINE_SANDBOX='(version 1) (allow default) (deny network*)'
-RIME_DEP="$ROOT_DIR/.build-deps/librime/1.16.1/lib/librime.1.dylib"
 PINYIN_DEP="$ROOT_DIR/.build-deps/rime-pinyin-simp/0c6861ef7420ee780270ca6d993d18d4101049d0/pinyin_simp.dict.yaml"
-[[ -f "$RIME_DEP" && -f "$PINYIN_DEP" ]] || {
+[[ -f "$PINYIN_DEP" ]] || {
   echo "pinned native dependencies must be bootstrapped before the offline joint gate" >&2
   exit 3
 }
@@ -690,7 +651,7 @@ CORE_LIBRARY_DIR="$CARGO_TARGET_DIR/release"
 mkdir -p "$CARGO_HOME_DIR"
 sandbox-exec -p "$OFFLINE_SANDBOX" env CARGO_HOME="$CARGO_HOME_DIR" \
   CARGO_NET_OFFLINE=true CARGO_INCREMENTAL=0 CARGO_TARGET_DIR="$CARGO_TARGET_DIR" \
-  cargo build --locked --offline --manifest-path "$ROOT_DIR/native/core/Cargo.toml" --release --features librime
+  cargo build --locked --offline --manifest-path "$ROOT_DIR/native/core/Cargo.toml" --release
 [[ -f "$CORE_LIBRARY_DIR/libagent_ime_core.a" && ! -L "$CORE_LIBRARY_DIR/libagent_ime_core.a" ]] || {
   echo "fresh isolated Rust core archive is missing" >&2
   exit 3
@@ -742,7 +703,6 @@ BEHAVIOR_NAME="${ARTIFACT_PREFIX}-behavior-golden.txt"
 BASE_NAME="${ARTIFACT_PREFIX}-base-500.json"
 FUZZY_NAME="${ARTIFACT_PREFIX}-fuzzy-56.json"
 USERDB_NAME="${ARTIFACT_PREFIX}-userdb.json"
-USERDB_PROCESS_NAME="${ARTIFACT_PREFIX}-userdb-process-recovery.txt"
 PERFORMANCE_NAME="${ARTIFACT_PREFIX}-performance-stress.json"
 HARNESS_BUILD_NAME="${ARTIFACT_PREFIX}-harness-build.txt"
 
@@ -773,7 +733,7 @@ bind_json_report_metadata() {
 
 BEHAVIOR_REPORT="$RESULTS/V03-01/$BEHAVIOR_NAME"
 BEHAVIOR_RAW="$RUNTIME_ROOT/behavior-golden-real.txt"
-sandbox-exec -p "$OFFLINE_SANDBOX" env DYLD_LIBRARY_PATH="$LIBRARY" \
+sandbox-exec -p "$OFFLINE_SANDBOX" env \
   "$BIN/AgentIMEBehaviorHarness" \
   "$RIME" "$RUNTIME_ROOT/behavior-user" "$ROOT_DIR/quality/golden/behavior-v0.3.tsv" \
   "$BEHAVIOR_RAW" "$ARTIFACT_SHA"
@@ -795,9 +755,9 @@ sandbox-exec -p "$OFFLINE_SANDBOX" env DYLD_LIBRARY_PATH="$LIBRARY" \
 } > "$BEHAVIOR_REPORT" 2>&1
 grep -qx "artifact_checksum=$ARTIFACT_SHA" "$BEHAVIOR_REPORT"
 grep -qx "artifact_version=$PRODUCT_VERSION" "$BEHAVIOR_REPORT"
-grep -qx 'execution_path=swift-coresession-c-abi-rust-state-librime' "$BEHAVIOR_REPORT"
+grep -qx 'execution_path=swift-coresession-c-abi-rust-state-zhixu' "$BEHAVIOR_REPORT"
 grep -qx 'core_abi_version=6' "$BEHAVIOR_REPORT"
-grep -qx 'real_decoder=librime' "$BEHAVIOR_REPORT"
+grep -qx 'real_decoder=zhixu' "$BEHAVIOR_REPORT"
 grep -qx 'frozen_cases=29' "$BEHAVIOR_REPORT"
 grep -qx 'semantic_cases_passed=29' "$BEHAVIOR_REPORT"
 grep -qx 'semantic_cases_failed=0' "$BEHAVIOR_REPORT"
@@ -824,7 +784,7 @@ sandbox-exec -p "$OFFLINE_SANDBOX" env CARGO_NET_OFFLINE=true \
   node "$ROOT_DIR/scripts/generate_locked_dependency_registry.mjs" --check \
   >> "$RUNTIME_ROOT/corpus-checksums.txt"
 BASE_REPORT="$RESULTS/V03-02/$BASE_NAME"
-sandbox-exec -p "$OFFLINE_SANDBOX" env DYLD_LIBRARY_PATH="$LIBRARY" \
+sandbox-exec -p "$OFFLINE_SANDBOX" env \
   "$BIN/AgentIMEReplayHarness" \
   "$RIME" "$RUNTIME_ROOT/base-user" "$ROOT_DIR/quality/corpus/base-500.json" \
   "$BASE_REPORT" 5 "$ARTIFACT_SHA"
@@ -847,10 +807,9 @@ jq -e --arg version "$PRODUCT_VERSION" --arg checksum "$ARTIFACT_SHA" '
   all(.failures[]; .reason == "top5-miss") and
   (([.failures[].id] | unique | length) == (.failures | length))
 ' "$BASE_REPORT" >/dev/null
-[[ -d "$RUNTIME_ROOT/base-user/pinyin_simp.userdb" && \
-   ! -e "$RUNTIME_ROOT/base-user/agent_pinyin.userdb" && \
-   ! -L "$RUNTIME_ROOT/base-user/pinyin_simp.userdb" ]] || {
-  echo "aggregate dictionary changed the v0.3 UserDB name" >&2
+[[ -f "$RUNTIME_ROOT/base-user/agent_zhixu_learning_v1.json" && \
+   ! -L "$RUNTIME_ROOT/base-user/agent_zhixu_learning_v1.json" ]] || {
+  echo "base replay did not keep the zhixu learning store in its user directory" >&2
   exit 3
 }
 
@@ -860,7 +819,7 @@ mkdir -p "$FUZZY_PARTS"
 for group in zh-z ch-c sh-s n-l f-h an-ang en-eng in-ing; do
   group_user="$RUNTIME_ROOT/fuzzy-$group-user"
   group_report="$FUZZY_PARTS/$group.json"
-  sandbox-exec -p "$OFFLINE_SANDBOX" env DYLD_LIBRARY_PATH="$LIBRARY" \
+  sandbox-exec -p "$OFFLINE_SANDBOX" env \
     "$BIN/AgentIMEFuzzyHarness" \
     "$RIME" "$group_user" "$ROOT_DIR/quality/corpus/fuzzy-56.json" \
     "$group_report" 5 "$group" "$ARTIFACT_SHA"
@@ -915,7 +874,7 @@ jq -e --arg version "$PRODUCT_VERSION" --arg checksum "$ARTIFACT_SHA" '
 ' "$FUZZY_REPORT" >/dev/null
 
 USERDB_REPORT="$RESULTS/V03-04/$USERDB_NAME"
-sandbox-exec -p "$OFFLINE_SANDBOX" env DYLD_LIBRARY_PATH="$LIBRARY" \
+sandbox-exec -p "$OFFLINE_SANDBOX" env \
   "$BIN/AgentIMEUserDBHarness" \
   "$RIME" "$RUNTIME_ROOT/userdb-user" "$ARTIFACT_SHA" > "$USERDB_REPORT"
 bind_json_report_metadata "$USERDB_REPORT"
@@ -923,30 +882,12 @@ jq -e --arg version "$PRODUCT_VERSION" --arg checksum "$ARTIFACT_SHA" '
   .artifactChecksum == $checksum and .artifactVersion == $version and
   .trainingSelections >= 30 and .promotedTop1 == .target and
   .afterDeleteTop1 != .target and .continuousSelectionCommit == "你好" and
-  (.userDBFiles | index("pinyin_simp.userdb")) != null
+  (.userDBFiles | index("agent_zhixu_learning_v1.json")) != null
 ' "$USERDB_REPORT" >/dev/null
-
-USERDB_PROCESS_REPORT="$RESULTS/V03-04/$USERDB_PROCESS_NAME"
-{
-  printf 'artifact_checksum=%s\nartifact_version=%s\nartifact_build=%s\nproduct_commit=%s\nproduct_inputs_sha256=%s\nrun_id=%s\n' \
-    "$ARTIFACT_SHA" "$INPUT_VERSION" "$INPUT_BUILD" "$INPUT_COMMIT" "$INPUT_TREE_SHA" "$RUN_ID"
-  sandbox-exec -p "$OFFLINE_SANDBOX" \
-    "$ROOT_DIR/script/test_userdb_process_recovery.sh" "$EXECUTION_BUNDLE" "$ARTIFACT_SHA"
-} > "$USERDB_PROCESS_REPORT" 2>&1
-grep -q "^userdb_process_recovery=PASS mode=RELEASE_EVIDENCE artifact_checksum=$ARTIFACT_SHA " \
-  "$USERDB_PROCESS_REPORT"
-grep -q '^after_select_hook_calls=1 hook_state=stopped restart_inspect_selection_calls=0 crash_learning_count=0 explicit_retry_learning_count=1$' \
-  "$USERDB_PROCESS_REPORT"
-grep -q '^same_physical_event_replay_id_stable=true different_physical_event_ids_unique=true replay_diagnostic_count=1 ' \
-  "$USERDB_PROCESS_REPORT"
-grep -qx 'post_sync_crash_exit=137 post_sync_first_learning_count=1 same_event_replay_learning_count=1 different_event_learning_count=2 same_event_replay_select_hook_calls=0 zero_id_learning_count=0 product_name_select_hook_calls=0 ledger_directory_mode=700 ledger_file_mode=600' \
-  "$USERDB_PROCESS_REPORT"
-grep -qx 'pre_select_claim_crash_exit=137 pre_select_claim_hook_calls=1 same_event_replay_learning_count=0 different_event_learning_count=1 same_event_replay_select_hook_calls=0 same_event_replay_committed=true' \
-  "$USERDB_PROCESS_REPORT"
 
 PERFORMANCE_REPORT="$RESULTS/V03-06/$PERFORMANCE_NAME"
 sandbox-exec -p "$OFFLINE_SANDBOX" env AIM_PERFORMANCE_OFFICIAL=1 \
-  DYLD_LIBRARY_PATH="$LIBRARY" "$BIN/AgentIMEPerformanceHarness" \
+  "$BIN/AgentIMEPerformanceHarness" \
   "$RIME" "$RUNTIME_ROOT/performance-user" "$ROOT_DIR/quality/corpus/base-500.json" \
   "$PERFORMANCE_REPORT" "$ARTIFACT_SHA" "$HOST" "$STRESS_SECONDS_REQUESTED" --official
 bind_json_report_metadata "$PERFORMANCE_REPORT"
@@ -1034,11 +975,7 @@ HARNESS_BUILD_REPORT="$RESULTS/V03-06/$HARNESS_BUILD_NAME"
   shasum -a 256 "$BIN/AgentIMEBehaviorHarness" \
     "$BIN/AgentIMEReplayHarness" "$BIN/AgentIMEFuzzyHarness" \
     "$BIN/AgentIMEUserDBHarness" "$BIN/AgentIMEPerformanceHarness"
-  shasum -a 256 "$PINNED_RIME_DIR/lib/librime.1.dylib" \
-    "$BUNDLE/Contents/Frameworks/librime.1.dylib" \
-    "$RUNTIME_ROOT/pinned-librime-unsigned.dylib" \
-    "$RUNTIME_ROOT/bundled-librime-unsigned.dylib" \
-    "$ROOT_DIR/native/resources/Rime/default.yaml" "$RIME/default.yaml" \
+  shasum -a 256 "$ROOT_DIR/native/resources/Rime/default.yaml" "$RIME/default.yaml" \
     "$ROOT_DIR/native/resources/Rime/agent_pinyin.schema.yaml" "$RIME/agent_pinyin.schema.yaml" \
     "$ROOT_DIR/native/resources/Rime/agent_pinyin.dict.yaml" "$RIME/agent_pinyin.dict.yaml" \
     "$ROOT_DIR/native/resources/Rime/agent_common_fix.dict.yaml" "$RIME/agent_common_fix.dict.yaml" \
@@ -1066,8 +1003,6 @@ HARNESS_BUILD_REPORT="$RESULTS/V03-06/$HARNESS_BUILD_NAME"
     "$ROOT_DIR/THIRD_PARTY_NOTICES.md" \
     "$BUNDLE/Contents/Resources/THIRD_PARTY_NOTICES.md" \
     "$MANAGER_BUNDLE/Contents/Resources/_up_/THIRD_PARTY_NOTICES.md" \
-    "$PINNED_RIME_DIR/licenses/LICENSE.librime" \
-    "$BUNDLE/Contents/Resources/Licenses/librime-BSD-3-Clause.txt" \
     "$PINNED_PINYIN_DIR/LICENSE" \
     "$BUNDLE/Contents/Resources/Licenses/rime-pinyin-simp-Apache-2.0.txt" \
     "$PINNED_PINYIN_DIR/AUTHORS" \
@@ -1078,28 +1013,12 @@ HARNESS_BUILD_REPORT="$RESULTS/V03-06/$HARNESS_BUILD_NAME"
     "$BUNDLE/Contents/Resources/Licenses/THUOCL-MIT.txt" \
     "$BUNDLE/Contents/Resources/Licenses/jieba-MIT.txt" \
     "$BUNDLE/Contents/Resources/Licenses/pypinyin-MIT.txt" \
-    "$ROOT_DIR/third_party/licenses/boost-BSL-1.0.txt" \
-    "$BUNDLE/Contents/Resources/Licenses/boost-BSL-1.0.txt" \
-    "$ROOT_DIR/third_party/licenses/glog-BSD-3-Clause.txt" \
-    "$BUNDLE/Contents/Resources/Licenses/glog-BSD-3-Clause.txt" \
-    "$ROOT_DIR/third_party/licenses/leveldb-BSD-3-Clause.txt" \
-    "$BUNDLE/Contents/Resources/Licenses/leveldb-BSD-3-Clause.txt" \
-    "$ROOT_DIR/third_party/licenses/marisa-trie-COPYING.txt" \
-    "$BUNDLE/Contents/Resources/Licenses/marisa-trie-COPYING.txt" \
-    "$ROOT_DIR/third_party/licenses/OpenCC-Apache-2.0.txt" \
-    "$BUNDLE/Contents/Resources/Licenses/OpenCC-Apache-2.0.txt" \
-    "$ROOT_DIR/third_party/licenses/darts-clone-COPYING.txt" \
-    "$BUNDLE/Contents/Resources/Licenses/darts-clone-COPYING.txt" \
-    "$ROOT_DIR/third_party/licenses/RapidJSON-LICENSE.txt" \
-    "$BUNDLE/Contents/Resources/Licenses/RapidJSON-LICENSE.txt" \
     "$ROOT_DIR/.build-deps/rust/1.94.1/licenses/LICENSE-APACHE" \
     "$BUNDLE/Contents/Resources/Licenses/Rust-standard-library-Apache-2.0.txt" \
     "$ROOT_DIR/.build-deps/rust/1.94.1/licenses/LICENSE-MIT" \
     "$BUNDLE/Contents/Resources/Licenses/Rust-standard-library-MIT.txt" \
     "$ROOT_DIR/.build-deps/rust/1.94.1/licenses/COPYRIGHT-library.html" \
     "$BUNDLE/Contents/Resources/Licenses/Rust-standard-library-COPYRIGHT.txt" \
-    "$ROOT_DIR/third_party/licenses/yaml-cpp-MIT.txt" \
-    "$BUNDLE/Contents/Resources/Licenses/yaml-cpp-MIT.txt" \
     "$ROOT_DIR/docs/current/licenses/LOCKED_DEPENDENCIES.json" \
     "$MANAGER_BUNDLE/Contents/Resources/_up_/docs/current/licenses/LOCKED_DEPENDENCIES.json" \
     "$ROOT_DIR/docs/current/licenses/DEPENDENCY_REGISTRY.md" \
@@ -1177,8 +1096,8 @@ POINTER_STAGE="$STAGE_ROOT/RC_ARTIFACT.sha256"
   printf '# pointer_report_set_sha256=%s\n' "$(printf '0%.0s' {1..64})"
   printf '# behavior_report=V03-01/artifacts/%s\n' "$BEHAVIOR_NAME"
   printf '# base_report=V03-02/artifacts/%s\n# fuzzy_report=V03-02/artifacts/%s\n' "$BASE_NAME" "$FUZZY_NAME"
-  printf '# userdb_report=V03-04/artifacts/%s\n' "$USERDB_NAME"
-  printf '# userdb_process_report=V03-04/artifacts/%s\n' "$USERDB_PROCESS_NAME"
+  printf '# userdb_report=V03-04/artifacts/%s
+' "$USERDB_NAME"
   printf '# performance_report=V03-06/artifacts/%s\n# harness_build_report=V03-06/artifacts/%s\n' \
     "$PERFORMANCE_NAME" "$HARNESS_BUILD_NAME"
   printf '%s  %s\n%s  %s\n' "$ARTIFACT_SHA" "$BUNDLE" "$MANAGER_SHA" "$MANAGER_BUNDLE"
@@ -1235,7 +1154,7 @@ done
 for published_report in \
   "V03-01/$BEHAVIOR_NAME" \
   "V03-02/$BASE_NAME" "V03-02/$FUZZY_NAME" \
-  "V03-04/$USERDB_NAME" "V03-04/$USERDB_PROCESS_NAME" \
+  "V03-04/$USERDB_NAME" \
   "V03-06/$PERFORMANCE_NAME" "V03-06/$HARNESS_BUILD_NAME"; do
   report_task="${published_report%%/*}"
   report_name="${published_report#*/}"

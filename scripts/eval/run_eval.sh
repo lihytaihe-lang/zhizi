@@ -20,7 +20,6 @@ else
 fi
 M="$ML/release"
 export ZHIZI_EVAL_WAIT_TICKS="${ZHIZI_EVAL_WAIT_TICKS:-400}"  # 40 let the model answer late under load: identical resources gave different firsts
-export DYLD_LIBRARY_PATH="${ZHIZI_RIME_LIB:-$ROOT/.build-deps/librime/1.16.1/lib}"
 if [ "${3:-}" != nomodel ]; then
   export ZHIZI_ORT="$(ls "$ML"/.venv/lib/python3.12/site-packages/onnxruntime/capi/libonnxruntime.*.dylib | head -1)"
   export ZHIZI_MODEL="${ZHIZI_MODEL_OVERRIDE:-$M/zhizi-30m-v3-onnx/zhizi30m_v2.onnx}" ZHIZI_ITOS="$M/zhizi-30m-v3/itos.json"

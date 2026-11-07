@@ -10,7 +10,6 @@ crate-type = ["rlib", "staticlib"]
 
 [features]
 default = []
-librime = []
 diagnostic-no-owner-raw-hits = []
 
 [dependencies]

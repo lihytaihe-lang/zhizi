@@ -4,7 +4,7 @@ English · [中文](README.zh-CN.md) · [Website](https://zhizi.dabblecove.com/)
 
 Zhizi is a Simplified Chinese full-pinyin input method for macOS (Apple Silicon) and Windows 11 (x64). The typing core is fully offline; a small bundled context model, Shunshou-Zhizi, runs on-device and reorders candidates using the text before the caret.
 
-Current version 0.1.5; see [CHANGELOG.md](CHANGELOG.md) (Chinese) for release notes.
+The current version is in the [VERSION](VERSION) file; see [CHANGELOG.md](CHANGELOG.md) (Chinese) for release notes. The macOS release published on GitHub (v0.1.5) is older than the source in this repository.
 
 ## Features
 
@@ -14,7 +14,7 @@ Current version 0.1.5; see [CHANGELOG.md](CHANGELOG.md) (Chinese) for release no
 - Context-aware ranking: the text before the caret participates in candidate ranking; on Windows it is read from the app's actual content, and code-oriented apps with no preceding text get half-width punctuation by default.
 - Mixed Chinese/English input: English candidates appear directly under a pinyin string; tapping Shift toggles Chinese/English (on Windows with a 中/英 badge, taskbar mode, and per-app memory).
 - `=` expands the panel to four rows; arrow keys move through the grid.
-- User-dictionary learning (UserDB); Ctrl+Backspace clears the highlighted candidate's learned entry, Ctrl+Shift+Backspace blacklists it.
+- Learning from your own choices, stored locally on your machine; Ctrl+Backspace clears the highlighted candidate's learned entry, Ctrl+Shift+Backspace blacklists it.
 - Candidate-panel skins: static and animated skins (action sequences, decorations that extend outside the panel) plus a skin-manager window; the skin format is defined in `native/resources/Skins/skin.schema.json`.
 - Layered lexicons: a base dictionary plus a daily-new-words layer (everyday names by category), a spoken-phrase layer, and idiom, IT and finance extension layers. Professional packs (poetry, CAD, industry, AI and English terms) are not part of this repository: they live in the zhizi-lexicon repository, which is the place to download them and to contribute entries.
 - Offline: the input-method core and the model make no network requests (a network-boundary check, `script/check_core_network_boundary.sh`, is part of the release gates).
@@ -35,7 +35,7 @@ Current version 0.1.5; see [CHANGELOG.md](CHANGELOG.md) (Chinese) for release no
 ```
 
 - Requires an Apple Silicon Mac, Xcode command-line tools, Rust, and Node.js (versions as locked by the repository).
-- On the first build, `script/bootstrap_native.sh` downloads librime 1.16.1, the rime-pinyin-simp base dictionary, and Rust standard-library license files, and locks them by SHA-256 into `.build-deps/` (not committed); later builds run offline.
+- On the first build, `script/bootstrap_native.sh` downloads the rime-pinyin-simp base dictionary and Rust standard-library license files (librime is no longer used), and locks them by SHA-256 into `.build-deps/` (not committed); later builds run offline.
 - The context model is not in this repository. Optionally run `python3 scripts/context_model/fetch_public_model.py` before building to download and compile it (see [Model and lexicons](#model-and-lexicons)); without it you get a model-less build with lower ranking quality.
 - The output is `build/native/release/Agent Input Method.inputmethod`. Installing it into the system is a separate release-validation step; a successful build alone is not a release.
 
@@ -45,12 +45,12 @@ Current version 0.1.5; see [CHANGELOG.md](CHANGELOG.md) (Chinese) for release no
 powershell -NoProfile -ExecutionPolicy Bypass -File script\build_windows.ps1 -Package
 ```
 
-- Requires Windows 11 x64 and the MSVC toolchain; how to prepare librime, ONNX Runtime, the VC runtime, Inno Setup, and the expected directory layout is documented in the script itself.
+- Requires Windows 11 x64 and the MSVC toolchain. Note: `script/build_windows.ps1` still targets the earlier librime-based engine and has not been updated or tested against the current core; the published Windows installer predates it. Treat the Windows build as being migrated, not as a working recipe.
 
 ## Model and lexicons
 
 - Model: Shunshou-Zhizi (shunshou-zhizi-30m), a small context model for candidate reranking. It ships with the input method and runs on-device via Core ML on macOS and ONNX Runtime on Windows. The model card (training data, evaluation, memorization checks) and its license (CC BY-SA 4.0): <https://huggingface.co/DabbleCove/shunshou-zhizi-30m>
-- Lexicons: the published lexicons are maintained in the separate zhizi-lexicon repository (under the same account as this repository). `native/resources/Rime/` in this repository holds the derived dictionaries bundled with the input method; they are generated — do not edit them by hand.
+- Lexicons: the published lexicons are maintained in the separate zhizi-lexicon repository (under the same account as this repository). `native/resources/Rime/` (the directory name is historical; librime is no longer used) in this repository holds the derived dictionaries bundled with the input method; they are generated — do not edit them by hand.
 
 ### Getting the model for a from-source build (macOS)
 
@@ -70,7 +70,7 @@ The model files are not committed to this repository: the weights are tens of me
 | `native/ipc/` | Inter-process communication component |
 | `native/macos/` | macOS input method (Swift package: InputMethodKit host, candidate panel, tests) |
 | `native/windows/` | Windows TSF shell, loader, and Inno Setup installer |
-| `native/resources/` | Bundled resources: Rime dictionaries and skins (derived/frozen files) |
+| `native/resources/` | Bundled resources: dictionary files (in the Rime `.dict.yaml` format) and skins (derived/frozen files) |
 | `script/` | Bash build/install/regression entry points (`build_native.sh`, `build_windows.ps1`, `test_all.sh`) |
 | `scripts/` | Node/Python generators and validators |
 | `src/`, `src-tauri/` | Management app (Tauri 2 + React + TypeScript) with settings such as skin management |

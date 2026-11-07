@@ -187,7 +187,7 @@ final class ContextRankingTests: XCTestCase {
     }
     @MainActor
     func testProductionControllerCommitsDisplayedOrderAndFallbackStaysInApp() throws {
-        let directories = try RealRimeProcessFixture.directories.get()
+        let directories = try RealZhixuProcessFixture.directories.get()
         let session = try XCTUnwrap(InputControllerPerformanceSession(
             sharedDirectory: directories.shared, userDirectory: directories.user,
             appIdentifier: "com.agentinputlayer.context-fallback-test"
@@ -224,7 +224,7 @@ final class ContextRankingTests: XCTestCase {
 
     @MainActor
     func testCoreSessionDisabledPathNeverCallsInjectedScorer() throws {
-        let directories = try RealRimeProcessFixture.directories.get()
+        let directories = try RealZhixuProcessFixture.directories.get()
         let session = try XCTUnwrap(CoreSession(sharedDirectory: directories.shared,
             userDirectory: directories.user, appIdentifier: "com.agentinputlayer.context-off-test"))
         defer { session.close() }
@@ -238,7 +238,7 @@ final class ContextRankingTests: XCTestCase {
     }
 
     func testCoreSessionNoGroupNeverCallsScorerAndReportsSize() throws {
-        let directories = try RealRimeProcessFixture.directories.get()
+        let directories = try RealZhixuProcessFixture.directories.get()
         let session = try XCTUnwrap(CoreSession(sharedDirectory: directories.shared,
             userDirectory: directories.user, appIdentifier: "com.agentinputlayer.c1-1-no-group"))
         defer { session.close() }
@@ -251,7 +251,7 @@ final class ContextRankingTests: XCTestCase {
     }
 
     func testRealRimeAbbreviationsFormAModelFirstGroup() throws {
-        let directories = try RealRimeProcessFixture.directories.get()
+        let directories = try RealZhixuProcessFixture.directories.get()
         // hais: abbreviation expansions; jiexialzuoshenm: whole-sentence compositions
         // (接下来做什么 vs 解析阿里做什么); zhineng: full-reading homophones.
         for input in ["hais", "jiexialzuoshenm", "zhineng"] {
@@ -278,8 +278,8 @@ final class ContextRankingTests: XCTestCase {
     }
 
     func testRealRimeModelComposesTheSentenceOnlyWithAClearMargin() throws {
-        let directories = try RealRimeProcessFixture.directories.get()
-        for (margin, leads) in [(40.0, true), (5.0, false)] {
+        let directories = try RealZhixuProcessFixture.directories.get()
+        for (margin, leads) in [(40.0, true), (3.0, false)] {
             let session = try XCTUnwrap(CoreSession(sharedDirectory: directories.shared,
                 userDirectory: directories.user, appIdentifier: "com.agentinputlayer.c3-\(leads)"))
             defer { session.close() }
@@ -308,7 +308,7 @@ final class ContextRankingTests: XCTestCase {
     }
 
     func testRealRimeBareInitialLetsTheModelPickAmongSameSyllableCharacters() throws {
-        let directories = try RealRimeProcessFixture.directories.get()
+        let directories = try RealZhixuProcessFixture.directories.get()
         for withContext in [false, true] {
             let session = try XCTUnwrap(CoreSession(sharedDirectory: directories.shared,
                 userDirectory: directories.user, appIdentifier: "com.agentinputlayer.context-initial-\(withContext)"))
@@ -333,7 +333,7 @@ final class ContextRankingTests: XCTestCase {
     }
 
     func testRealRimeSlipSitsThirdAndTheModelCanLiftIt() throws {
-        let directories = try RealRimeProcessFixture.directories.get()
+        let directories = try RealZhixuProcessFixture.directories.get()
         // yoyisi spells yo-yi-si, so Rime composes 哟意思; the slip decoder offers 有意思 third.
         for modelOn in [false, true] {
             let session = try XCTUnwrap(CoreSession(sharedDirectory: directories.shared,
@@ -361,7 +361,7 @@ final class ContextRankingTests: XCTestCase {
     }
 
     func testSlowButUnderHardCapScoreIsDisplayedAndSelectedAsShown() throws {
-        let directories = try RealRimeProcessFixture.directories.get()
+        let directories = try RealZhixuProcessFixture.directories.get()
         let session = try XCTUnwrap(CoreSession(sharedDirectory: directories.shared,
             userDirectory: directories.user, appIdentifier: "com.agentinputlayer.context-slow-test"))
         defer { session.close() }
@@ -382,7 +382,7 @@ final class ContextRankingTests: XCTestCase {
     }
 
     func testLateScoreRestoresCoreOrderBeforeDisplayAndDeliberateSelection() throws {
-        let directories = try RealRimeProcessFixture.directories.get()
+        let directories = try RealZhixuProcessFixture.directories.get()
         let baseline = try XCTUnwrap(CoreSession(sharedDirectory: directories.shared,
             userDirectory: directories.user, appIdentifier: "com.agentinputlayer.context-late-baseline"))
         var original: IMEViewModel?
@@ -408,4 +408,135 @@ final class ContextRankingTests: XCTestCase {
         XCTAssertEqual(selected.commitText, expected[1].text)
     }
 
+
+    // MARK: deferred ranking (core page first, model reorders afterwards)
+
+    func testDeferredRankingShowsTheCorePageAtOnceThenReordersIt() throws {
+        let directories = try RealZhixuProcessFixture.directories.get()
+        let baseline = try XCTUnwrap(CoreSession(sharedDirectory: directories.shared,
+            userDirectory: directories.user, appIdentifier: "com.agentinputlayer.deferred-baseline"))
+        var original: IMEViewModel?
+        for c in "zhineng" { original = baseline.process(kind: .text, text: String(c), security: .nonSecure) }
+        let corePage = try XCTUnwrap(original).candidates
+        baseline.close()
+
+        let session = try XCTUnwrap(CoreSession(sharedDirectory: directories.shared,
+            userDirectory: directories.user, appIdentifier: "com.agentinputlayer.deferred-test"))
+        defer { session.close() }
+        session.contextRankingScoreForTesting = { _, candidates in
+            Thread.sleep(forTimeInterval: 0.030)
+            return candidates.indices.map { $0 == candidates.count - 1 ? 0 : -40 }
+        }
+        session.contextRankingColdForTesting = false
+        session.setContextRankingEnabled(true)
+        session.defersRanking = true
+        let late = expectation(description: "deferred result for the last key")
+        let lock = NSLock()
+        var delivered: [(IMEViewModel, UInt64)] = []
+        session.onDeferredRanking = { view, generation in
+            lock.lock(); delivered.append((view, generation)); lock.unlock()
+            if generation == session.currentRankingGeneration { late.fulfill() }
+        }
+        var shown: IMEViewModel?
+        let began = DispatchTime.now().uptimeNanoseconds
+        for c in "zhineng" { shown = session.process(kind: .text, text: String(c), security: .nonSecure) }
+        let keyPath = DispatchTime.now().uptimeNanoseconds &- began
+        XCTAssertEqual(try XCTUnwrap(shown).candidates, corePage, "the key returns the core's own page")
+        XCTAssertLessThan(keyPath, 7 * 30_000_000, "the key path must not wait for the model")
+        wait(for: [late], timeout: 5)
+        lock.lock(); defer { lock.unlock() }
+        let (view, generation) = try XCTUnwrap(delivered.last)
+        XCTAssertEqual(generation, session.currentRankingGeneration)
+        XCTAssertNotEqual(view.candidates.map(\.text), corePage.map(\.text), "the model reordered the page")
+        XCTAssertTrue([.reordered, .composed].contains(view.contextModel.outcome), "\(view.contextModel.outcome)")
+    }
+
+    func testDeferredRankingResultIsDroppedWhenAKeyArrivedFirst() throws {
+        let directories = try RealZhixuProcessFixture.directories.get()
+        let session = try XCTUnwrap(CoreSession(sharedDirectory: directories.shared,
+            userDirectory: directories.user, appIdentifier: "com.agentinputlayer.deferred-stale"))
+        defer { session.close() }
+        let gate = DispatchSemaphore(value: 0)
+        let started = DispatchSemaphore(value: 0)
+        session.contextRankingScoreForTesting = { _, candidates in
+            started.signal()
+            gate.wait()
+            return candidates.indices.map { $0 == candidates.count - 1 ? 0 : -40 }
+        }
+        session.contextRankingColdForTesting = false
+        session.setContextRankingEnabled(true)
+        session.defersRanking = true
+        let lock = NSLock()
+        var generations: [UInt64] = []
+        session.onDeferredRanking = { _, generation in lock.lock(); generations.append(generation); lock.unlock() }
+        for c in "zhine" { _ = session.process(kind: .text, text: String(c), security: .nonSecure) }
+        XCTAssertEqual(started.wait(timeout: .now() + 5), .success)
+        let staleGeneration = session.currentRankingGeneration
+        // A key arrives while the model is still scoring; the stale result must not reach the core.
+        let next = try XCTUnwrap(session.process(kind: .text, text: "n", security: .nonSecure))
+        XCTAssertGreaterThan(session.currentRankingGeneration, staleGeneration)
+        for _ in 0..<8 { gate.signal() }
+        Thread.sleep(forTimeInterval: 0.3)
+        lock.lock(); let seen = generations; lock.unlock()
+        XCTAssertFalse(seen.contains(staleGeneration), "a superseded ranking was delivered: \(seen)")
+        let committed = try XCTUnwrap(session.process(kind: .text, text: "1", security: .nonSecure, deliveryID: 0xDE_F001))
+        XCTAssertFalse(committed.commitText.isEmpty)
+        _ = next
+    }
+
+    func testProductionControllerAppliesADeferredReorderToTheShownPage() throws {
+        let directories = try RealZhixuProcessFixture.directories.get()
+        let session = try XCTUnwrap(InputControllerPerformanceSession(
+            sharedDirectory: directories.shared, userDirectory: directories.user,
+            appIdentifier: "com.agentinputlayer.deferred-controller-test"
+        ))
+        defer { session.close() }
+        session.seedDocumentTextForTesting("没有前文")
+        session.setContextRankingScorerForTesting { _, candidates in
+            Thread.sleep(forTimeInterval: 0.020)
+            return candidates.indices.map { $0 == candidates.count - 1 ? 100 : -100 }
+        }
+        session.enableDeferredRankingForTesting()
+        var corePage: [String] = []
+        for c in "zhineng" { _ = session.processText(String(c)) }
+        corePage = try XCTUnwrap(session.latestCandidateTextsForTesting)
+        XCTAssertFalse(corePage.isEmpty)
+        let deadline = Date().addingTimeInterval(5)
+        while session.latestCandidateTextsForTesting == corePage, Date() < deadline {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+        }
+        let reordered = try XCTUnwrap(session.latestCandidateTextsForTesting)
+        XCTAssertNotEqual(reordered, corePage, "the controller never received the deferred reorder")
+        let commit = try XCTUnwrap(session.processText(" "))
+        XCTAssertEqual(commit.commitText, reordered.first, "space commits the page now on screen")
+    }
+
+    func testDigitKeyBeforeTheDeferredStepActsOnTheShownPageAndTheStepGoesStale() throws {
+        let directories = try RealZhixuProcessFixture.directories.get()
+        let session = try XCTUnwrap(CoreSession(sharedDirectory: directories.shared,
+            userDirectory: directories.user, appIdentifier: "com.agentinputlayer.deferred-race"))
+        defer { session.close() }
+        session.contextRankingScoreForTesting = { _, candidates in
+            candidates.indices.map { $0 == candidates.count - 1 ? 0 : -40 }
+        }
+        session.contextRankingColdForTesting = false
+        session.setContextRankingEnabled(true)
+        session.defersRanking = true
+        let ready = expectation(description: "step handed over")
+        let lock = NSLock()
+        var step: DeferredRankingStep?
+        session.deferredApplier = { handed in
+            lock.lock(); step = handed; lock.unlock()
+            if handed.generation == session.currentRankingGeneration { ready.fulfill() }
+        }
+        var shown: IMEViewModel?
+        for c in "zhineng" { shown = session.process(kind: .text, text: String(c), security: .nonSecure) }
+        let corePage = try XCTUnwrap(shown).candidates.map(\.text)
+        wait(for: [ready], timeout: 5)
+        // The model has scored but the core is untouched: the key meets the page that is on screen.
+        let committed = try XCTUnwrap(session.process(kind: .text, text: "2", security: .nonSecure, deliveryID: 0xDE_F002))
+        XCTAssertEqual(committed.commitText, corePage[1])
+        lock.lock(); let handed = try XCTUnwrap(step); lock.unlock()
+        XCTAssertNil(handed.finish(), "a step older than a key must not touch the core")
+    }
 }

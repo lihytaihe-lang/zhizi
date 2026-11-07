@@ -241,16 +241,16 @@ class FullRegressionCycleSelfTest(unittest.TestCase):
         self.assertIn("BUILD_NUMBER=2743", result.stdout)
         self.assertTrue(result.stdout.strip().endswith("CLEANUP unregister exit=0"), result.stdout[-300:])
 
-    def test_gate_table_has_60_entries_including_unittest(self):
+    def test_gate_table_has_56_entries_including_unittest(self):
         listing = _run_plain([TEST_ALL, "--list"])
         self.assertEqual(listing.returncode, 0, listing.stderr)
         lines = listing.stdout.splitlines()
         self.assertEqual(lines[0].split("\t"), ["id", "needs", "provides", "command"])
         ids = [line.split("\t")[0] for line in lines[1:]]
-        # A real 60-gate table, not an empty header: exact count, unique ids,
+        # A real 56-gate table, not an empty header: exact count, unique ids,
         # every row carries a non-empty command.
-        self.assertEqual(len(ids), 60, ids)
-        self.assertEqual(len(set(ids)), 60, ids)
+        self.assertEqual(len(ids), 56, ids)
+        self.assertEqual(len(set(ids)), 56, ids)
         self.assertEqual(ids, self.GATE_IDS)
         commands = {line.split("\t")[0]: line.split("\t")[3] for line in lines[1:]}
         for gate_id, command in commands.items():
@@ -260,7 +260,7 @@ class FullRegressionCycleSelfTest(unittest.TestCase):
         self.assertIn("AIM_CONTEXT_MODEL_REQUIRED=1", commands["context_model_integration"])
         for required in ("unittest", "bootstrap_native", "build_release", "fuzzy_exact_priority_replay",
                          "offcorpus_probe", "q3b1_garble_replay", "q3b2_heavy_garble_replay",
-                         "partial_coverage_top1_replay", "userdb_process_recovery", "install_input_method",
+                         "partial_coverage_closed_replay", "learning_degradation", "install_input_method",
                          "build_manager", "artifact_checksum_equivalence"):
             self.assertIn(required, ids)
         # The checksum equivalence gate consumes the built bundle (it exits 2
@@ -284,8 +284,8 @@ class FullRegressionCycleSelfTest(unittest.TestCase):
             "offcorpus_probe",
             "q3b1_garble_replay",
             "q3b2_heavy_garble_replay",
-            "partial_coverage_top1_replay",
-            "userdb_process_recovery",
+            "partial_coverage_closed_replay",
+            "learning_degradation",
             "install_input_method",
             "build_manager",
         ):
@@ -307,7 +307,7 @@ class FullRegressionCycleSelfTest(unittest.TestCase):
             "offcorpus_probe",
             "q3b2_heavy_garble_replay",
             "fuzzy_exact_priority_replay",
-            "userdb_process_recovery",
+            "learning_degradation",
             "install_input_method",
         ):
             row = self.assert_status(rows, gate_id, "BLOCKED")
@@ -316,7 +316,7 @@ class FullRegressionCycleSelfTest(unittest.TestCase):
         self.assertEqual(self.stub.invocations("test_offcorpus_probe.sh"), [])
         # Gates that do not need the bundle still collected evidence.
         for gate_id in ("frontend_tests", "unittest", "dogfood_checkpoint", "cargo_test_core",
-                        "swift_tests", "context_model_integration", "userdb_word_cleanup"):
+                        "swift_tests", "context_model_integration"):
             self.assert_status(rows, gate_id, "PASS", 0)
         self.assertIn("REGRESSION RESULT: FAIL", result.stdout)
 
@@ -347,8 +347,7 @@ class FullRegressionCycleSelfTest(unittest.TestCase):
         for gate_id in ("cargo_test_core", "swift_tests", "build_release", "fuzzy_exact_priority_replay", "build_manager"):
             row = self.assert_status(rows, gate_id, "BLOCKED")
             self.assertIn("deps", row["needs"].split(","))
-        for gate_id in ("frontend_tests", "unittest", "owner_error_ranking", "replay_gate_contract",
-                       "userdb_word_cleanup"):
+        for gate_id in ("frontend_tests", "unittest", "owner_error_ranking", "replay_gate_contract"):
             self.assert_status(rows, gate_id, "PASS", 0)
 
     def test_any_step_nonzero_fails_whole_run(self):
@@ -357,7 +356,7 @@ class FullRegressionCycleSelfTest(unittest.TestCase):
             ("npm", "frontend_tests", 1),
             ("build_manager.sh", "build_manager", 2),
             ("cargo", "cargo_test_core", 127),
-            ("test_partial_coverage_top1_replay.sh", "partial_coverage_top1_replay", 6),
+            ("test_partial_coverage_closed.sh", "partial_coverage_closed_replay", 6),
         ]
         for name, gate_id, code in cases:
             with self.subTest(gate=gate_id, code=code):

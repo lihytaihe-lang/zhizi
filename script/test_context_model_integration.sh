@@ -33,14 +33,14 @@ else
   BIN_DIR="$(swift build --package-path "$ROOT_DIR/native/macos" -c release --disable-automatic-resolution --show-bin-path)"
   HARNESS="$BIN_DIR/AgentIMEContextModelHarness"
 fi
-DYLD_LIBRARY_PATH="$ROOT_DIR/.build-deps/librime/1.16.1/lib" "$PYTHON" \
+"$PYTHON" \
   "$ROOT_DIR/scripts/context_model/zhizi/check_host_alignment.py" \
   --harness "$HARNESS" --directory "$TEMP_ROOT/ContextModel" \
   --out "$ROOT_DIR/build/model-integration-c1-handoff/alignment-public.json"
 # Typing has pauses. After about a second idle the Neural Engine clocks down and the next
 # prediction took 18-25 ms in C1, so back-to-back latency alone overstated how often the
 # model ran. Replay keys with real gaps through the production loader and keep-warm path.
-DYLD_LIBRARY_PATH="$ROOT_DIR/.build-deps/librime/1.16.1/lib" "$HARNESS" --paced "$TEMP_ROOT/ContextModel" "$TEMP_ROOT/paced.json"
+"$HARNESS" --paced "$TEMP_ROOT/ContextModel" "$TEMP_ROOT/paced.json"
 python3 - "$TEMP_ROOT/paced.json" <<'PY'
 import json, sys
 rows = json.load(open(sys.argv[1]))

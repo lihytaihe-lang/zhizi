@@ -1,9 +1,8 @@
-#![cfg_attr(not(feature = "librime"), allow(dead_code))]
-
 //! Zhixu is a platform-independent runtime dictionary for local Chinese composition
 //! and ASCII terms. Immutable snapshots share strings and entry IDs across lookups;
 //! background loading replaces a whole snapshot while readers retain the previous one.
 
+pub(crate) mod index_cache;
 pub(crate) mod loader;
 pub(crate) mod trie;
 pub mod learning;
@@ -11,12 +10,19 @@ pub(crate) mod learning_session;
 pub mod decoder;
 pub(crate) mod fuzzy;
 
+use index_cache::{Reader, Writer};
 use loader::{DictionaryData, Entry};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 use trie::{CompactReadingTrie, HeavyTrie};
+
+static NEXT_GENERATION: AtomicU64 = AtomicU64::new(1);
+
+fn fresh_generation() -> u64 {
+    NEXT_GENERATION.fetch_add(1, Ordering::Relaxed)
+}
 
 /// Sorted strings in one allocation. IDs retain lexicographic order for trie ties.
 struct Strings {
@@ -50,11 +56,41 @@ impl Strings {
             .map(|id| id as u32)
     }
 
+    fn cache_write(&self, out: &mut Writer) {
+        out.u64(self.bytes.len() as u64);
+        out.bytes(self.bytes.as_bytes());
+        out.u64(self.spans.len() as u64);
+        for &(start, len) in &self.spans {
+            out.u32(start as u32);
+            out.u32(len as u32);
+        }
+    }
+
+    fn cache_read(from: &mut Reader) -> std::io::Result<Self> {
+        let byte_count = from.count(from.remaining())?;
+        let bytes = from.bytes(byte_count)?;
+        let bytes = String::from_utf8(bytes.to_vec())
+            .map_err(|_| from.invalid("cached index strings are not UTF-8"))?;
+        let span_count = from.count(from.remaining() / 8)?;
+        let mut spans = Vec::with_capacity(span_count);
+        for _ in 0..span_count {
+            let start = from.u32()? as usize;
+            let len = from.u32()? as usize;
+            if start.saturating_add(len) > bytes.len() {
+                return Err(from.invalid("cached index string span is out of bounds"));
+            }
+            spans.push((start, len));
+        }
+        Ok(Self { bytes, spans })
+    }
+
+    #[cfg_attr(not(test), allow(dead_code))]
     fn estimated_bytes(&self) -> usize {
         self.bytes.capacity() + self.spans.capacity() * std::mem::size_of::<(usize, usize)>()
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct StoredWord {
     text: u32,
     reading: u32,
@@ -80,7 +116,7 @@ pub(crate) struct WholeWord<'a> {
     pub(crate) lexical_score: i64,
 }
 
-#[derive(Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct WholeWordMetadata {
     // Zero marks an invalid word; every normalized reading has a syllable.
     syllables: usize,
@@ -149,6 +185,7 @@ impl Index {
         result
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn whole_ready(&self) -> bool {
         self.complete_initials.get().is_some()
             && self.whole_readings.get().is_some_and(|whole| whole.trie.get().is_some() && whole.metadata.get().is_some())
@@ -212,7 +249,6 @@ impl Index {
     }
 
     pub fn from_data(data: DictionaryData) -> Self {
-        static NEXT: AtomicU64 = AtomicU64::new(1);
         let texts = Strings::new(data.entries.iter().map(|entry| entry.text.as_str()));
         let readings = Strings::new(data.entries.iter().map(|entry| entry.reading.as_str()));
         let layers = Strings::new(data.entries.iter().map(|entry| entry.layer.as_str()));
@@ -354,7 +390,7 @@ impl Index {
             .collect();
         embedded.sort_by(|a, b| b.0.len().cmp(&a.0.len()).then_with(|| a.0.cmp(&b.0)));
         Self {
-            generation: NEXT.fetch_add(1, Ordering::Relaxed),
+            generation: fresh_generation(),
             entries,
             texts,
             readings,
@@ -374,6 +410,219 @@ impl Index {
             tech: Arc::new(tech),
             embedded: Arc::new(embedded),
         }
+    }
+
+    /// Serializes every `from_data` result plus the whole-reading structures
+    /// `warm_whole` prepared. The runtime generation counter stays out; the
+    /// reader assigns a fresh one.
+    pub(crate) fn cache_write(&self, out: &mut Writer) {
+        let warmed = self.whole_ready();
+        out.u8(u8::from(warmed));
+        out.u64(self.entries.len() as u64);
+        for word in &self.entries {
+            out.u32(word.text);
+            out.u32(word.reading);
+            out.u32(word.weight);
+            out.u32(word.layers_start);
+            out.u32(word.layers_len);
+        }
+        out.u64(self.sources.len() as u64);
+        out.slice_u32(&self.sources);
+        self.texts.cache_write(out);
+        self.readings.cache_write(out);
+        self.layers.cache_write(out);
+        out.u64(self.by_reading.len() as u64);
+        out.slice_u32(&self.by_reading);
+        out.u64(self.projection.len() as u64);
+        out.slice_u32(&self.projection);
+        out.u64(self.by_text.len() as u64);
+        out.slice_u32(&self.by_text);
+        out.u64(self.all_by_text.len() as u64);
+        out.slice_u32(&self.all_by_text);
+        out.map_u32_ids(&self.initials);
+        self.trie.cache_write(out);
+        out.string_map(&self.project);
+        out.string_map_vec(&self.english);
+        out.string_map_vec(&self.tech);
+        out.u64(self.embedded.len() as u64);
+        for (reading, text) in self.embedded.iter() {
+            out.str(reading);
+            out.str(text);
+        }
+        if warmed {
+            let whole = self.whole_readings.get().unwrap();
+            whole.readings.cache_write(out);
+            out.u64(whole.entries.len() as u64);
+            for &(reading, id) in &whole.entries {
+                out.u32(reading);
+                out.u32(id);
+            }
+            whole.trie.get().unwrap().cache_write(out);
+            let metadata = whole.metadata.get().unwrap();
+            out.u64(metadata.len() as u64);
+            for item in metadata {
+                out.u32(item.syllables as u32);
+                out.u64(item.reading_hash);
+                out.i64(item.lexical_score);
+            }
+            out.map_u32_ids(self.complete_initials.get().unwrap());
+        }
+    }
+
+    /// Rebuilds the index from cache bytes, leaving lazy structures empty when
+    /// the cache predates warming. Every id is bounds-checked so a damaged file
+    /// fails the read instead of producing an unsafe index.
+    pub(crate) fn cache_read(from: &mut Reader) -> std::io::Result<Self> {
+        let warmed = from.u8()? != 0;
+        let entry_count = from.count(from.remaining() / 20)?;
+        let mut entries = Vec::with_capacity(entry_count);
+        for _ in 0..entry_count {
+            entries.push(StoredWord {
+                text: from.u32()?,
+                reading: from.u32()?,
+                weight: from.u32()?,
+                layers_start: from.u32()?,
+                layers_len: from.u32()?,
+            });
+        }
+        let source_count = from.count(from.remaining() / 4)?;
+        let sources = from.slice_u32(source_count)?;
+        let texts = Strings::cache_read(from)?;
+        let readings = Strings::cache_read(from)?;
+        let layers = Strings::cache_read(from)?;
+        let id_list = |from: &mut Reader| -> std::io::Result<Vec<u32>> {
+            let count = from.count(from.remaining() / 4)?;
+            Ok(from.slice_u32(count)?.to_vec())
+        };
+        let by_reading = id_list(from)?;
+        let projection = id_list(from)?;
+        let by_text = id_list(from)?;
+        let all_by_text = id_list(from)?;
+        for id in by_reading.iter().chain(&projection).chain(&by_text).chain(&all_by_text) {
+            if *id as usize >= entry_count {
+                return Err(from.invalid("cached index id is not an entry"));
+            }
+        }
+        for word in &entries {
+            if word.text as usize >= texts.spans.len()
+                || word.reading as usize >= readings.spans.len()
+                || word.layers_start as usize + word.layers_len as usize > sources.len()
+                || word.layers_start.checked_add(word.layers_len).is_none()
+            {
+                return Err(from.invalid("cached index entry is out of bounds"));
+            }
+        }
+        let initials = from.map_u32_ids(entry_count)?;
+        let trie = HeavyTrie::cache_read(from, texts.spans.len())?;
+        let project = from.string_map()?;
+        let english = from.string_map_vec()?;
+        let tech = from.string_map_vec()?;
+        let embedded_count = from.count(from.remaining())?;
+        let mut embedded = Vec::with_capacity(embedded_count);
+        for _ in 0..embedded_count {
+            embedded.push((from.str()?.to_string(), from.str()?.to_string()));
+        }
+        let (whole_readings, complete_initials, prewarm_started) = if warmed {
+            let whole_readings_strings = Strings::cache_read(from)?;
+            let whole_entry_count = from.count(from.remaining() / 8)?;
+            let mut whole_entries = Vec::with_capacity(whole_entry_count);
+            for _ in 0..whole_entry_count {
+                let reading = from.u32()?;
+                let id = from.u32()?;
+                if reading as usize >= whole_readings_strings.spans.len() || id as usize >= entry_count {
+                    return Err(from.invalid("cached whole entry is out of bounds"));
+                }
+                whole_entries.push((reading, id));
+            }
+            let trie = CompactReadingTrie::cache_read(from, whole_entries.len())?;
+            let metadata_count = from.count(from.remaining() / 20)?;
+            let mut metadata = Vec::with_capacity(metadata_count);
+            for _ in 0..metadata_count {
+                metadata.push(WholeWordMetadata {
+                    syllables: from.u32()? as usize,
+                    reading_hash: from.u64()?,
+                    lexical_score: from.i64()?,
+                });
+            }
+            if metadata.len() != entry_count {
+                return Err(from.invalid("cached whole metadata size mismatch"));
+            }
+            let complete = from.map_u32_ids(entry_count)?;
+            let whole = WholeReadingIndex {
+                readings: whole_readings_strings,
+                entries: whole_entries,
+                trie: OnceLock::from(trie),
+                metadata: OnceLock::from(metadata),
+            };
+            (OnceLock::from(whole), OnceLock::from(complete), true)
+        } else {
+            (OnceLock::new(), OnceLock::new(), false)
+        };
+        Ok(Self {
+            generation: fresh_generation(),
+            entries,
+            texts,
+            readings,
+            layers,
+            sources,
+            by_reading,
+            whole_readings,
+            whole_prewarm_started: AtomicBool::new(prewarm_started),
+            projection,
+            by_text,
+            all_by_text,
+            initials,
+            complete_initials,
+            trie,
+            project: Arc::new(project),
+            english: Arc::new(english),
+            tech: Arc::new(tech),
+            embedded: Arc::new(embedded),
+        })
+    }
+
+    /// Structural equality of every persisted field (generation and lazy
+    /// OnceLock wrappers excluded) for the cache round-trip checks.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn cache_equals(&self, other: &Self) -> bool {
+        self.entries == other.entries
+            && self.texts.bytes == other.texts.bytes
+            && self.texts.spans == other.texts.spans
+            && self.readings.bytes == other.readings.bytes
+            && self.readings.spans == other.readings.spans
+            && self.layers.bytes == other.layers.bytes
+            && self.layers.spans == other.layers.spans
+            && self.sources == other.sources
+            && self.by_reading == other.by_reading
+            && self.projection == other.projection
+            && self.by_text == other.by_text
+            && self.all_by_text == other.all_by_text
+            && self.initials == other.initials
+            && self.trie.cache_equals(&other.trie)
+            && *self.project == *other.project
+            && *self.english == *other.english
+            && *self.tech == *other.tech
+            && *self.embedded == *other.embedded
+            && match (self.complete_initials.get(), other.complete_initials.get()) {
+                (None, None) => true,
+                (Some(mine), Some(theirs)) => mine == theirs,
+                _ => false,
+            }
+            && match (self.whole_readings.get(), other.whole_readings.get()) {
+                (None, None) => true,
+                (Some(mine), Some(theirs)) => {
+                    mine.readings.bytes == theirs.readings.bytes
+                        && mine.readings.spans == theirs.readings.spans
+                        && mine.entries == theirs.entries
+                        && match (mine.trie.get(), theirs.trie.get()) {
+                            (None, None) => true,
+                            (Some(mine), Some(theirs)) => mine.cache_equals(theirs),
+                            _ => false,
+                        }
+                        && mine.metadata.get() == theirs.metadata.get()
+                }
+                _ => false,
+            }
     }
 
     fn reading_ids<'a>(&'a self, ids: &'a [u32], reading: &str) -> &'a [u32] {
@@ -596,14 +845,17 @@ impl Index {
     pub fn text(&self, terminal: trie::HeavyTerminal) -> &str {
         self.texts.get(terminal.text)
     }
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn entry_count(&self) -> usize {
         self.entries.len()
     }
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn projection_count(&self) -> usize {
         self.projection.len()
     }
 
     /// Owned capacity, excluding allocator metadata and temporary construction buffers.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn estimated_bytes(&self) -> usize {
         self.estimated_breakdown()
             .iter()
@@ -611,6 +863,7 @@ impl Index {
             .sum()
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn estimated_breakdown(&self) -> Vec<(&'static str, usize)> {
         use std::mem::size_of;
         let ascii = self.project.capacity() * size_of::<(String, String)>()
@@ -762,7 +1015,12 @@ fn prewarm_whole_index(index: Arc<Index>) {
     if index.whole_prewarm_started.swap(true, Ordering::Relaxed) { return; }
     let worker_index = index.clone();
     if std::thread::Builder::new().name("zhixu-whole-prewarm".into())
-        .spawn(move || worker_index.warm_whole()).is_err() {
+        .spawn(move || {
+            worker_index.warm_whole();
+            // A fresh build publishes its cache file only after the warm
+            // structures it must contain are ready.
+            index_cache::run_scheduled(&worker_index);
+        }).is_err() {
         index.whole_prewarm_started.store(false, Ordering::Relaxed);
     }
 }

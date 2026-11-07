@@ -27,7 +27,8 @@ ROOT = Path(__file__).resolve().parents[2]
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from build_general_lexicon import existing_entries  # noqa: E402
-from export_new_words import first_choice_top, owner_row, provenance_line  # noqa: E402
+from export_new_words import HAN_CHAR, OWNER_CONFIRMED_SOURCE, first_choice_top, owner_row, provenance_line, run_row  # noqa: E402
+from check_contribution import SYLLABLES  # noqa: E402
 
 DICT_NAME = "agent_newwords.dict.yaml"
 # added under the existing header notes once owner-sourced words are appended
@@ -52,10 +53,14 @@ def line_key(line):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--owner-sourced", required=True, metavar="TSV",
+    ap.add_argument("--owner-sourced", metavar="TSV",
                     help="owner input records; columns text/reading/occurrences/review, as in export_new_words.py")
+    ap.add_argument("--run-words", metavar="TSV",
+                    help="gen_category_words.py new_words.tsv (text/reading/year/domain/wiki/synth); merged with the category-word rules")
     ap.add_argument("--rime", default=str(ROOT / "native/resources/Rime"))
     ap.add_argument("--provenance", default=str(ROOT / "quality/corpus/agent-newwords-provenance.tsv"))
+    ap.add_argument("--owner-confirmed", action="store_true",
+                    help="label the --owner-sourced rows as owner-confirmed colloquial words that the DeepSeek pass dropped")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
@@ -87,13 +92,28 @@ def main():
     top = first_choice_top(existing)
 
     new_rows, stats, seen = [], Counter(), set()
-    with open(args.owner_sourced, encoding="utf-8") as fh:
-        for number, r in enumerate(csv.DictReader(fh, delimiter="\t"), 2):  # header on line 1
-            row, reason = owner_row(r["text"], r["reading"], r["occurrences"], seen, existing, top, stats)
-            if row:
-                new_rows.append(row)
-            elif reason:
-                print(f"{args.owner_sourced}:{number}: {reason}", file=sys.stderr)
+    if not (args.owner_sourced or args.run_words):
+        ap.error("give --owner-sourced or --run-words")
+    if args.owner_sourced:
+        with open(args.owner_sourced, encoding="utf-8") as fh:
+            for number, r in enumerate(csv.DictReader(fh, delimiter="\t"), 2):  # header on line 1
+                row, reason = owner_row(r["text"], r["reading"], r["occurrences"], seen, existing, top, stats)
+                if row:
+                    if args.owner_confirmed:
+                        row = row[:7] + (OWNER_CONFIRMED_SOURCE,)
+                    new_rows.append(row)
+                elif reason:
+                    print(f"{args.owner_sourced}:{number}: {reason}", file=sys.stderr)
+    if args.run_words:
+        with open(args.run_words, encoding="utf-8") as fh:
+            for r in csv.DictReader(fh, delimiter="\t"):
+                syl = r["reading"].split()
+                if any(x not in SYLLABLES for x in syl) or len(syl) != len(HAN_CHAR.findall(r["text"])):
+                    stats["run_bad_reading"] += 1
+                    continue
+                row = run_row(r, seen, existing, top, stats)
+                if row:
+                    new_rows.append(row)
 
     new_body, new_prov = list(body), list(prov_rows)
     if new_rows:

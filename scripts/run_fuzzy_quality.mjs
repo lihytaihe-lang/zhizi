@@ -12,7 +12,7 @@ const rimeResources = path.join(bundle, "Contents/Resources/Rime");
 const groups = ["zh-z", "ch-c", "sh-s", "n-l", "f-h", "an-ang", "en-eng", "in-ing"];
 const coreLibraryDirectory = path.join(root, "native/core/target/release");
 execFileSync("cargo", [
-  "build", "--release", "--locked", "--offline", "--features", "librime",
+  "build", "--release", "--locked", "--offline",
   "--manifest-path", "native/core/Cargo.toml",
 ], { cwd: root, stdio: "inherit", env: { ...process.env, CARGO_NET_OFFLINE: "true" } });
 const swiftScratch = mkdtempSync(path.join(os.tmpdir(), "agent-ime-fuzzy-swift-"));
@@ -27,11 +27,6 @@ const swiftBin = execFileSync("swift", [...swiftArguments, "--show-bin-path"], {
   encoding: "utf8",
   env: swiftEnvironment,
 }).trim();
-copyFileSync(
-  path.join(root, ".build-deps/librime/1.16.1/lib/librime.1.dylib"),
-  path.join(swiftBin, "librime.1.dylib"),
-);
-
 const aggregate = {
   artifactVersion: readFileSync(path.join(root, "VERSION"), "utf8").trim(),
   artifactChecksum,

@@ -22,42 +22,39 @@ run_case() {
   local primary="$TEMP_ROOT/$name-primary"
   local fallback="$TEMP_ROOT/$name-fallback"
   local log="$TEMP_ROOT/$name.log"
-  mkdir -p "$primary/Rime/pinyin_simp.userdb" "$fallback"
-  chmod 700 "$primary" "$primary/Rime" "$primary/Rime/pinyin_simp.userdb" "$fallback"
+  mkdir -p "$primary" "$fallback"
+  chmod 700 "$primary" "$fallback"
 
   if [[ "$name" == "symlink" ]]; then
-    local external="$TEMP_ROOT/symlink-external.userdb"
-    rm -rf "$primary/Rime/pinyin_simp.userdb"
+    # The user directory itself is a symlink escaping the tree: the lease must
+    # reject the primary without following or mutating the external tree.
+    local external="$TEMP_ROOT/symlink-external-user-tree"
     mkdir -p "$external"
-    printf 'MANIFEST-000001\n' > "$external/CURRENT"
-    printf 'fixture' > "$external/MANIFEST-000001"
     printf 'external-symlink-sentinel' > "$external/TEST_MARKER"
     chmod 640 "$external/TEST_MARKER"
-    ln -s "$external" "$primary/Rime/pinyin_simp.userdb"
+    ln -s "$external" "$primary/Rime"
     local before_mode before_links
     before_mode="$(stat -f '%Lp' "$external/TEST_MARKER")"
     before_links="$(stat -f '%l' "$external/TEST_MARKER")"
-    env DYLD_LIBRARY_PATH="$BUNDLE/Contents/Frameworks" "$HARNESS" \
+    "$HARNESS" \
       "$BUNDLE/Contents/Resources/Rime" "$primary" ni \
       --storage-fallback "$fallback" > "$log"
     [[ "$(<"$external/TEST_MARKER")" == "external-symlink-sentinel" ]]
     [[ "$(stat -f '%Lp' "$external/TEST_MARKER")" == "$before_mode" ]]
     [[ "$(stat -f '%l' "$external/TEST_MARKER")" == "$before_links" ]]
   else
-    local external="$TEMP_ROOT/hardlink-external-CURRENT"
-    printf 'MANIFEST-000001\n' > "$external"
-    ln "$external" "$primary/Rime/pinyin_simp.userdb/CURRENT"
-    printf 'fixture' > "$primary/Rime/pinyin_simp.userdb/MANIFEST-000001"
-    chmod 640 "$external"
+    # A non-directory occupies the user-directory name.
+    printf 'not-a-directory' > "$primary/Rime"
+    chmod 640 "$primary/Rime"
     local before_mode before_links
-    before_mode="$(stat -f '%Lp' "$external")"
-    before_links="$(stat -f '%l' "$external")"
-    env DYLD_LIBRARY_PATH="$BUNDLE/Contents/Frameworks" "$HARNESS" \
+    before_mode="$(stat -f '%Lp' "$primary/Rime")"
+    before_links="$(stat -f '%l' "$primary/Rime")"
+    "$HARNESS" \
       "$BUNDLE/Contents/Resources/Rime" "$primary" ni \
       --storage-fallback "$fallback" > "$log"
-    [[ "$(<"$external")" == "MANIFEST-000001" ]]
-    [[ "$(stat -f '%Lp' "$external")" == "$before_mode" ]]
-    [[ "$(stat -f '%l' "$external")" == "$before_links" ]]
+    [[ "$(<"$primary/Rime")" == "not-a-directory" ]]
+    [[ "$(stat -f '%Lp' "$primary/Rime")" == "$before_mode" ]]
+    [[ "$(stat -f '%l' "$primary/Rime")" == "$before_links" ]]
   fi
 
   grep -qx 'storage_degraded=true' "$log"
@@ -67,5 +64,5 @@ run_case() {
 }
 
 run_case symlink
-run_case hardlink
+run_case regular-file
 echo "runtime_storage_fallback=PASS cases=2 candidates=available external_sentinels=unchanged"

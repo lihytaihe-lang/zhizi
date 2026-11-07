@@ -19,12 +19,12 @@ const assets = Object.freeze({
   thuoclIt: ["native/resources/Rime/agent_thuocl_it.dict.yaml", "f2de2e7ef773e3951b9a1b444da81341ea6a1da80aceac3840683fd03d008187"],
   thuoclCaijing: ["native/resources/Rime/agent_thuocl_caijing.dict.yaml", "4497c28c3cb8e745c2d6408ad588a79e145efe2308682bbbbf9818dde6b2d157"],
   modern: ["native/resources/Rime/agent_modern.dict.yaml", "d1e6a40abca03593a85c38da0e5da9cf8d04404fa1ccb0039027268bd7b54682"],
-  general: ["native/resources/Rime/agent_general.dict.yaml", "0d41f62fae2a717da06aeb5fefd77d569fce6ae215c51ea178659e6a63fc5cec"],
-  generalProvenance: ["quality/corpus/agent-general-provenance.tsv", "7d540c4fc7ccf32934149bfbea63fdc505b113b2cad08784d55874d3d3faff17"],
-  newwords: ["native/resources/Rime/agent_newwords.dict.yaml", "4dcde77fae2ebfd06434071f281baf04f3c580a491bb7233813978202e71bef7"],
-  newwordsProvenance: ["quality/corpus/agent-newwords-provenance.tsv", "44203c28579d601924eda4ab7daaa4240a9f3bb9f8ba4cdd9df2f88b8dfbb0b3"],
-  spoken: ["native/resources/Rime/agent_spoken.dict.yaml", "1294b968bfb0e6e2946991c349ea1f62dc3afa388bc984963216e2a26c2f4293"],
-  spokenProvenance: ["quality/corpus/agent-spoken-provenance.tsv", "8651403810bea8474e955c7d1e9e2856f1bd35a834b710b7e3c473cf710aedfb"],
+  general: ["native/resources/Rime/agent_general.dict.yaml", "acf8a03457802fd3add68334d0ff93eac1ebcef289407e205576113612728d98"],
+  generalProvenance: ["quality/corpus/agent-general-provenance.tsv", "1e1c0407d247ddd3ac3f30e076fc7beaff141978fb6bf5c0319ffb94814dd6ab"],
+  newwords: ["native/resources/Rime/agent_newwords.dict.yaml", "3f1e80009df6db6b93857dedeb88765117de6c9f7f4454400f23e049ec859c9b"],
+  newwordsProvenance: ["quality/corpus/agent-newwords-provenance.tsv", "55c589987e9ffd2f47025dd8c3ff4f9da3bb1d9351d34f863416cb59e9bcad6c"],
+  spoken: ["native/resources/Rime/agent_spoken.dict.yaml", "68fd7ae5a41d2eb8b6a1b60922a23580f698263bb41192c11de3041b6aaba898"],
+  spokenProvenance: ["quality/corpus/agent-spoken-provenance.tsv", "12dbf8b5be1447db7f5c0cbc9e4de2aa49a93ef0026f0f11aee31afae611f093"],
   aiTerms: ["native/resources/Rime/agent_ai_terms.dict.yaml", "2e4e058bc42a1a83f4fedf1c9b2a31ed93d63f1c7558f63dcdef01caed2ec4b3"],
   aiTermsProvenance: ["quality/corpus/agent-ai-terms-provenance.tsv", "464574b1bcb3e16fd7cae28dd3ba4617dd837c6425cb4c40f0c56a2ed0cf1680"],
   aiNames: ["native/resources/Rime/agent_ai_names.dict.yaml", "c458a49954b7e2f9f1e53942f2ee5b9deb4601fb2c80b53e256a72e947af9a7f"],
@@ -298,7 +298,7 @@ for (const [, reading, weight] of precedingRows) {
 }
 const syllables = new Set(upstreamRows.flatMap(([, reading]) => reading.toLowerCase().split(" ")));
 assert(syllables.size === 415, "pinned schema syllable inventory changed");
-for (const [name, expectedCount] of [["general", 26947], ["newwords", 14684], ["spoken", 10853]]) {
+for (const [name, expectedCount] of [["general", 26947], ["newwords", 25025], ["spoken", 10807]]) {
   const rows = parseDictionaryRows(loaded[name]);
   const provenance = loaded[`${name}Provenance`].trimEnd().split(/\r?\n/u).slice(1).map((line) => line.split("\t"));
   assert(rows.length === expectedCount && provenance.length === rows.length, `${name} row count changed`);
@@ -332,8 +332,11 @@ for (const [name, expectedCount] of [["general", 26947], ["newwords", 14684], ["
     } else {
       // newwords also carries words the owner's records show missing (scripts/lexicon/append_owner_words.py)
       const newwordsSources = ["deepseek-flash generation, 3-pass review",
-        "owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked"];
-      assert(fields.length === 9 && newwordsSources.includes(fields[7]) && fields[8] === "project-authored"
+        "owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked",
+        "owner input records (owner-approved for public use), owner-confirmed colloquial, not DeepSeek-approved"];
+      const jiebaSource = "jieba 0.42.1 dict.txt (MIT), DeepSeek-judged, 2-pass";  // scripts/lexicon/append_jieba_words.py
+      assert(fields.length === 9 && newwordsSources.concat([jiebaSource]).includes(fields[7])
+        && fields[8] === (fields[7] === jiebaSource ? "MIT" : "project-authored")
         && fields.slice(5, 7).every((v) => /^\d+$/u.test(v)), `${name} unregistered provenance: ${text}`);
     }
     shippedTexts.add(text);

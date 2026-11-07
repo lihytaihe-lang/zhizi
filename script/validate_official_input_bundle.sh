@@ -90,15 +90,6 @@ verify_arm64_and_dependencies() {
       esac
       case "$dependency_path" in
         /System/Library/*|/usr/lib/*) ;;
-        @rpath/librime.1.dylib)
-          [[ "$relative_path" == "Contents/MacOS/AgentInputMethod" || \
-             "$relative_path" == "Contents/MacOS/AgentIMEPersonalReplayHarness" || \
-             "$relative_path" == "Contents/MacOS/AgentIMEUserDBCtl" || \
-             "$relative_path" == "Contents/Frameworks/librime.1.dylib" ]] || {
-            echo "undeclared librime dependency: $relative_path" >&2
-            return 3
-          }
-          ;;
         *)
           echo "undeclared Mach-O dependency: $relative_path ($dependency_path)" >&2
           return 3
@@ -110,8 +101,7 @@ verify_arm64_and_dependencies() {
       in_rpath && $1 == "path" { print $2; in_rpath=0 }
     ' | LC_ALL=C sort)"
     if [[ "$relative_path" == "Contents/MacOS/AgentInputMethod" || \
-          "$relative_path" == "Contents/MacOS/AgentIMEPersonalReplayHarness" || \
-          "$relative_path" == "Contents/MacOS/AgentIMEUserDBCtl" ]]; then
+          "$relative_path" == "Contents/MacOS/AgentIMEPersonalReplayHarness" ]]; then
       expected_rpaths=$'@executable_path/../Frameworks\n@loader_path'
       [[ "$rpaths" == "$expected_rpaths" ]] || {
         echo "official input host has a missing or undeclared RPATH: $rpaths" >&2
@@ -165,33 +155,22 @@ for plugin_path in Contents/PlugIns Contents/Resources/Rime/plugins Contents/Res
 done
 
 verify_exact_inventory \
-  Contents/Frameworks/librime.1.dylib \
   Contents/Info.plist \
   Contents/MacOS/AgentIMEInputSourceCtl \
   Contents/MacOS/AgentIMEPersonalReplayHarness \
-  Contents/MacOS/AgentIMEUserDBCtl \
   Contents/MacOS/AgentInputMethod \
   Contents/PkgInfo \
   Contents/Resources/AgentInputMethod.icns \
   Contents/Resources/AgentInputMethodMenu.pdf \
   Contents/Resources/ContextDisambig.json \
-  Contents/Resources/Licenses/OpenCC-Apache-2.0.txt \
-  Contents/Resources/Licenses/RapidJSON-LICENSE.txt \
   Contents/Resources/Licenses/Rust-standard-library-Apache-2.0.txt \
   Contents/Resources/Licenses/Rust-standard-library-COPYRIGHT.txt \
   Contents/Resources/Licenses/Rust-standard-library-MIT.txt \
-  Contents/Resources/Licenses/boost-BSL-1.0.txt \
-  Contents/Resources/Licenses/darts-clone-COPYING.txt \
-  Contents/Resources/Licenses/glog-BSD-3-Clause.txt \
-  Contents/Resources/Licenses/leveldb-BSD-3-Clause.txt \
-  Contents/Resources/Licenses/librime-BSD-3-Clause.txt \
-  Contents/Resources/Licenses/marisa-trie-COPYING.txt \
   Contents/Resources/Licenses/rime-pinyin-simp-Apache-2.0.txt \
   Contents/Resources/Licenses/rime-pinyin-simp-AUTHORS.txt \
   Contents/Resources/Licenses/THUOCL-MIT.txt \
   Contents/Resources/Licenses/jieba-MIT.txt \
   Contents/Resources/Licenses/pypinyin-MIT.txt \
-  Contents/Resources/Licenses/yaml-cpp-MIT.txt \
   Contents/Resources/Rime/agent_common_fix.dict.yaml \
   Contents/Resources/Rime/agent_daily.dict.yaml \
   Contents/Resources/Rime/agent_english.dict.yaml \

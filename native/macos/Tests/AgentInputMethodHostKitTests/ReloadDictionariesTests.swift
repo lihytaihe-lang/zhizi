@@ -5,7 +5,7 @@ import XCTest
 /// session deploys again; `reloadDictionariesStatus` is that deploy.
 final class ReloadDictionariesTests: XCTestCase {
     func testDictionaryAddedAfterStartAppearsOnlyAfterReload() throws {
-        let directories = try RealRimeProcessFixture.directories.get()
+        let directories = try RealZhixuProcessFixture.directories.get()
         let repositoryRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent()

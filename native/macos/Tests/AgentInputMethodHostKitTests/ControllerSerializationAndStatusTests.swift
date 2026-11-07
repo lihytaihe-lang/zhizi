@@ -465,7 +465,7 @@ final class ControllerSerializationAndStatusTests: XCTestCase {
     }
 
     private func controllerDirectories() throws -> ControllerTestDirectories {
-        try RealRimeProcessFixture.directories.get()
+        try RealZhixuProcessFixture.directories.get()
     }
 }
 

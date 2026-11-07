@@ -115,8 +115,14 @@ private final class CandidateSlotControl: NSControl {
         didSet { if oldValue != fixedWidth, layoutInvalidationEnabled { invalidateIntrinsicContentSize() } }
     }
 
+    /// A row that would overflow the panel shrinks its longest slots to this width; the text is then cut with an ellipsis
+    /// when drawn. The candidate itself (what is committed, what VoiceOver reads) stays whole.
+    var widthCap: CGFloat? {
+        didSet { if oldValue != widthCap, layoutInvalidationEnabled { invalidateIntrinsicContentSize() } }
+    }
+
     override var intrinsicContentSize: NSSize {
-        NSSize(width: fixedWidth ?? naturalWidth, height: theme.rowHeight)
+        NSSize(width: fixedWidth ?? min(naturalWidth, widthCap ?? .greatestFiniteMagnitude), height: theme.rowHeight)
     }
 
     func apply(
@@ -267,7 +273,11 @@ private final class CandidateSlotControl: NSControl {
             width: max(0, bounds.width - x - theme.horizontalPadding),
             height: textSize.height
         )
-        (displayText as NSString).draw(in: textRect, withAttributes: textAttributes)
+        let truncating = NSMutableParagraphStyle()
+        truncating.lineBreakMode = .byTruncatingTail
+        var drawAttributes = textAttributes
+        drawAttributes[.paragraphStyle] = truncating
+        (displayText as NSString).draw(in: textRect, withAttributes: drawAttributes)
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -386,6 +396,8 @@ public final class CandidatePanelController: NSObject {
         firstRow.spacing = theme.candidateSpacing
         firstRow.distribution = .fillProportionally
         firstRow.detachesHiddenViews = false
+        // A panel kept wide after a long row must not stretch the next, shorter row's slots apart.
+        firstRow.setHuggingPriority(.defaultHigh, for: .horizontal)
         for index in 0..<5 {
             let button = CandidateSlotControl(
                 frame: .zero,
@@ -394,6 +406,7 @@ public final class CandidatePanelController: NSObject {
                 rowStyle: .primary,
                 theme: theme
             )
+            button.setContentHuggingPriority(.init(900), for: .horizontal)
             button.target = self
             button.action = #selector(selectCandidate(_:))
             button.tag = index
@@ -746,6 +759,7 @@ public final class CandidatePanelController: NSObject {
             compositionGeometry.reset()
         }
         appliedCandidateCount = visibleCandidates.count
+        if layoutEnabled { Self.fitFirstRow(candidateButtons, grid: grid != nil, theme: theme) }
         let visibleSecondary = secure || grid != nil ? [] : secondaryCandidatesThatFit(secondaryCandidates)
         for (index, button) in secondaryButtons.enumerated() {
             guard visibleSecondary.indices.contains(index) else {
@@ -767,7 +781,8 @@ public final class CandidatePanelController: NSObject {
         }
         secondaryRow.isHidden = visibleSecondary.isEmpty
         let showsPreedit = theme.preeditRow && !secure && !preedit.isEmpty && !visibleCandidates.isEmpty
-        if showsPreedit, preeditLabel.stringValue != preedit { preeditLabel.stringValue = preedit }
+        let shownPreedit = Self.displayedPinyin(preedit, spaced: !keepsPinyinApostrophes)
+        if showsPreedit, preeditLabel.stringValue != shownPreedit { preeditLabel.stringValue = shownPreedit }
         if preeditRow.isHidden == showsPreedit { preeditRow.isHidden = !showsPreedit }
         // Pinyin also stays in the client's marked-text surface. VoiceOver retains
         // one stable group label whether or not the skin shows the preedit row.
@@ -815,6 +830,55 @@ public final class CandidatePanelController: NSObject {
     }
 
     private static let secondaryDigits = ["6", "7", "8", "9", "0"]
+
+    /// Defaults key: set true to show the pinyin row exactly as the app's marked text has it (`ni'hao`) instead of
+    /// syllables separated by spaces (`ni hao`, the way other input methods print it).
+    public static let keepPinyinApostrophesDefaultsKey = "candidatePanelKeepPinyinApostrophes"
+    private var keepsPinyinApostrophes: Bool {
+        UserDefaults.standard.bool(forKey: Self.keepPinyinApostrophesDefaultsKey)
+    }
+
+    /// The pinyin row is a reading aid, not the text the app holds: syllable separators print as spaces.
+    static func displayedPinyin(_ preedit: String, spaced: Bool) -> String {
+        guard spaced else { return preedit }
+        return preedit.replacingOccurrences(of: "'", with: " ")
+    }
+
+    /// Slot widths for a first row that is wider than the panel may be: the longest slots give up width first (water
+    /// filling), none below `minimumSlotWidth`. A row that fits is untouched.
+    static let minimumSlotWidth: CGFloat = 96
+    static func slotWidthCap(naturalWidths: [CGFloat], spacing: CGFloat, available: CGFloat) -> CGFloat? {
+        guard !naturalWidths.isEmpty else { return nil }
+        let gaps = spacing * CGFloat(max(0, naturalWidths.count - 1))
+        guard naturalWidths.reduce(0, +) + gaps > available else { return nil }
+        let budget = max(available - gaps, minimumSlotWidth * CGFloat(naturalWidths.count))
+        var remaining = budget
+        var left = naturalWidths.sorted()
+        while let smallest = left.first {
+            let fair = remaining / CGFloat(left.count)
+            if smallest <= fair {
+                remaining -= smallest
+                left.removeFirst()
+            } else {
+                return max(minimumSlotWidth, floor(fair))
+            }
+        }
+        return nil
+    }
+
+    private static func fitFirstRow(_ buttons: [CandidateSlotControl], grid: Bool, theme: CandidateTheme) {
+        let live = buttons.filter(\.isEnabled)
+        let cap = grid ? nil : slotWidthCap(
+            naturalWidths: live.map(\.naturalWidth),
+            spacing: theme.candidateSpacing,
+            available: theme.maximumPanelWidth - theme.edgeInsets.left - theme.edgeInsets.right
+        )
+        buttons.forEach { $0.widthCap = cap }
+    }
+    var firstRowSlotWidthsForTesting: [CGFloat] {
+        content.layoutSubtreeIfNeeded()
+        return candidateButtons.filter(\.isEnabled).map { $0.frame.width }
+    }
     var preeditRowTextForTesting: String? { preeditRow.isHidden ? nil : preeditLabel.stringValue }
     /// Renders the laid-out panel content (for skin previews in tests).
     func renderedPNGForTesting(appearance: NSAppearance.Name) -> Data? {

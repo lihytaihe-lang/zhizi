@@ -32,11 +32,13 @@ from check_contribution import SYLLABLES  # noqa: E402
 WORK = str(WORK_DIR / 'lexicon')
 # Standalone colloquial replies, weighted by analogy to shipped words of the same kind (好的 36,136, 好吧 8,222, 是吧 3,554); see calibrate_weights.py.
 REPLY_WEIGHTS = {"是的": 36000, "对的": 12000, "对吧": 8000, "行吧": 6000, "好不好": 4000, "对不对": 4000, "是不是": 8000}
-CATEGORY_GROUPS = {"动物", "植物", "食物", "物品", "人", "身体与健康", "地方", "生活", "学习与工作", "文化娱乐", "社会"}
+CATEGORY_GROUPS = {"动物", "植物", "食物", "物品", "人", "身体与健康", "地方", "生活", "学习与工作", "文化娱乐", "社会", "景区"}
 NUMERALS = re.compile(r"[零一二三四五六七八九十百千万两]{2,}")
 HAN_CHAR = re.compile(r"[一-鿿]")
 RUN_SOURCE = "deepseek-flash generation, 3-pass review"
 OWNER_SOURCE = "owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked"
+# Everyday colloquial words the owner typed that the DeepSeek pass dropped as dialect/narrow (11-06); the owner confirmed them as ordinary speech.
+OWNER_CONFIRMED_SOURCE = "owner input records (owner-approved for public use), owner-confirmed colloquial, not DeepSeek-approved"
 
 
 def first_choice_top(existing):
@@ -78,6 +80,27 @@ def owner_row(text, reading, occurrences, seen, existing, top, stats):
         weight = max(1, top[reading] - 1)
         stats["capped_below_first_choice"] += 1
     return (text, reading, weight, "owner", "owner-gap", "0", "0", OWNER_SOURCE), None
+
+
+def run_row(r, seen, existing, top, stats):
+    """One generated category word (gen_category_words.py new_words.tsv row) through the export's merge rules; shared with
+    append_owner_words.py --run-words.  Category words weigh 250 and never reach the existing first choice of their reading."""
+    t = r["text"]
+    if t in seen:
+        stats["duplicate_across_runs"] += 1
+        return None
+    seen.add(t)
+    if NUMERALS.search(t):
+        stats["spelled_out_numbers"] += 1
+        return None
+    if t in existing:
+        stats["already_shipped"] += 1
+        return None
+    weight = 250
+    if r["reading"] in top and weight >= top[r["reading"]]:
+        weight = max(1, top[r["reading"]] - 1)
+        stats["capped_below_first_choice"] += 1
+    return (t, r["reading"], weight, r["year"], r["domain"], r["wiki"], r["synth"], RUN_SOURCE)
 
 
 def provenance_line(row):

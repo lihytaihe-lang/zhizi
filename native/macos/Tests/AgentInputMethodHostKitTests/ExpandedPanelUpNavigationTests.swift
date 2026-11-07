@@ -13,7 +13,7 @@ final class ExpandedPanelUpNavigationTests: XCTestCase {
     private func makeController(
         _ suffix: String, client: inout SerializationTextInputClient?
     ) throws -> AgentInputController {
-        let directories = try RealRimeProcessFixture.directories.get()
+        let directories = try RealZhixuProcessFixture.directories.get()
         let created = SerializationTextInputClient()
         client = created
         return try XCTUnwrap(AgentInputController(
@@ -26,7 +26,7 @@ final class ExpandedPanelUpNavigationTests: XCTestCase {
 
     /// The pages real paging shows for `shi`, from an independent session.
     private func canonicalShiPages() throws -> [[String]] {
-        let directories = try RealRimeProcessFixture.directories.get()
+        let directories = try RealZhixuProcessFixture.directories.get()
         let session = try XCTUnwrap(CoreSession(sharedDirectory: directories.shared,
             userDirectory: directories.user, appIdentifier: "com.agentinputlayer.up-nav-canonical"))
         defer { session.close() }
@@ -204,7 +204,7 @@ final class ExpandedPanelUpNavigationTests: XCTestCase {
     /// pages, and peek from any page matches continuing down (mixes in the
     /// controller's moveRow column-restore steps: `.down` after `.pageUp`).
     func testCorePageUpRoundTripAndPeekMatchContinuingDown() throws {
-        let directories = try RealRimeProcessFixture.directories.get()
+        let directories = try RealZhixuProcessFixture.directories.get()
         let session = try XCTUnwrap(CoreSession(sharedDirectory: directories.shared,
             userDirectory: directories.user, appIdentifier: "com.agentinputlayer.up-nav-core"))
         defer { session.close() }
@@ -325,7 +325,7 @@ final class ExpandedPanelUpNavigationTests: XCTestCase {
     /// the highlighted column, and Down on the last candidate rolls into the
     /// next page (so restoring a column by adding Downs only works from 0).
     func testRimeKeepsHighlightAcrossPagesAndDownRollsAtTheLastCandidate() throws {
-        let directories = try RealRimeProcessFixture.directories.get()
+        let directories = try RealZhixuProcessFixture.directories.get()
         let session = try XCTUnwrap(CoreSession(sharedDirectory: directories.shared,
             userDirectory: directories.user, appIdentifier: "com.agentinputlayer.up-nav-rime-facts"))
         defer { session.close() }
@@ -376,7 +376,7 @@ final class ExpandedPanelUpNavigationTests: XCTestCase {
     /// plus column-restore downs) on a ranking-enabled session and checks the
     /// precondition of `ContextModelObservation.recorded` on every result.
     func testExpandedPanelKeyMixKeepsBaseOrderAtLeastAsLongAsCandidates() throws {
-        let directories = try RealRimeProcessFixture.directories.get()
+        let directories = try RealZhixuProcessFixture.directories.get()
         let session = try XCTUnwrap(CoreSession(sharedDirectory: directories.shared,
             userDirectory: directories.user, appIdentifier: "com.agentinputlayer.up-nav-crash-link"))
         defer { session.close() }

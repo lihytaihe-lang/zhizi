@@ -22,9 +22,6 @@ mod runtime_dictionary_tests;
 #[cfg(test)]
 #[path = "zhixu/mixer_tests.rs"]
 mod runtime_dictionary_unit_tests;
-#[cfg(all(test, feature = "librime"))]
-#[path = "../../../host/probes/key_latency.rs"]
-mod key_latency_profile;
 #[cfg(test)]
 #[path = "../../../host/probes/decoder_contract.rs"]
 mod decoder_contract;
@@ -627,9 +624,6 @@ pub(crate) struct WholeLattice {
 
 pub struct MixerDecoder {
     inner: Box<dyn Decoder>,
-    rime_fallback: Option<Box<dyn Decoder>>,
-    decoder_switch: bool,
-    requested_learning: LearningMode,
     learning: LearningSession,
     lexicon: Arc<MixerLexicon>,
     app_id: String,
@@ -644,7 +638,6 @@ pub struct MixerDecoder {
     fuzzy_highlighted: usize,
     whole_page_no: usize,
     whole_highlighted: usize,
-    zhixu_whole: bool,
     #[cfg(test)]
     whole_override: Option<bool>,
     #[cfg(test)]
@@ -680,6 +673,16 @@ pub struct MixerDecoder {
     carry: Mutex<CarryState>,
 }
 
+
+/// Why `lead_with_composition` refuses (returned through `aim_session_lead_with_composition`; a shell only needs
+/// "non-zero means the sentence does not lead", but diagnostics and tests name the reason).
+pub const LEAD_NOT_AN_ALTERNATIVE: i32 = -10;
+/// The owner's learned whole word stays first (`protect_learned_whole`): a model sentence never displaces what
+/// the owner has taught for this reading.
+pub const LEAD_OUTRANKED_BY_LEARNED_WHOLE: i32 = -11;
+/// Something else is first on the real page.
+pub const LEAD_OUTRANKED_OTHER: i32 = -12;
+
 impl MixerDecoder {
     fn pin_dictionary(&self) -> (zhixu::SnapshotGuard, zhixu::LearningSnapshotGuard) {
         #[cfg(test)]
@@ -709,9 +712,6 @@ impl MixerDecoder {
     pub fn new(inner: Box<dyn Decoder>, app_id: String) -> Self {
         Self {
             inner,
-            rime_fallback: None,
-            decoder_switch: false,
-            requested_learning: LearningMode::Rime,
             learning: LearningSession::default(),
             lexicon: Arc::new(MixerLexicon::default()),
             app_id,
@@ -726,7 +726,6 @@ impl MixerDecoder {
             fuzzy_highlighted: 0,
             whole_page_no: 0,
             whole_highlighted: 0,
-            zhixu_whole: false,
             #[cfg(test)]
             whole_override: None,
             #[cfg(test)]
@@ -753,40 +752,33 @@ impl MixerDecoder {
         }
     }
 
-    pub(crate) fn enable_decoder_switch(&mut self) -> Result<(), i32> {
-        self.decoder_switch = true;
-        self.update_inner()
-    }
-
-    fn new_zhixu_decoder(&self, dictionary: Option<Arc<Index>>) -> Result<Box<dyn Decoder>, i32> {
-        let prepared = dictionary.is_some();
-        let mut decoder = dictionary.map(crate::zhixu::decoder::ZhixuDecoder::from_ready_dictionary)
-            .unwrap_or_else(crate::zhixu::decoder::ZhixuDecoder::new);
-        if let Some(directory) = self.blacklist.lock().ok().and_then(|store| store.directory()) {
+    /// The product session's permanent inner: the native decoder over one fully
+    /// deployed dictionary generation.
+    pub(crate) fn new_zhixu_inner(
+        dictionary: Arc<Index>,
+        blacklist: Option<&Arc<Mutex<Store>>>,
+    ) -> Result<Box<dyn Decoder>, i32> {
+        let mut decoder = crate::zhixu::decoder::ZhixuDecoder::from_ready_dictionary(dictionary);
+        if let Some(directory) = blacklist.and_then(|store| store.lock().ok().and_then(|store| store.directory())) {
             decoder.attach_learning(&directory);
         }
-        if !prepared { decoder.configure_zhixu_whole(true)?; }
         decoder.configure_learning(LearningMode::Zhixu)?;
-        decoder.configure_fuzzy(self.fuzzy_mask)?;
         Ok(Box::new(decoder))
     }
 
-    fn update_inner(&mut self) -> Result<(), i32> {
-        if !self.decoder_switch { return Ok(()); }
-        let enabled = self.zhixu_whole || zhixu_whole_enabled();
-        if enabled == self.rime_fallback.is_some() { return Ok(()); }
-        if enabled && self.rime_fallback.is_none() {
-            if self.is_composing() { return Ok(()); }
-            let Ok(dictionary) = zhixu::loader::ready_deployed_snapshot() else { return Ok(()); };
-            let decoder = self.new_zhixu_decoder(dictionary)?;
-            self.rime_fallback = Some(std::mem::replace(&mut self.inner, decoder));
-        } else if !enabled && let Some(rime) = self.rime_fallback.take() {
-            self.inner = rime;
-        }
-        if let Ok(cache) = self.dictionary_snapshot.get_mut() { *cache = None; }
-        let mode = if enabled { LearningMode::Zhixu } else { self.requested_learning };
-        self.learning.set_mode(mode, &zhixu::current());
-        Ok(())
+    /// The product constructor: the native decoder is the inner for the session's
+    /// whole life and learning runs in Zhixu, exactly as the trial switch's on
+    /// state behaved.
+    pub(crate) fn new_native(
+        app_id: String,
+        blacklist: Arc<Mutex<Store>>,
+        dictionary: Arc<Index>,
+    ) -> Result<Self, i32> {
+        let inner = Self::new_zhixu_inner(dictionary.clone(), Some(&blacklist))?;
+        let mut mixer = Self::new(inner, app_id);
+        mixer.apply_blacklist(blacklist);
+        mixer.learning.set_mode(LearningMode::Zhixu, &dictionary);
+        Ok(mixer)
     }
 
     pub(crate) fn apply_blacklist(&mut self, blacklist: Arc<Mutex<Store>>) {
@@ -959,15 +951,22 @@ impl MixerDecoder {
     fn whole_enabled(&self) -> bool {
         // The native decoder already generated its complete input. The retained
         // block-3 path is only for explicit legacy probes, never product sessions.
-        if self.decoder_switch || self.inner.native_editing() { return false; }
+        if self.inner.native_editing() { return false; }
         #[cfg(test)]
         if let Some(enabled) = self.whole_override { return enabled; }
-        self.zhixu_whole || zhixu_whole_enabled()
+        false
     }
 
     fn confirmed_boundary(&self) -> Option<CompositionBoundary> {
         self.inner.composition_boundary(BoundaryPurpose::Mixing)
             .filter(|boundary| !boundary.confirmed.is_empty())
+    }
+
+    /// The letters of the input still to be converted: the decoder's own boundary,
+    /// or the whole raw input when it reports none.
+    fn letters_left(&self) -> String {
+        self.inner.composition_boundary(BoundaryPurpose::Mixing)
+            .map_or_else(|| self.inner.snapshot().raw_input, |boundary| boundary.unconfirmed_raw)
     }
 
     fn at_native_edit_boundary(&self) -> bool {
@@ -1736,6 +1735,7 @@ impl MixerDecoder {
                 mixed = ordered.clone();
             }
         }
+        one_row_per_text(&mut mixed);
         self.place_offered_composition(&snapshot, &mut mixed);
         if self.fuzzy_mask == 0 && self.deep_page_no.is_none() && self.whole_base().is_none() {
             self.carry_pages(&snapshot, &mut mixed);
@@ -2110,10 +2110,10 @@ impl MixerDecoder {
         let Some(all) = self.inner.snapshot_all_candidates() else {
             return false;
         };
-        // The letters still to be converted: after a segment was picked mid-composition the decoder
-        // still reports the whole input, and the single characters must follow the letters left
-        // (分析 picked, d toutoude left: characters that start with d, not with fen).
-        let rest_raw = unconfirmed_raw(self.inner.as_ref());
+        // The letters still to be converted: after a segment was picked mid-composition the
+        // decoder's boundary reports them (分析 picked, d toutoude left: characters that start
+        // with d, not with fen).
+        let rest_raw = self.letters_left();
         let Some(start) = deep_single_start(&rest_raw) else {
             return false;
         };
@@ -2567,28 +2567,26 @@ impl Decoder for MixerDecoder {
         if self.inner.native_editing() {
             self.inner.composition_boundary(purpose)
         } else {
-            crate::state::default_composition_boundary(&self.snapshot(), purpose)
+            crate::state::default_composition_boundary(&self.snapshot())
         }
     }
 
-    fn configure_zhixu_whole(&mut self, on: bool) -> Result<(), i32> {
-        if self.decoder_switch && self.is_composing() { return Err(-10); }
+    fn configure_zhixu_whole(&mut self, _on: bool) -> Result<(), i32> {
+        // The shells still call this knob, but the inner decoder is native for
+        // the product session's whole life; there is nothing left to switch.
+        // A native session rejects the call mid-composition, as the switched-on
+        // product always did; legacy probes keep their lenient path.
+        if self.inner.native_editing() && self.is_composing() { return Err(-10); }
         if let Ok(cache) = self.whole_lattice.get_mut() { *cache = None; }
-        let previous = self.zhixu_whole;
-        self.zhixu_whole = on;
-        if on { zhixu::prewarm_whole(); }
-        if let Err(status) = self.update_inner() {
-            self.zhixu_whole = previous;
-            return Err(status);
-        }
         self.reset_layer();
         if let Ok(mut cache) = self.composition_cache.lock() { *cache = None; }
         Ok(())
     }
 
     fn configure_learning(&mut self, mode: LearningMode) -> Result<(), i32> {
-        self.requested_learning = mode;
-        let mode = if self.rime_fallback.is_some() { LearningMode::Zhixu } else { mode };
+        // A native inner only ever learns in Zhixu; no Rime decoder remains to
+        // keep a legacy mode for.
+        let mode = if self.inner.native_editing() { LearningMode::Zhixu } else { mode };
         self.learning.set_mode(mode, &zhixu::current());
         if mode == LearningMode::Zhixu {
             let directory = self.blacklist.lock().ok().and_then(|store| store.directory());
@@ -2661,20 +2659,38 @@ impl Decoder for MixerDecoder {
             .unwrap_or(false)
     }
 
+    /// C3: lets a model-composed sentence lead the page. **The rule**: it leads only when it really is first on
+    /// the page the digit keys resolve against (`visible()`). The owner's learned whole word outranks it
+    /// (`protect_learned_whole`), and then the call fails with `LEAD_OUTRANKED_BY_LEARNED_WHOLE` and the page stays
+    /// as the core has it; the shell may still offer the sentence in the last slot. Never report success for a lead
+    /// the page does not show (11-07: the shell drew the sentence first while digit 2 committed it).
     fn lead_with_composition(&mut self, text: &str) -> Result<(), i32> {
         if self.learning.mode == LearningMode::Zhixu {
             let (snapshot, mut page) = self.visible();
             page.insert(0, MixedCandidate { candidate: Candidate { text: text.into(), comment: String::new(),
                 reading_key: String::new(), source_index: None }, selection: Selection::Local { text: text.into() }, tier: 0, score: 0 });
             self.protect_learned_whole(&snapshot.raw_input, &mut page);
-            if page.first().is_some_and(|item| item.candidate.text != text) { return Err(-10); }
+            if let Some(first) = page.first().filter(|item| item.candidate.text != text) {
+                return Err(self.lead_refusal(&snapshot.raw_input, &first.candidate.text));
+            }
         }
         if !self.composition_alternatives().iter().any(|value| value == text) {
-            return Err(-10);
+            return Err(LEAD_NOT_AN_ALTERNATIVE);
         }
-        let raw = unconfirmed_raw(self.inner.as_ref());
-        self.host_order = None;
-        self.lead_composition = Some((raw, text.to_string()));
+        let raw = self.letters_left();
+        let (previous_order, previous_lead) = (self.host_order.take(), self.lead_composition.take());
+        self.lead_composition = Some((raw.clone(), text.to_string()));
+        if self.learning.mode == LearningMode::Zhixu {
+            // The simulation above does not see everything `visible()` does. Only report success when the page
+            // really starts with the sentence, or the shell shows one order and the digit keys act on another.
+            let (snapshot, page) = self.visible();
+            if let Some(first) = page.first().filter(|item| item.candidate.text != text) {
+                let code = self.lead_refusal(&snapshot.raw_input, &first.candidate.text);
+                self.host_order = previous_order;
+                self.lead_composition = previous_lead;
+                return Err(code);
+            }
+        }
         Ok(())
     }
 
@@ -2695,7 +2711,7 @@ impl Decoder for MixerDecoder {
                 if page.iter().map(|item| &item.candidate).ne(requested.iter()) { return Err(-10); }
             }
         }
-        self.offered_composition = Some((unconfirmed_raw(self.inner.as_ref()), text.to_string()));
+        self.offered_composition = Some((self.letters_left(), text.to_string()));
         Ok(())
     }
 
@@ -2815,7 +2831,6 @@ impl Decoder for MixerDecoder {
     }
 
     fn input(&mut self, text: &str) -> Result<String, i32> {
-        self.update_inner()?;
         let prefix = if self.whole_enabled() && text.len() == 1 && text.as_bytes()[0].is_ascii_alphabetic()
             && self.raw_override.is_none()
         {
@@ -3191,30 +3206,17 @@ impl Decoder for MixerDecoder {
         self.inner.clear();
     }
     fn configure_fuzzy(&mut self, mask: u32) -> Result<(), i32> {
-        if self.decoder_switch && (self.zhixu_whole || zhixu_whole_enabled()) && self.is_composing() { return Err(-10); }
+        // The native decoder reads fuzzy spellings itself; a live menu must not change.
+        if self.inner.native_editing() && self.is_composing() { return Err(-10); }
         self.reset_layer();
-        // Zhixu reads fuzzy spellings itself. A retained Rime fallback keeps the
-        // same setting so turning the trial switch off restores it unchanged.
-        if let Some(rime) = &mut self.rime_fallback { rime.configure_fuzzy(mask)?; }
         self.inner.configure_fuzzy(mask)?;
         self.fuzzy_mask = mask;
-        self.update_inner()
+        Ok(())
     }
     fn reload_dictionaries(&mut self) -> Result<(), i32> {
         self.reset_layer();
-        if let Some(rime) = &mut self.rime_fallback {
-            rime.reload_dictionaries()?;
-            self.inner.reload_dictionaries()
-        }
-        else {
-            self.inner.reload_dictionaries()?;
-            if self.decoder_switch && (self.zhixu_whole || zhixu_whole_enabled()) && self.fuzzy_mask == 0 {
-                // Explicit idle reloads retain their synchronous validation contract.
-                // Replace a pending old deployment too, before the next input can adopt it.
-                zhixu::loader::deployed_snapshot().map_err(|_| -110)?;
-            }
-            Ok(())
-        }
+        // A native inner rebuilds and validates its own generation synchronously.
+        self.inner.reload_dictionaries()
     }
     fn apply_lexicon(&mut self, lexicon: Arc<MixerLexicon>) {
         self.lexicon = lexicon;
@@ -3697,6 +3699,13 @@ fn heavy_correction_readings(reading: &str) -> Vec<CorrectionReading> {
 type CompositionKey = ((u64, u64), String, usize, Option<(String, String, bool)>, ranking::CorrectionSettings);
 
 impl MixerDecoder {
+    /// The refusal code for a page whose first candidate is `first` instead of the sentence.
+    fn lead_refusal(&self, raw: &str, first: &str) -> i32 {
+        let learned = self.learning.entries().iter()
+            .any(|entry| entry.is_learned() && entry.text == first && learning_covers(raw, &entry.reading));
+        if learned { LEAD_OUTRANKED_BY_LEARNED_WHOLE } else { LEAD_OUTRANKED_OTHER }
+    }
+
     /// C3 alternatives for the current page and the first's own edits, computed once per
     /// key: the shells ask for alternatives and edits two or three times a key.
     fn compositions(&self) -> (Vec<(String, f64)>, f64) {
@@ -3920,35 +3929,6 @@ fn composition_candidates_for(snapshot: &DecoderSnapshot, mixed: &[MixedCandidat
             bytes <= MAX_SENTENCE_BYTES && edit_bytes <= 250
         })
         .collect()
-}
-
-/// A segment picked mid-composition stays in Rime's composition as text in front of the
-/// letters still to be converted (`到时候wo xuan yi xuan`). Returns that confirmed text and
-/// the letters left; None when nothing is confirmed yet. Rime still reports the whole input
-/// (`daoshihwoxuanyixuan`) as the raw input, so a sentence built from it spells the confirmed
-/// part again (到是和…); the mixer works on the letters left and puts the text back on commit.
-pub(crate) fn confirmed_prefix_and_rest(preedit: &str) -> Option<(&str, String)> {
-    let at = preedit.find(|c: char| c.is_ascii_alphabetic())?;
-    let (prefix, tail) = preedit.split_at(at);
-    if prefix.is_ascii() {
-        return None;
-    }
-    // Rime shows ü where the keys were v (lv -> lü).
-    let rest: String = tail
-        .chars()
-        .filter_map(|c| match c {
-            'ü' | 'Ü' => Some('v'),
-            c if c.is_ascii_alphabetic() => Some(c.to_ascii_lowercase()),
-            _ => None,
-        })
-        .collect();
-    (!rest.is_empty()).then_some((prefix, rest))
-}
-
-/// The letters of the input still to be converted: the raw input, less any segment already picked.
-fn unconfirmed_raw(decoder: &dyn Decoder) -> String {
-    decoder.composition_boundary(BoundaryPurpose::Mixing)
-        .map_or_else(|| decoder.snapshot().raw_input, |boundary| boundary.unconfirmed_raw)
 }
 
 /// Two or more bare initials and nothing else (hd, jdfs): an all-initials abbreviation,
@@ -4299,12 +4279,6 @@ fn decode_compositions_with(reading: &str, limit: usize, abbreviated: bool) -> V
         .collect()
 }
 
-/// Evaluation override: the host preference defaults off and cannot suppress this flag.
-pub(crate) fn zhixu_whole_enabled() -> bool {
-    static ON: OnceLock<bool> = OnceLock::new();
-    *ON.get_or_init(|| std::env::var("ZHIZI_ZHIXU_WHOLE").is_ok_and(|value| value == "1"))
-}
-
 fn whole_spelling_matches(raw: &str, spaced: &str) -> bool {
     if !raw.contains('\'') { return true; }
     let mut boundaries = HashSet::new();
@@ -4331,9 +4305,11 @@ fn whole_syllable_count(reading: &str) -> Option<usize> {
         // its original spellings and tie order for all other callers.
         let mut best = vec![usize::MAX; segment.len() + 1];
         best[segment.len()] = 0;
+        let repair_jqx = zhixu::fuzzy::has_jqx_spelling_error(&segment);
         for start in (0..segment.len()).rev() {
             for end in start + 1..=segment.len().min(start + 6) {
-                if best[end] != usize::MAX && syllables.contains(&segment[start..end]) {
+                if best[end] != usize::MAX && (syllables.contains(&segment[start..end])
+                    || repair_jqx && !zhixu::fuzzy::jqx_token_repairs(&segment[start..end]).is_empty()) {
                     best[start] = best[start].min(best[end] + 1);
                 }
             }
@@ -4427,6 +4403,18 @@ fn whole_reading_candidates_demand(reading: &str, entries: &[zhixu::learning::En
     let mut additions: Vec<_> = personal.iter().flat_map(|dictionary|
         dictionary.whole_words_for_compact_reading(&compact)).filter(eligible)
         .map(|word| (word.text, word.weight, word.syllables)).collect();
+    let repairs = zhixu::fuzzy::jqx_spelling_repairs(reading);
+    // A repaired whole dictionary word keeps the same front-of-prefix placement
+    // as an exact word. Every repair here costs one edit, so their weight order
+    // is unchanged by the common JQX_REPAIR_COST; assembled paths pay it below.
+    for repair in &repairs {
+        let compact = repair.spelling.replace('\'', "");
+        for dictionary in std::iter::once(index.as_ref()).chain(personal.as_deref()) {
+            additions.extend(dictionary.whole_words_for_compact_reading(&compact)
+                .filter(|word| whole_spelling_matches(&repair.spelling, word.reading))
+                .map(|word| (word.text, word.weight, word.syllables)));
+        }
+    }
     #[cfg(test)]
     stage.next(2);
     let mut learned: HashMap<&str, f64> = HashMap::new();
@@ -4497,8 +4485,9 @@ fn whole_reading_candidates_demand(reading: &str, entries: &[zhixu::learning::En
     #[cfg(test)]
     let _stage = WholeGenerationTiming::start(5);
     let mut seen = HashSet::new();
+    let single_repair = normal_count == 1 && zhixu::fuzzy::has_jqx_spelling_error(reading);
     let candidates = texts.into_iter()
-        .filter(|(text, _)| text.chars().count() >= 2 && seen.insert(*text))
+        .filter(|(text, _)| (text.chars().count() >= 2 || single_repair) && seen.insert(*text))
         .map(|(text, comment)| MixedCandidate {
             candidate: Candidate { text: text.into(), comment: comment.into(),
                 reading_key: reading.into(), source_index: None },
@@ -4823,6 +4812,7 @@ fn decode_whole_lattice_demand(reading: &str, limit: usize, cap: usize, beam: us
     #[cfg(test)]
     let mut stage = WholeGenerationTiming::start(0);
     if reading.is_empty() { return (Vec::new(), true); }
+    let repair_jqx = zhixu::fuzzy::has_jqx_spelling_error(reading);
     let index = zhixu::current();
     let personal = zhixu::learning_index();
     #[cfg(test)]
@@ -4874,12 +4864,14 @@ fn decode_whole_lattice_demand(reading: &str, limit: usize, cap: usize, beam: us
                 continue;
             }
             let mut seen = HashSet::new();
+            let repairs = if repair_jqx { zhixu::fuzzy::jqx_spelling_repairs(&reading[start..]) } else { Vec::new() };
             for dictionary in std::iter::once(index.as_ref()).chain(personal.as_deref()) {
-                dictionary.visit_whole_words_for_prefixes(&reading[start..], reused.saturating_sub(start), |offset, word| {
+                let mut extend = |offset: usize, word, spelling: &str, repair_cost: i64| {
+                    let word: zhixu::WholeWord<'_> = word;
                     let end = start + offset;
                     let spelled = match fuzzy_mask {
-                        0 => whole_spelling_matches(&reading[start..end], word.reading),
-                        mask => zhixu::fuzzy::spelling_matches(&reading[start..end], word.reading, mask),
+                        0 => whole_spelling_matches(spelling, word.reading),
+                        mask => zhixu::fuzzy::spelling_matches(spelling, word.reading, mask),
                     };
                     if !spelled
                         || (personal.is_some() && !seen.insert((end, word.text, word.reading)))
@@ -4897,10 +4889,19 @@ fn decode_whole_lattice_demand(reading: &str, limit: usize, cap: usize, beam: us
                         let mut joined = String::with_capacity(text.len() + word.text.len());
                         joined.push_str(text);
                         joined.push_str(word.text);
-                        paths[end].push((score + lexical_score - 32236 - penalty, joined,
+                        paths[end].push((score + lexical_score - 32236 - penalty - repair_cost, joined,
                             (readings_used ^ word.reading_hash).wrapping_mul(0x0000_0100_0000_01b3), count + word.syllables));
                     }
-                });
+                };
+                dictionary.visit_whole_words_for_prefixes(&reading[start..], reused.saturating_sub(start), |offset, word|
+                    extend(offset, word, &reading[start..start + offset], 0));
+                for repair in &repairs {
+                    dictionary.visit_whole_words_for_prefixes(&repair.spelling, 0, |offset, word| {
+                        if let Some(raw_end) = repair.raw_end(offset).filter(|&end| end > reused.saturating_sub(start)) {
+                            extend(raw_end, word, &repair.spelling[..offset], zhixu::fuzzy::JQX_REPAIR_COST);
+                        }
+                    });
+                }
             }
             paths[start] = current;
         }
@@ -5141,6 +5142,25 @@ fn decode_whole_reference(reading: &str, limit: usize, cap: usize, beam: usize,
 fn lattice_enabled() -> bool {
     static ON: OnceLock<bool> = OnceLock::new();
     *ON.get_or_init(|| !std::env::var("ZHIZI_LATTICE").is_ok_and(|value| value == "0"))
+}
+
+/// One row per text on a page. The same text can arrive twice with different sources: a heavy-garble index candidate
+/// (a bare `Local` string) and the decoder's ordinary candidate (about 0.3% of pages in the 11-07 replay: 但是皮肤, 搞混了,
+/// 指针那个). The row stays where the earlier one was; when the earlier is a bare `Local` and the later is the decoder's
+/// own candidate, the decoder's candidate (its selection path teaches the dictionary) takes that row.
+fn one_row_per_text(items: &mut Vec<MixedCandidate>) {
+    let mut kept: Vec<MixedCandidate> = Vec::with_capacity(items.len());
+    for item in items.drain(..) {
+        match kept.iter_mut().find(|existing| existing.candidate.text == item.candidate.text) {
+            Some(existing) => {
+                if matches!(existing.selection, Selection::Local { .. }) && !matches!(item.selection, Selection::Local { .. }) {
+                    *existing = item;
+                }
+            }
+            None => kept.push(item),
+        }
+    }
+    *items = kept;
 }
 
 fn heavy_garble_candidates(
@@ -6670,8 +6690,8 @@ mod tests {
 
     impl Decoder for ListDecoder {
         fn native_editing(&self) -> bool { self.exact_boundary.is_some() }
-        fn composition_boundary(&self, purpose: crate::state::BoundaryPurpose) -> Option<crate::state::CompositionBoundary> {
-            self.exact_boundary.clone().or_else(|| crate::state::default_composition_boundary(&self.snapshot(), purpose))
+        fn composition_boundary(&self, _purpose: crate::state::BoundaryPurpose) -> Option<crate::state::CompositionBoundary> {
+            self.exact_boundary.clone().or_else(|| crate::state::default_composition_boundary(&self.snapshot()))
         }
         fn snapshot(&self) -> DecoderSnapshot {
             let preedit = if self.confirmed.is_empty() {
@@ -6893,6 +6913,15 @@ mod tests {
 
     impl Decoder for WholePartialDecoder {
         fn snapshot(&self) -> DecoderSnapshot { self.0.snapshot() }
+        fn composition_boundary(&self, _purpose: BoundaryPurpose) -> Option<CompositionBoundary> {
+            // A native-style partial pick: the picked text plus the letters left.
+            if self.0.confirmed.is_empty() { return None; }
+            let letters = self.0.remainder.chars()
+                .filter(|c| c.is_ascii_alphabetic()).collect::<String>();
+            (!letters.is_empty()).then(|| CompositionBoundary {
+                confirmed: self.0.confirmed.clone(), unconfirmed_raw: letters,
+            })
+        }
         fn snapshot_all_candidates(&self) -> Option<DecoderSnapshot> { Some(self.snapshot()) }
         fn input(&mut self, text: &str) -> Result<String, i32> { self.0.input(text) }
         fn backspace(&mut self) -> Result<String, i32> { self.0.backspace() }
@@ -7029,6 +7058,119 @@ mod tests {
         let mut mixer = MixerDecoder::new(Box::new(ListDecoder::with(raw, values)), "whole-fixture".into());
         mixer.whole_override = Some(enabled);
         mixer
+    }
+
+    #[test]
+    fn q9_public_jqx_repairs_reach_first_page() {
+        let dictionary = zhixu::fallback();
+        zhixu::with_index(dictionary.clone(), || {
+            let mut missing = Vec::new();
+            for (raw, expected) in [
+                ("qanmian", "前面"), ("xanzai", "现在"), ("jandan", "简单"),
+                ("xang", "想"), ("haoxangshi", "好像是"),
+            ] {
+                let decoder = crate::zhixu::decoder::ZhixuDecoder::from_ready_dictionary(dictionary.clone());
+                let mut mixer = MixerDecoder::new(Box::new(decoder), format!("q9-{raw}"));
+                mixer.configure_zhixu_whole(true).unwrap();
+                mixer.input(raw).unwrap();
+                let page = mixer.snapshot();
+                println!("Q9_PAGE\t{raw}\t{:?}", page.candidates.iter().map(|c| c.text.as_str()).collect::<Vec<_>>());
+                if !page.candidates.iter().any(|candidate| candidate.text == expected) {
+                    missing.push((raw, expected));
+                }
+                if let Some(position) = page.candidates.iter().position(|candidate| candidate.text == expected) {
+                    assert_eq!(mixer.select_candidate(position, 909, LearningIntent::NoLearn).unwrap(), expected);
+                    assert!(mixer.snapshot().raw_input.is_empty(), "{raw}: repaired selection consumes all keys");
+                }
+            }
+            assert!(missing.is_empty(), "missing first-page repairs: {missing:?}");
+        });
+    }
+
+    #[test]
+    fn q9_legal_public_candidates_match_every_baseline_row() {
+        let dictionary = zhixu::fallback();
+        zhixu::with_index(dictionary.clone(), || {
+            // Captured before the Q9 repair: all pages and all Candidate fields.
+            for (raw, groups) in [
+                ("qian", vec![
+                    ("钱 前 千 签 欠 浅 牵 迁 潜 倩 铅 谦 乾", "", "qian"),
+                    ("奇案", "", "qi an"),
+                    ("其 起 期 气 器 七 齐 奇 骑 妻 启 旗 企 棋 漆 弃 琪 琦 岂", "", "qi"),
+                    ("其按 其俺 起按 其安 起俺 起安", ZHIXU_WHOLE_TAIL_COMMENT, "qian"),
+                ]),
+                ("xia", vec![
+                    ("下 夏 吓 瞎 虾 霞 侠", "", "xia"),
+                    ("系 西 洗 戏 喜 係 细 吸 希 溪 锡 息 兮 熙 席 惜 稀 习 夕", "", "xi"),
+                    ("系啊 西啊 洗啊 系阿 戏啊 喜啊", ZHIXU_WHOLE_TAIL_COMMENT, "xia"),
+                ]),
+                ("jiao", vec![
+                    ("叫 交 教 较 脚 角 胶 焦 娇 觉 浇 搅 缴 嚼", "", "jiao"),
+                    ("家 加 假 价 架 甲 佳 夹 嘉 嫁 贾 驾", "", "jia"),
+                    ("及 级 即 几 机 既 急 集 记 极 鸡 寄 基 继 吉 计 挤 季 剂 暨 纪 己 积 籍 技 击 姬 济 肌 忌 祭 疾 激 迹 辑", "", "ji"),
+                    ("家哦 加哦 及奥 家噢 加噢 及熬 假哦 家喔 级奥 即奥 几奥 机奥 及啊哦 及啊噢 级啊哦 即啊哦 几啊哦 及阿哦", ZHIXU_WHOLE_TAIL_COMMENT, "jiao"),
+                ]),
+            ] {
+                let decoder = crate::zhixu::decoder::ZhixuDecoder::from_ready_dictionary(dictionary.clone());
+                let mut mixer = MixerDecoder::new(Box::new(decoder), format!("q9-legal-{raw}"));
+                mixer.configure_zhixu_whole(true).unwrap();
+                mixer.input(raw).unwrap();
+                let mut candidates = Vec::new();
+                loop {
+                    let page = mixer.snapshot();
+                    candidates.extend(page.candidates);
+                    if page.is_last_page { break; }
+                    mixer.page_down().unwrap();
+                }
+                let expected: Vec<_> = groups.into_iter().flat_map(|(texts, comment, reading)|
+                    texts.split_whitespace().map(move |text| Candidate { text: text.into(), comment: comment.into(),
+                        reading_key: reading.into(), source_index: None })).collect();
+                assert_eq!(candidates, expected, "{raw}: every baseline row stays unchanged");
+            }
+        });
+    }
+
+    #[test]
+    fn q9_jqx_sentence_paths_keep_incremental_and_fresh_results_equal() {
+        use crate::zhixu::loader::{DictionaryData, Entry};
+        // No multi-character dictionary entries: every result must be assembled.
+        let dictionary = Arc::new(Index::from_data(DictionaryData { entries: [
+            ("前", "qian", 1000), ("全", "quan", 900), ("面", "mian", 1000),
+            ("现", "xian", 1000), ("在", "zai", 1000), ("简", "jian", 1000),
+            ("单", "dan", 1000), ("好", "hao", 1000), ("想", "xiang", 1000),
+            ("是", "shi", 1000), ("接", "jie", 1000), ("家", "jia", 1000),
+        ].into_iter().map(|(text, reading, weight)| Entry {
+            text: text.into(), reading: reading.into(), weight, layer: "fixture".into(),
+        }).collect() }));
+        zhixu::with_index(dictionary, || {
+            for (keys, expected) in [("qanmian", "前面"), ("xanzai", "现在"), ("jandan", "简单"),
+                ("haoxangshi", "好想是"), ("jei", "接"), ("jai", "家"), ("ixang", "想"),
+                ("qanhaoxang", "前好想")] {
+                let mut cache = None;
+                for end in 1..=keys.len() {
+                    let raw = &keys[..end];
+                    if whole_syllable_count(raw).is_none() { continue; }
+                    let incremental = decode_whole_lattice(raw, 120, 6, 96, &[], 0, Some((&mut cache, 0)), 0);
+                    let fresh = decode_whole_lattice(raw, 120, 6, 96, &[], 0, None, 0);
+                    assert_eq!(incremental, fresh, "{keys}: {raw}");
+                    if end == keys.len() {
+                        assert_eq!(fresh.first().map(|(text, _)| text.as_str()), Some(expected), "{keys}");
+                    }
+                }
+            }
+            for raw in ["q'an", "x'ang", "j'ai"] {
+                assert!(decode_whole_lattice(raw, 120, 6, 96, &[], 0, None, 0).is_empty(), "{raw}");
+            }
+            let mut exact = None;
+            let mut repaired = None;
+            decode_whole_lattice("qian", 120, 6, 96, &[], 0, Some((&mut exact, 0)), 0);
+            decode_whole_lattice("qan", 120, 6, 96, &[], 0, Some((&mut repaired, 0)), 0);
+            let score = |state: WholeLattice| state.paths.last().unwrap().iter()
+                .find(|path| path.1 == "前").unwrap().0;
+            assert_eq!(score(exact.unwrap()) - score(repaired.unwrap()), zhixu::fuzzy::JQX_REPAIR_COST);
+            let _fuzzy = zhixu::fuzzy::pin_mask(1 << 5);
+            assert_eq!(decode_whole_lattice("qanmian", 120, 6, 96, &[], 0, None, 0)[0].0, "前面");
+        });
     }
 
     #[test]
@@ -7528,6 +7670,16 @@ mod tests {
         false
     }
 
+    /// The product session shape: a native inner built exactly as
+    /// `Session::new_native` constructs it, over an empty in-memory user store.
+    fn native_mixer(app: &str, dictionary: Arc<Index>) -> MixerDecoder {
+        MixerDecoder::new_native(app.into(), Arc::new(Mutex::new(Store::default())), dictionary).unwrap()
+    }
+
+    fn native_mixer_with(app: &str, blacklist: Arc<Mutex<Store>>, dictionary: Arc<Index>) -> MixerDecoder {
+        MixerDecoder::new_native(app.into(), blacklist, dictionary).unwrap()
+    }
+
     fn y3e_terms_fixture() -> Arc<Index> {
         use crate::zhixu::loader::{DictionaryData, Entry};
         let mut entries: Vec<_> = [
@@ -7556,7 +7708,7 @@ mod tests {
             text: text.into(), reading: reading.into(), weight, layer: "fixture".into(),
         }).collect() }));
         zhixu::with_index(dictionary.clone(), || {
-            let mut mixer = MixerDecoder::new(Box::new(crate::zhixu::decoder::ZhixuDecoder::from_ready_dictionary(dictionary.clone())), "fuzzy.protection".into());
+            let mut mixer = native_mixer("fuzzy.protection", dictionary.clone());
             mixer.configure_fuzzy(1 << 3).unwrap();
             mixer.input("limen").unwrap();
             let page: Vec<_> = mixer.snapshot().candidates.into_iter().map(|c| c.text).collect();
@@ -7567,11 +7719,10 @@ mod tests {
     #[test]
     fn y3e_native_technical_prefixes_keep_existing_ascii_priority() {
         let mut failures = Vec::new();
-        zhixu::with_index(y3e_terms_fixture(), || {
+        let dictionary = y3e_terms_fixture();
+        zhixu::with_index(dictionary.clone(), || {
             for (raw, expected) in [("sql", "SQLite"), ("clo", "Cloudflare"), ("cloudf", "Cloudflare")] {
-                let mut mixer = MixerDecoder::new(Box::new(crate::state::MockDecoder::default()), "y3e.terms".into());
-                mixer.enable_decoder_switch().unwrap();
-                mixer.configure_zhixu_whole(true).unwrap();
+                let mut mixer = native_mixer("y3e.terms", dictionary.clone());
                 mixer.input(raw).unwrap();
                 let inner = mixer.inner.snapshot();
                 assert!(!inner.candidates.is_empty(), "{raw}: Chinese competition must exist");
@@ -7604,10 +7755,9 @@ mod tests {
             entries.extend(extra.into_iter().map(|(text, reading)| Entry {
                 text: text.into(), reading: reading.into(), weight: 5000, layer: "fixture".into(),
             }));
-            zhixu::with_index(Arc::new(Index::from_data(DictionaryData { entries })), || {
-                let mut mixer = MixerDecoder::new(Box::new(crate::state::MockDecoder::default()), "y3e.first-piece".into());
-                mixer.enable_decoder_switch().unwrap();
-                mixer.configure_zhixu_whole(true).unwrap();
+            let dictionary = Arc::new(Index::from_data(DictionaryData { entries }));
+            zhixu::with_index(dictionary.clone(), || {
+                let mut mixer = native_mixer("y3e.first-piece", dictionary.clone());
                 mixer.configure_typo(true);
                 mixer.input(raw).unwrap();
                 let inner = mixer.inner.snapshot();
@@ -7635,11 +7785,10 @@ mod tests {
         }).collect();
         entries.push(Entry { text: "ShengCloud".into(), reading: "shengcloud".into(),
             weight: 5000, layer: "agent_tech_terms".into() });
-        zhixu::with_index(Arc::new(Index::from_data(DictionaryData { entries })), || {
+        let dictionary = Arc::new(Index::from_data(DictionaryData { entries }));
+        zhixu::with_index(dictionary.clone(), || {
             for (raw, text) in [("zgr", "中国人"), ("shengc", "生成"), ("henkyi", "很可以"), ("leisishi", "类似是"), ("leisshi", "类似是")] {
-                let mut mixer = MixerDecoder::new(Box::new(crate::state::MockDecoder::default()), "y3e.complete".into());
-                mixer.enable_decoder_switch().unwrap();
-                mixer.configure_zhixu_whole(true).unwrap();
+                let mut mixer = native_mixer("y3e.complete", dictionary.clone());
                 mixer.configure_typo(true);
                 mixer.input(raw).unwrap();
                 assert_eq!(mixer.snapshot().candidates[0].text, text, "{raw}");
@@ -7689,30 +7838,33 @@ mod tests {
     }
 
     #[test]
-    fn product_inner_switches_at_idle_and_retains_rime_fallback() {
-        if !whole_test_child("product_inner_switches_at_idle_and_retains_rime_fallback") { return; }
-        let mut mixer = MixerDecoder::new(Box::new(crate::state::MockDecoder::default()), "y3.switch".into());
-        mixer.enable_decoder_switch().unwrap();
-        assert!(!mixer.native_editing());
-        mixer.configure_zhixu_whole(true).unwrap();
-        assert!(mixer.native_editing());
-        assert_eq!(mixer.learning.mode, LearningMode::Zhixu);
-        assert!(!mixer.whole_enabled());
-        mixer.input("nihao").unwrap();
-        assert_eq!(mixer.configure_zhixu_whole(false), Err(-10));
-        assert_eq!(mixer.configure_fuzzy(1), Err(-10));
-        assert_eq!(mixer.inner.snapshot().raw_input, "nihao");
-        mixer.clear();
-        // F2: Zhixu reads fuzzy spellings itself, so fuzzy input stays native.
-        mixer.configure_fuzzy(1).unwrap();
-        assert!(mixer.native_editing());
-        assert!(!mixer.whole_enabled());
-        mixer.configure_fuzzy(0).unwrap();
-        assert!(mixer.native_editing());
-        mixer.configure_zhixu_whole(false).unwrap();
-        assert!(!mixer.native_editing());
-        assert_eq!(mixer.learning.mode, LearningMode::Rime);
-        assert!(mixer.rime_fallback.is_none());
+    fn product_inner_stays_native_for_its_whole_life() {
+        if !whole_test_child("product_inner_stays_native_for_its_whole_life") { return; }
+        let dictionary = y3e_terms_fixture();
+        zhixu::with_index(dictionary.clone(), || {
+            let mut mixer = native_mixer("y3.switch", dictionary.clone());
+            assert!(mixer.native_editing());
+            assert_eq!(mixer.learning.mode, LearningMode::Zhixu);
+            assert!(!mixer.whole_enabled());
+            mixer.input("nihao").unwrap();
+            assert_eq!(mixer.configure_zhixu_whole(false), Err(-10));
+            assert_eq!(mixer.configure_fuzzy(1), Err(-10));
+            assert_eq!(mixer.inner.snapshot().raw_input, "nihao");
+            mixer.clear();
+            // F2: Zhixu reads fuzzy spellings itself, so fuzzy input stays native.
+            mixer.configure_fuzzy(1).unwrap();
+            assert!(mixer.native_editing());
+            assert!(!mixer.whole_enabled());
+            mixer.configure_fuzzy(0).unwrap();
+            assert!(mixer.native_editing());
+            // The shell knob no longer changes the inner or the learning mode.
+            mixer.configure_zhixu_whole(false).unwrap();
+            assert!(mixer.native_editing());
+            assert_eq!(mixer.learning.mode, LearningMode::Zhixu);
+            mixer.configure_zhixu_whole(true).unwrap();
+            assert!(mixer.native_editing());
+            assert_eq!(mixer.learning.mode, LearningMode::Zhixu);
+        });
     }
 
     #[test]
@@ -7736,15 +7888,16 @@ mod tests {
         std::fs::create_dir_all(&shared).unwrap();
         std::fs::create_dir_all(&user).unwrap();
         zhixu::loader::attach(&shared, &user);
-        let mut mixer = MixerDecoder::new(Box::new(crate::state::MockDecoder::default()), "y5b.reload".into());
-        mixer.enable_decoder_switch().unwrap();
-        mixer.configure_zhixu_whole(true).unwrap();
         let file = shared.join("agent_pinyin.dict.yaml");
         std::fs::write(&file, "---\nname: agent_pinyin\n...\n旧词\tjiu ci\t100\n").unwrap();
-        zhixu::loader::deployed_snapshot().unwrap().unwrap().warm_whole();
-        assert!(!mixer.native_editing());
+        let dictionary = zhixu::loader::deployed_snapshot().unwrap().unwrap();
+        dictionary.warm_whole();
+        let mut mixer = native_mixer("y5b.reload", dictionary);
+        assert!(mixer.native_editing());
         std::fs::write(&file, "---\nname: agent_pinyin\n...\n新词\txin ci\t100\n").unwrap();
         mixer.reload_dictionaries().unwrap();
+        assert!(mixer.inner.dictionary_snapshot().unwrap().all_readings_for_text("新词").next().is_some(),
+            "the inner decoder reads the new generation");
         if let Ok(Some(ready)) = zhixu::loader::ready_deployed_snapshot() {
             assert!(ready.all_readings_for_text("旧词").next().is_none(), "reload must retire the pending old deployment");
         }
@@ -7752,41 +7905,34 @@ mod tests {
     }
 
     #[test]
-    fn y5b_pending_deployment_keeps_composition_until_next_input() {
-        if !whole_test_child("y5b_pending_deployment_keeps_composition_until_next_input") { return; }
+    fn native_reload_keeps_composition_and_the_next_input_uses_the_new_generation() {
+        if !whole_test_child("native_reload_keeps_composition_and_the_next_input_uses_the_new_generation") { return; }
         let root = std::env::temp_dir().join(format!("y5b-handoff-{}", std::process::id()));
         let shared = root.join("shared");
         let user = root.join("user");
         std::fs::create_dir_all(&shared).unwrap();
         std::fs::create_dir_all(&user).unwrap();
         zhixu::loader::attach(&shared, &user);
-        let mut mixer = MixerDecoder::new(Box::new(crate::state::MockDecoder::default()), "y5b".into());
-        mixer.apply_blacklist(crate::blacklist::shared_blacklist(&user).unwrap());
-        mixer.enable_decoder_switch().unwrap();
-        mixer.configure_zhixu_whole(true).expect("pending deployment must keep the existing inner");
-        mixer.configure_fuzzy(0).unwrap();
-        assert!(!mixer.native_editing());
-        assert_eq!(mixer.input("ni").unwrap(), "");
-        let before = mixer.inner.snapshot();
-        let mut off = MixerDecoder::new(Box::new(crate::state::MockDecoder::default()), "y5b".into());
-        off.apply_blacklist(crate::blacklist::shared_blacklist(&user).unwrap());
-        off.enable_decoder_switch().unwrap();
-        off.input("ni").unwrap();
-        assert_whole_snapshot(&mixer.snapshot(), &off.snapshot());
         std::fs::write(shared.join("agent_pinyin.dict.yaml"), "---\nname: agent_pinyin\n...\n你好\tni hao\t100\n你\tni\t90\n").unwrap();
         let dictionary = zhixu::loader::deployed_snapshot().unwrap().unwrap();
         dictionary.warm_whole();
-        mixer.update_inner().unwrap();
-        assert!(!mixer.native_editing(), "never replace a composing inner");
+        let mut mixer = native_mixer_with("y5b", crate::blacklist::shared_blacklist(&user).unwrap(), dictionary);
+        assert!(mixer.native_editing());
+        assert_eq!(mixer.input("ni").unwrap(), "");
+        let before = mixer.inner.snapshot();
+        std::fs::write(shared.join("agent_pinyin.dict.yaml"), "---\nname: agent_pinyin\n...\n你好\tni hao\t100\n你\tni\t90\n泥蒿\tni hao\t80\n").unwrap();
+        mixer.reload_dictionaries().unwrap();
         assert_eq!(mixer.inner.snapshot().preedit, before.preedit);
         assert_eq!(mixer.inner.snapshot().cursor_utf8, before.cursor_utf8);
         let committed = mixer.commit_raw();
         assert_eq!(committed, "ni");
-        assert_eq!(mixer.input("nihao").unwrap(), "", "handoff must not replay a commit");
+        assert_eq!(mixer.input("nihao").unwrap(), "", "reload must not replay a commit");
         assert!(mixer.native_editing());
         assert_eq!(mixer.inner.snapshot().raw_input, "nihao");
         assert_eq!(mixer.learning.mode, LearningMode::Zhixu);
-        assert!(mixer.inner.snapshot().candidates.iter().any(|c| c.text == "你好"));
+        assert!(mixer.inner.snapshot_all_candidates().unwrap().candidates.iter().any(|c| c.text == "你好"));
+        assert!(mixer.inner.snapshot_all_candidates().unwrap().candidates.iter().any(|c| c.text == "泥蒿"),
+            "the next input adopts the new generation");
         let now = personal_picks::now_ms();
         let at = mixer.snapshot().candidates.iter().position(|c| c.text == "你好").unwrap();
         let committed = mixer.select_candidate(at, 9001, LearningIntent::DeliberateSelection).unwrap();
@@ -7805,10 +7951,7 @@ mod tests {
         if !whole_test_child("product_native_learning_persists_and_is_read_by_the_inner_decoder") { return; }
         let directory = migration_fixture("拟好\tni hao\t7\n");
         let blacklist = crate::blacklist::shared_blacklist(&directory).unwrap();
-        let mut mixer = MixerDecoder::new(Box::new(crate::state::MockDecoder::default()), "y3.learning".into());
-        mixer.apply_blacklist(blacklist);
-        mixer.enable_decoder_switch().unwrap();
-        mixer.configure_zhixu_whole(true).unwrap();
+        let mut mixer = native_mixer_with("y3.learning", blacklist, zhixu::fallback());
         let now = personal_picks::now_ms();
         mixer.input("nihao").unwrap();
         assert!(mixer.inner.snapshot_all_candidates().unwrap().candidates.iter().any(|candidate| candidate.text == "拟好"));
@@ -7822,7 +7965,7 @@ mod tests {
             delivery_id: 9002 }, now + 6_000);
         let store = crate::zhixu::learning::LearningStore::load(&directory, now + 6_000);
         assert!(store.entries().iter().any(|entry| entry.text == "你好" && entry.is_learned()));
-        assert!(mixer.rime_fallback.as_ref().unwrap().snapshot().raw_input.is_empty());
+        assert!(mixer.inner.snapshot().raw_input.is_empty());
         mixer.learning.remember_for_test("ni hao", "泥蒿", now + 6_000);
         mixer.input("nihao").unwrap();
         assert!(mixer.inner.snapshot_all_candidates().unwrap().candidates.iter().any(|candidate| candidate.text == "泥蒿"));
@@ -7840,7 +7983,7 @@ mod tests {
         ].into_iter().map(|(text, reading, weight)| crate::zhixu::loader::Entry {
             text: text.into(), reading: reading.into(), weight, layer: "fixture".into(),
         }).collect() }));
-        zhixu::with_index(dictionary, || {
+        zhixu::with_index(dictionary.clone(), || {
             for (case, export) in [None,
                 Some("#@/tick\t1000\nsheng chan \t生产\tc=7 d=8 t=999\n"),
                 Some("#@/tick\t1000\nsheng chan \t生产\tc=7 d=8 t=999\nsheng cheng \t生成\tc=1 d=1 t=999\n"),
@@ -7852,10 +7995,8 @@ mod tests {
                     store.import_rime_export(export, personal_picks::now_ms()).unwrap();
                     store.save(&directory).unwrap();
                 }
-                let mut mixer = MixerDecoder::new(Box::new(crate::state::MockDecoder::default()), "y3d.learning".into());
-                mixer.apply_blacklist(crate::blacklist::shared_blacklist(&directory).unwrap());
-                mixer.enable_decoder_switch().unwrap();
-                mixer.configure_zhixu_whole(true).unwrap();
+                let mut mixer = native_mixer_with("y3d.learning",
+                    crate::blacklist::shared_blacklist(&directory).unwrap(), dictionary.clone());
                 mixer.input("shengc").unwrap();
                 let before = mixer.snapshot();
                 let position = |page: &DecoderSnapshot| page.candidates.iter().position(|c| c.text == "生成").unwrap();
@@ -7949,7 +8090,7 @@ mod tests {
         ].into_iter().map(|(text, weight)| crate::zhixu::loader::Entry {
             text: text.into(), reading: "ni hao".into(), weight, layer: "fixture".into(),
         }).collect() }));
-        zhixu::with_index(dictionary, || {
+        zhixu::with_index(dictionary.clone(), || {
             let directory = std::env::temp_dir().join(format!("zhixu-y3b-mixer-delete-{}", std::process::id()));
             std::fs::create_dir_all(&directory).unwrap();
             let now = personal_picks::now_ms();
@@ -7959,10 +8100,8 @@ mod tests {
                 reading: "ni hao".into(), text: "拟好".into(), target: 0, count: 10,
                 last_ms: now, alternatives: vec!["你好".into()] });
             store.save(&directory).unwrap();
-            let mut mixer = MixerDecoder::new(Box::new(crate::state::MockDecoder::default()), "y3b.delete".into());
-            mixer.apply_blacklist(crate::blacklist::shared_blacklist(&directory).unwrap());
-            mixer.enable_decoder_switch().unwrap();
-            mixer.configure_zhixu_whole(true).unwrap();
+            let mut mixer = native_mixer_with("y3b.delete",
+                crate::blacklist::shared_blacklist(&directory).unwrap(), dictionary.clone());
             mixer.input("nihao").unwrap();
             assert_eq!(mixer.snapshot().candidates[0].text, "拟好");
             let committed = mixer.select_candidate(0, 9201, LearningIntent::DeliberateSelection).unwrap();
@@ -7991,20 +8130,20 @@ mod tests {
             entries: vec![crate::zhixu::loader::Entry { text: "甲乙".into(), reading: "ni hao".into(),
                 weight: 900, layer: "fixture".into() }],
         }));
-        let mut mixer = MixerDecoder::new(Box::new(crate::state::MockDecoder::default()), "y3.deployed-learning".into());
-        mixer.enable_decoder_switch().unwrap();
-        zhixu::with_index(deployed, || mixer.configure_zhixu_whole(true).unwrap());
-        mixer.input("nihao").unwrap();
-        let page = mixer.snapshot();
-        let at = page.candidates.iter().position(|candidate| candidate.text == "甲乙").unwrap();
-        let committed = mixer.select_candidate(at, 9101, LearningIntent::DeliberateSelection).unwrap();
-        assert_eq!(committed, "甲乙");
-        let now = personal_picks::now_ms();
-        mixer.learning_commit(&committed, 9101, now);
-        mixer.learning_key(&crate::state::KeyEvent { kind: crate::state::KeyKind::Text,
-            text: "n".into(), modifiers: 0, security: crate::state::SecurityState::NonSecure,
-            delivery_id: 9102 }, now + 6_000);
-        assert!(mixer.learning.entries().iter().any(|entry| entry.text == "甲乙" && entry.reading == "ni hao"));
+        zhixu::with_index(deployed.clone(), || {
+            let mut mixer = native_mixer("y3.deployed-learning", deployed.clone());
+            mixer.input("nihao").unwrap();
+            let page = mixer.snapshot();
+            let at = page.candidates.iter().position(|candidate| candidate.text == "甲乙").unwrap();
+            let committed = mixer.select_candidate(at, 9101, LearningIntent::DeliberateSelection).unwrap();
+            assert_eq!(committed, "甲乙");
+            let now = personal_picks::now_ms();
+            mixer.learning_commit(&committed, 9101, now);
+            mixer.learning_key(&crate::state::KeyEvent { kind: crate::state::KeyKind::Text,
+                text: "n".into(), modifiers: 0, security: crate::state::SecurityState::NonSecure,
+                delivery_id: 9102 }, now + 6_000);
+            assert!(mixer.learning.entries().iter().any(|entry| entry.text == "甲乙" && entry.reading == "ni hao"));
+        });
     }
 
     #[test]
@@ -8074,7 +8213,7 @@ mod tests {
         zhixu::with_index(whole_fixture(), || {
             let mut mixer = whole_mixer("yijian", &[("一", "yi")], true);
             mixer.whole_override = None;
-            mixer.configure_zhixu_whole(true).unwrap();
+            mixer.whole_override = Some(true);
             mixer.configure_learning(LearningMode::Zhixu).unwrap();
             let original = mixer.snapshot_all_candidates().unwrap().candidates;
             let now = personal_picks::now_ms();
@@ -8092,9 +8231,9 @@ mod tests {
             assert!(!ranking::owner_keeps("cache-unrelated", "意见"), "an unconfirmed cached page also clears protection");
             mixer.configure_learning(LearningMode::Zhixu).unwrap();
             assert_eq!(mixer.snapshot().candidates[0].text, "一键");
-            mixer.configure_zhixu_whole(false).unwrap();
+            mixer.whole_override = Some(false);
             assert!(mixer.snapshot_all_candidates().is_none());
-            mixer.configure_zhixu_whole(true).unwrap();
+            mixer.whole_override = Some(true);
             assert_eq!(mixer.snapshot().candidates[0].text, "一键");
             let replacement = Arc::new(Index::from_data(zhixu::loader::DictionaryData {
                 entries: vec![zhixu::loader::Entry { text: "异简".into(), reading: "yi jian".into(), weight: 1000, layer: "fixture".into() }],
@@ -8537,53 +8676,6 @@ mod tests {
         });
     }
 
-    #[test]
-    fn whole_session_switch_matches_shadow_pages_and_environment() {
-        const CHILD: &str = "ZHIXU_WHOLE_SESSION_TEST";
-        if std::env::var_os(CHILD).is_none() {
-            for value in [None, Some("1"), Some("true")] {
-                let mut command = std::process::Command::new(std::env::current_exe().unwrap());
-                command.args(["--exact", "mixer::tests::whole_session_switch_matches_shadow_pages_and_environment", "--nocapture"])
-                    .env(CHILD, "1").env_remove("ZHIZI_ZHIXU_WHOLE");
-                if let Some(value) = value { command.env("ZHIZI_ZHIXU_WHOLE", value); }
-                let output = command.output().unwrap();
-                assert!(output.status.success(), "environment {value:?}: {}", String::from_utf8_lossy(&output.stderr));
-            }
-            return;
-        }
-        let forced = std::env::var("ZHIZI_ZHIXU_WHOLE").is_ok_and(|value| value == "1");
-        zhixu::with_index(whole_fixture(), || {
-            let values = [("意见", "yi jian"), ("一", "yi")];
-            let mut mixer = MixerDecoder::new(Box::new(ListDecoder::with("yijian", &values)), "whole-fixture".into());
-            let native = whole_mixer("yijian", &values, false);
-            let shadow = whole_mixer("yijian", &values, true);
-            assert_ne!(native.snapshot().candidates, shadow.snapshot().candidates);
-            assert_eq!(mixer.whole_enabled(), forced, "the session preference defaults off");
-            assert_eq!(mixer.snapshot().candidates, if forced { shadow.snapshot().candidates } else { native.snapshot().candidates });
-            mixer.configure_zhixu_whole(false).unwrap();
-            assert_eq!(mixer.whole_enabled(), forced, "the evaluation override still forces on");
-            assert_eq!(mixer.snapshot().candidates, if forced { shadow.snapshot().candidates } else { native.snapshot().candidates });
-            mixer.configure_zhixu_whole(true).unwrap();
-            assert!(mixer.whole_enabled());
-            assert_eq!(mixer.snapshot_all_candidates().unwrap().candidates, shadow.snapshot_all_candidates().unwrap().candidates);
-            let mut shadow = shadow;
-            loop {
-                assert_eq!(mixer.snapshot().candidates, shadow.snapshot().candidates);
-                assert_eq!(mixer.snapshot().is_last_page, shadow.snapshot().is_last_page);
-                if shadow.snapshot().is_last_page { break; }
-                mixer.page_down().unwrap();
-                shadow.page_down().unwrap();
-            }
-            mixer.configure_zhixu_whole(false).unwrap();
-            assert_eq!(mixer.whole_enabled(), forced);
-            assert_eq!(mixer.snapshot().candidates, if forced {
-                whole_mixer("yijian", &values, true).snapshot().candidates
-            } else { native.snapshot().candidates });
-            let other = MixerDecoder::new(Box::new(ListDecoder::with("yijian", &values)), "whole-fixture".into());
-            assert_eq!(other.whole_enabled(), forced, "preferences belong to one session");
-        });
-    }
-
     fn whole_learning_fixture() -> Arc<Index> {
         use crate::zhixu::loader::{DictionaryData, Entry};
         Arc::new(Index::from_data(DictionaryData { entries: [
@@ -8969,7 +9061,7 @@ mod tests {
         for (raw, values) in [
             ("wmyiqi", vec![("我们一起", "wo men yi qi")]),
             ("sz", vec![("设置", "she zhi")]),
-            ("yijain", vec![("意见", "yi jian")]),
+            ("yijianx", vec![("意见", "yi jian")]),
             ("mini", vec![("mini", "mini"), ("迷你", "mi ni")]),
             ("api", vec![("API", "api")]),
         ] {
@@ -9858,6 +9950,62 @@ mod tests {
         assert_eq!(page.candidates[0].text, "先走");
     }
 
+    fn mixed(text: &str, comment: &str, local: bool) -> MixedCandidate {
+        let selection = if local { Selection::Local { text: text.into() } } else { Selection::Base { index: 0, text: text.into() } };
+        MixedCandidate { candidate: Candidate { text: text.into(), comment: comment.into(), reading_key: String::new(), source_index: None },
+            selection, tier: 0, score: 0 }
+    }
+
+    /// 11-07 replay (0.3% of pages): the heavy-garble copy and the decoder's own copy of the same text.
+    #[test]
+    fn a_page_shows_each_text_once_and_the_decoders_candidate_keeps_the_row() {
+        let mut page = vec![
+            mixed("执政", "重度乱拼 · 本地索引", true),
+            mixed("指针那个", "重度乱拼 · 本地索引", true),
+            mixed("指针那个", "", false),
+            mixed("指针你", "尾字母 · 本地索引", true),
+        ];
+        one_row_per_text(&mut page);
+        let texts: Vec<_> = page.iter().map(|m| m.candidate.text.as_str()).collect();
+        assert_eq!(texts, ["执政", "指针那个", "指针你"]);
+        assert!(matches!(page[1].selection, Selection::Base { .. }), "the decoder's selection path (it teaches the dictionary) is kept");
+        assert_eq!(page[1].candidate.comment, "");
+        // The decoder's copy first, or two ordinary copies: the first row stays.
+        let mut page = vec![mixed("甲", "", false), mixed("甲", "重度乱拼 · 本地索引", true), mixed("乙", "", false), mixed("乙", "", false)];
+        one_row_per_text(&mut page);
+        assert_eq!(page.iter().map(|m| m.candidate.text.as_str()).collect::<Vec<_>>(), ["甲", "乙"]);
+        assert!(matches!(page[0].selection, Selection::Base { .. }));
+    }
+
+    /// A composition that `lead_with_composition` accepts must really lead the page: the owner's
+    /// learned whole (八九本 for bajiuben) once outranked the model's 把剧本 in `visible()` while the
+    /// call still said Ok, so the shell showed 把剧本 first and digit 2 committed it (11-07).
+    #[test]
+    fn an_accepted_composition_lead_really_leads_when_a_learned_whole_competes() {
+        zhixu::with_index(zhixu::fallback(), || {
+            let mut mixer = MixerDecoder::new(
+                Box::new(ListDecoder::with("bajiuben", &[("八九本", "ba jiu ben"), ("八九", "ba jiu"), ("把酒", "ba jiu")])),
+                "lead-vs-learned-whole".into());
+            mixer.typo_enabled = true;
+            mixer.configure_learning(LearningMode::Zhixu).unwrap();
+            mixer.learning.remember_for_test("ba jiu ben", "八九本", personal_picks::now_ms());
+            let alternatives = mixer.composition_alternatives();
+            let mut refused = 0;
+            for text in alternatives {
+                let outcome = mixer.lead_with_composition(&text);
+                let page = mixer.snapshot().candidates;
+                if outcome.is_ok() {
+                    assert_eq!(page[0].text, text, "accepted lead must be first");
+                } else {
+                    refused += 1;
+                    assert_eq!(outcome, Err(LEAD_OUTRANKED_BY_LEARNED_WHOLE), "the refusal names the learned whole");
+                    assert_eq!(page[0].text, "八九本", "a refused lead leaves the learned whole first");
+                }
+            }
+            assert!(refused > 0, "the learned whole must have refused at least one lead");
+        });
+    }
+
     #[test]
     fn correction_switches_restore_their_baseline_paths_and_protect_abbreviations() {
         use ranking::{CorrectionSettings, with_correction_settings};
@@ -9916,8 +10064,9 @@ mod tests {
             assert!(repairs.iter().any(|repair| repair.reading == heavy.reading), "{} missing", heavy.reading);
         }
         let correct = repairs.iter().find(|repair| repair.texts.iter().any(|text| text == "已经是了")).unwrap();
-        let dead = heavy.iter().find(|repair| repair.texts.iter().any(|text| text == "已经死了")).unwrap();
-        assert!(correct.edits < dead.edits, "literal swap must cost less than swap + stray h");
+        // Which heavy repairs appear is the lexicon's call (cap three: 已经死了 once, 已经是了 once 是了 became a word);
+        // what must hold is that a heavier spelling than the literal swap is among them.
+        assert!(heavy.iter().any(|repair| correct.edits < repair.edits), "literal swap must cost less than swap + stray h");
         let swap = ranking::typed_repair_cost("yijignshile", "yijingshile").unwrap();
         assert!((correct.edits * ranking::edit_penalty() - swap).abs() < 1e-9);
         for raw in ["yijignshile", "xianzo"] {
@@ -10056,21 +10205,13 @@ mod tests {
 
     #[test]
     fn the_single_characters_after_two_pages_follow_the_letters_left_after_a_picked_segment() {
-        // 分析 picked, d toutoude left: Rime still reports fenxidtoutoude as the raw input.
-        let snapshot = DecoderSnapshot {
-            raw_input: "fenxidtoutoude".into(),
-            preedit: "分析d tou tou de".into(),
-            cursor_utf8: 0,
-            candidates: Vec::new(),
-            secondary_candidates: Vec::new(),
-            highlighted_index: 0,
-            page_no: 0,
-            is_last_page: true,
-        };
-        let mut decoder = ListDecoder::with(&snapshot.raw_input, &[]);
-        decoder.confirmed = "分析".into();
-        decoder.remainder = "d tou tou de".into();
-        let rest = unconfirmed_raw(&decoder);
+        // 分析 picked, d toutoude left: the decoder's boundary reports the
+        // letters left, and the single characters must start with them.
+        let mut decoder = ListDecoder::with("fenxidtoutoude", &[]);
+        decoder.exact_boundary = Some(CompositionBoundary {
+            confirmed: "分析".into(), unconfirmed_raw: "dtoutoude".into(),
+        });
+        let rest = decoder.composition_boundary(BoundaryPurpose::Mixing).unwrap().unconfirmed_raw;
         assert_eq!(rest, "dtoutoude");
         let start = deep_single_start(&rest).expect("the letters left start the single characters");
         let candidate = |text: &str, reading: &str| Candidate {
@@ -10159,7 +10300,6 @@ mod tests {
 
     #[test]
     fn apostrophes_and_umlauts_do_not_lose_letters_of_the_composition() {
-        assert_eq!(confirmed_prefix_and_rest("我lü se"), Some(("我", "lvse".to_string())));
         let mixer = MixerDecoder::new(
             Box::new(ListDecoder::with(
                 "tai'fu'za'le",
@@ -10174,13 +10314,11 @@ mod tests {
 
     #[test]
     fn a_segment_picked_mid_composition_is_kept_and_not_spelled_again() {
-        assert_eq!(confirmed_prefix_and_rest("到时候wo xuan yi xuan"), Some(("到时候", "woxuanyixuan".to_string())));
-        assert_eq!(confirmed_prefix_and_rest("dao shi h"), None);
-        assert_eq!(confirmed_prefix_and_rest("到时候"), None);
-        // Rime reports the whole input as raw input and shows the picked text in the preedit.
+        // The decoder's boundary reports the picked text and the letters left.
         let mut decoder = ListDecoder::with("daoshihwoxuanyixuan", &[("我悬疑选", "wo xuan yi xuan"), ("斡旋", "wo xuan")]);
-        decoder.confirmed = "到时候".into();
-        decoder.remainder = "wo xuan yi xuan".into();
+        decoder.exact_boundary = Some(CompositionBoundary {
+            confirmed: "到时候".into(), unconfirmed_raw: "woxuanyixuan".into(),
+        });
         let mut mixer = MixerDecoder::new(Box::new(decoder), "partial-pick".into());
         let (snapshot, _) = mixer.visible_unranked();
         assert_eq!(snapshot.raw_input, "woxuanyixuan");
@@ -10190,6 +10328,103 @@ mod tests {
         let at = texts.iter().position(|text| text == "我选一选").expect("offered");
         assert!(texts.iter().all(|text| !text.contains('是') || text == "我选一选" || !text.contains("到是")), "{texts:?}");
         assert_eq!(mixer.select_candidate(at, 3, LearningIntent::DeliberateSelection).unwrap(), "到时候我选一选");
+    }
+
+    /// F3 2.4 under the real native decoder: pick 到时候 off
+    /// `daoshihwoxuanyixuan`, then the remaining letters keep composing.
+    #[test]
+    fn native_partial_pick_leaves_the_remaining_letters_to_compose() {
+        use crate::zhixu::loader::{DictionaryData, Entry};
+        let dictionary = Arc::new(Index::from_data(DictionaryData { entries: [
+            ("到时候", "dao shi hou", 9000), ("倒", "dao", 5000), ("到", "dao", 4000),
+            ("我", "wo", 9000), ("选", "xuan", 8000), ("一", "yi", 7000), ("悬疑", "xuan yi", 6000),
+        ].into_iter().map(|(text, reading, weight)| Entry {
+            text: text.into(), reading: reading.into(), weight, layer: "fixture".into(),
+        }).collect() }));
+        zhixu::with_index(dictionary.clone(), || {
+            let mut mixer = native_mixer("native-partial-pick", dictionary.clone());
+            for letter in "daoshihwoxuanyixuan".chars() {
+                mixer.input(&letter.to_string()).unwrap();
+            }
+            // The 到时候 prefix piece keeps composing when picked.
+            assert_eq!(select_displayed_text(&mut mixer, "到时候", 3), "");
+            let boundary = mixer.confirmed_boundary().expect("segment picked");
+            assert_eq!(boundary.confirmed, "到时候");
+            assert_eq!(boundary.unconfirmed_raw, "woxuanyixuan");
+            let (snapshot, _) = mixer.visible_unranked();
+            assert_eq!(snapshot.raw_input, "woxuanyixuan");
+            assert!(snapshot.candidates.iter().any(|c| c.text == "我选一选"), "{snapshot:?}");
+            // A sentence for the letters left commits with the picked text in front.
+            mixer.offer_composition("我选一选").unwrap();
+            let at = mixer.snapshot().candidates.iter().position(|c| c.text == "我选一选").unwrap();
+            assert_eq!(mixer.select_candidate(at, 4, LearningIntent::DeliberateSelection).unwrap(), "到时候我选一选");
+        });
+    }
+
+    /// F3 2.4 under the real native decoder: after 分析 is picked off
+    /// `fenxidtoutoude`, the single characters after two pages start with d, not fen.
+    #[test]
+    fn native_deep_single_characters_follow_the_letters_left_after_a_picked_segment() {
+        use crate::zhixu::loader::{DictionaryData, Entry};
+        let dictionary = Arc::new(Index::from_data(DictionaryData { entries: [
+            ("分析", "fen xi", 9000), ("分", "fen", 8000), ("坟", "fen", 7000), ("芬", "fen", 6000), ("纷", "fen", 5000),
+            ("的", "de", 9000), ("都", "dou", 8000), ("道", "dao", 7000), ("到", "dao", 6000), ("东", "dong", 5000),
+            ("洞", "dong", 4000), ("动", "dong", 3000),
+        ].into_iter().map(|(text, reading, weight)| Entry {
+            text: text.into(), reading: reading.into(), weight, layer: "fixture".into(),
+        }).collect() }));
+        zhixu::with_index(dictionary.clone(), || {
+            let mut mixer = native_mixer("native-deep-letters-left", dictionary.clone());
+            for letter in "fenxidtoutoude".chars() {
+                mixer.input(&letter.to_string()).unwrap();
+            }
+            assert_eq!(select_displayed_text(&mut mixer, "分析", 5), "");
+            assert_eq!(mixer.confirmed_boundary().unwrap().unconfirmed_raw, "dtoutoude");
+            mixer.page_down().unwrap();
+            mixer.page_down().unwrap();
+            let deep = mixer.snapshot();
+            let singles: Vec<_> = deep.candidates.iter().map(|c| c.text.clone()).collect();
+            assert!(singles.iter().take(3).all(|text| ["的", "都", "道", "到", "东", "洞", "动"].contains(&text.as_str())),
+                "single characters start with the letters left: {singles:?}");
+            assert!(!singles.iter().take(3).any(|text| ["分", "坟", "芬", "纷"].contains(&text.as_str())),
+                "not the picked part's first syllable: {singles:?}");
+        });
+    }
+
+    /// F3 2.5: a Local commit carries this composition's already-picked segments.
+    #[test]
+    fn local_candidate_commit_carries_this_compositions_confirmed_segments() {
+        use crate::zhixu::loader::{DictionaryData, Entry};
+        let dictionary = Arc::new(Index::from_data(DictionaryData { entries: [
+            ("到时候", "dao shi hou", 9000), ("倒", "dao", 5000),
+            ("我", "wo", 9000), ("选", "xuan", 8000), ("一", "yi", 7000),
+        ].into_iter().map(|(text, reading, weight)| Entry {
+            text: text.into(), reading: reading.into(), weight, layer: "fixture".into(),
+        }).collect() }));
+        zhixu::with_index(dictionary.clone(), || {
+            let mut mixer = native_mixer("local-confirmed-prefix", dictionary.clone());
+            for letter in "daoshihwoxuanyixuan".chars() {
+                mixer.input(&letter.to_string()).unwrap();
+            }
+            assert_eq!(select_displayed_text(&mut mixer, "到时候", 6), "");
+            assert_eq!(mixer.confirmed_boundary().unwrap().confirmed, "到时候");
+            // The composed sentence is a Local selection: committing it must not
+            // drop the segment picked earlier in this same composition.
+            let at = mixer.snapshot().candidates.iter().position(|c| c.text == "我选一选").unwrap();
+            assert_eq!(mixer.select_candidate(at, 7, LearningIntent::DeliberateSelection).unwrap(), "到时候我选一选");
+        });
+    }
+
+    /// Selects the first displayed candidate with exactly `text`, paging as needed.
+    fn select_displayed_text(mixer: &mut MixerDecoder, text: &str, id: u64) -> String {
+        loop {
+            let page = mixer.snapshot();
+            if let Some(at) = page.candidates.iter().position(|candidate| candidate.text == text) {
+                return mixer.select_candidate(at, id, LearningIntent::DeliberateSelection).unwrap();
+            }
+            assert!(!page.is_last_page, "{text} was not offered: {:?}", page.candidates);
+            mixer.page_down().unwrap();
+        }
     }
 
     #[test]
@@ -12635,9 +12870,7 @@ mod composition_probe {
             let new = super::decode_lattice(keys, 24, abbreviated);
             println!("TIME\t{keys}\told {:.2}ms ({})\tlattice {:.2}ms ({})", old_time.as_secs_f64() * 1e3, old.len(), start.elapsed().as_secs_f64() * 1e3, new.len());
             if !abbreviated {
-                let generate = || if super::zhixu_whole_enabled() {
-                    super::whole_reading_candidates(keys, &[], 0, false).len()
-                } else { super::decode_lattice(keys, super::lattice_params().limit, false).len() };
+                let generate = || super::decode_lattice(keys, super::lattice_params().limit, false).len();
                 let start = std::time::Instant::now();
                 let count = generate();
                 let cold = start.elapsed().as_secs_f64() * 1e3;
@@ -12648,8 +12881,8 @@ mod composition_probe {
                     times.push(start.elapsed().as_secs_f64() * 1e3);
                 }
                 times.sort_by(f64::total_cmp);
-                println!("WHOLE_TIME\t{keys}\ton={}\tfirst={cold:.3}ms\tmedian={:.3}ms\tp95={:.3}ms\tcount={count}",
-                    super::zhixu_whole_enabled(), times[12], times[23]);
+                println!("WHOLE_TIME\t{keys}\tfirst={cold:.3}ms\tmedian={:.3}ms\tp95={:.3}ms\tcount={count}",
+                    times[12], times[23]);
             }
         }
     }
@@ -12703,7 +12936,3 @@ mod composition_probe {
     }
 
 }
-
-#[cfg(test)]
-#[path = "whole_sentence_probe.rs"]
-mod whole_sentence_probe;

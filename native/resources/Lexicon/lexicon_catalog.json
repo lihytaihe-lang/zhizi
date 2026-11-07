@@ -47,7 +47,7 @@
       "description": "日常说话的整句与短语",
       "group": "core",
       "defaultEnabled": true,
-      "rows": 10853
+      "rows": 10807
     },
     {
       "id": "agent_newwords",
@@ -55,7 +55,7 @@
       "description": "动物、食物、物品等日常名称",
       "group": "core",
       "defaultEnabled": true,
-      "rows": 14684
+      "rows": 25025
     },
     {
       "id": "agent_idioms",

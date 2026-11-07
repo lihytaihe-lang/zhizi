@@ -19,9 +19,8 @@ ACTUAL_CORPUS_SHA="$(shasum -a 256 "$CORPUS" | awk '{print $1}')"
   exit 6
 }
 
-LIBRARY_PATH="$ROOT_DIR/.build-deps/librime/1.16.1/lib" \
-  cargo build --manifest-path "$ROOT_DIR/native/core/agent-ime-core/Cargo.toml" \
-  --release --features librime >/dev/null
+cargo build --manifest-path "$ROOT_DIR/native/core/agent-ime-core/Cargo.toml" \
+  --release >/dev/null
 touch "$ROOT_DIR/native/macos/Sources/AgentIMECoreBridge/bridge.c"
 AIM_CORE_LIBRARY_DIR="$ROOT_DIR/native/core/target/release" swift build \
   --package-path "$ROOT_DIR/native/macos" -c debug --disable-automatic-resolution \
@@ -34,7 +33,6 @@ BIN_DIR="$(swift build \
   --show-bin-path)"
 USERDB_HARNESS="$BIN_DIR/AgentIMEUserDBHarness"
 REPLAY_HARNESS="$BIN_DIR/AgentIMEReplayHarness"
-USERDB_CTL="$BUNDLE/Contents/MacOS/AgentIMEUserDBCtl"
 
 TEMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/agent-ime-learning-degradation.XXXXXX")"
 trap 'chmod -R u+rwX "$TEMP_ROOT" 2>/dev/null || true; rm -rf "$TEMP_ROOT"' EXIT
@@ -47,8 +45,7 @@ run_learning_period() {
     output="$TEMP_ROOT/$arm-attempt-$attempt.json"
     mkdir -p "$root/Rime"
     set +e
-    DYLD_LIBRARY_PATH="$ROOT_DIR/.build-deps/librime/1.16.1/lib" \
-      "$USERDB_HARNESS" --learning-period "$SHARED_RIME" "$root" \
+    "$USERDB_HARNESS" --learning-period "$SHARED_RIME" "$root" \
       "$gesture" "$output" 9300000000 "$SECONDARY_FIXTURE" "$USE_ITERATIONS" \
       >/dev/null
     status=$?
@@ -76,57 +73,39 @@ USED_OUTPUT=""
 run_learning_period control multi-segment-prefix-control CONTROL_ROOT CONTROL_OUTPUT
 run_learning_period used multi-segment-nolearn USED_ROOT USED_OUTPUT
 
-list_entries() {
-  local user_directory="$1" output="$2"
-  DYLD_LIBRARY_PATH="$BUNDLE/Contents/Frameworks" "$USERDB_CTL" list \
-    "$SHARED_RIME" "$user_directory" |
-    jq -S '[.items[] | {pinyin, text, entryLine}] | sort_by(.pinyin, .text)' > "$output"
+# Zhixu learning store invariant (the successor of the old UserDB logical diff):
+# committing the auto-completed remainder (Space after the confirmed prefix)
+# must not add or change learned entries beyond the deliberate prefix
+# confirmation the control arm already performs. Compared fields are the
+# learning entries (reading/text/count/lastMs); choices record per-app context
+# that legitimately differs between the arms.
+learning_entries() {
+  local store="$1/Rime/agent_zhixu_learning_v1.json"
+  [[ -f "$store" && ! -L "$store" ]] || { echo "[]"; return; }
+  jq -S '[.entries[] | {reading, text, count, lastMs}] | sort_by(.reading, .text)' "$store"
 }
-list_entries "$CONTROL_ROOT/Rime" "$TEMP_ROOT/control-entries.json"
-list_entries "$USED_ROOT/Rime" "$TEMP_ROOT/used-entries.json"
+learning_entries "$CONTROL_ROOT" > "$TEMP_ROOT/control-entries.json"
+learning_entries "$USED_ROOT" > "$TEMP_ROOT/used-entries.json"
 
-jq -n --slurpfile control "$TEMP_ROOT/control-entries.json" \
+if ! jq -e --slurpfile control "$TEMP_ROOT/control-entries.json" \
   --slurpfile used "$TEMP_ROOT/used-entries.json" '
-  def keyed: map({key: (.pinyin + "\u0000" + .text), value: .}) | from_entries;
-  ($control[0] | keyed) as $c |
-  ($used[0] | keyed) as $u |
-  {
-    added: [($u | keys[]) as $key | select($c[$key] == null) | $u[$key]],
-    removed: [($c | keys[]) as $key | select($u[$key] == null) | $c[$key]],
-    valueChanged: [
-      ($u | keys[]) as $key |
-      select($c[$key] != null and $c[$key].entryLine != $u[$key].entryLine) |
-      {pinyin: $u[$key].pinyin, text: $u[$key].text,
-       before: $c[$key].entryLine, after: $u[$key].entryLine}
-    ]
-  } |
-  . + {
-    addedCount: (.added | length),
-    removedCount: (.removed | length),
-    valueChangedCount: (.valueChanged | length)
-  }
-' > "$TEMP_ROOT/incremental-diff.json"
-
-if ! jq -e '
-  .addedCount == 0 and .removedCount == 0 and .valueChangedCount == 0
-' "$TEMP_ROOT/incremental-diff.json" >/dev/null; then
-  counts="$(jq -r '"added=\(.addedCount) removed=\(.removedCount) value_changed=\(.valueChangedCount)"' \
-    "$TEMP_ROOT/incremental-diff.json")"
-  echo "learning_degradation_gate=FAIL unauthorized_persistent_learning $counts" >&2
-  jq -c '{added, removed, valueChanged}' "$TEMP_ROOT/incremental-diff.json" >&2
+  ($control[0] | length) == ($used[0] | length) and
+  ($control[0] == $used[0])
+' <<< '{}' >/dev/null; then
+  echo "learning_degradation_gate=FAIL unauthorized_persistent_learning control_count=$(jq 'length' "$TEMP_ROOT/control-entries.json") used_count=$(jq 'length' "$TEMP_ROOT/used-entries.json")" >&2
+  diff <(jq -S . "$TEMP_ROOT/control-entries.json") <(jq -S . "$TEMP_ROOT/used-entries.json") >&2 || true
   exit 1
 fi
 
 jq -e '
-  .selectionProbe.reinforce == false and
-  .selectionProbe.requiresRegularSelection == true and
+  .gesture == "multi-segment-nolearn" and
+  .iterations == 12 and
   .commitText == "你好吗"
 ' "$USED_OUTPUT" >/dev/null
 
 REPORT="$TEMP_ROOT/after-use-report.json"
 ARTIFACT_SHA="$("$ROOT_DIR/script/artifact_checksum.sh" "$BUNDLE")"
-DYLD_LIBRARY_PATH="$BUNDLE/Contents/Frameworks:$ROOT_DIR/native/core/target/release" \
-  "$REPLAY_HARNESS" "$SHARED_RIME" "$USED_ROOT/Rime" \
+"$REPLAY_HARNESS" "$SHARED_RIME" "$USED_ROOT/Rime" \
   "$CORPUS" "$REPORT" 5 "$ARTIFACT_SHA" >/dev/null
 jq -e '
   .cases == 20 and .attemptedSessions == 100 and
@@ -136,4 +115,4 @@ jq -e '
   (.failures | length) == 0
 ' "$REPORT" >/dev/null
 
-echo "learning_degradation_gate=PASS legal_prefix_selections=$USE_ITERATIONS required_segment_commits=$USE_ITERATIONS unauthorized_diff=0 factory_top1=20/20 sessions=100 corpus_checksum=$ACTUAL_CORPUS_SHA"
+echo "learning_degradation_gate=PASS legal_prefix_selections=$USE_ITERATIONS required_segment_commits=$USE_ITERATIONS zhixu_entries_diff=0 factory_top1=20/20 sessions=100 corpus_checksum=$ACTUAL_CORPUS_SHA"

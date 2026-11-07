@@ -15,6 +15,7 @@ import random
 import re
 import sys
 import time
+import unicodedata
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor
 
@@ -46,6 +47,16 @@ GROUPS = {
     "文化娱乐": ["电影和电视剧类型与行业词", "音乐类型、乐队和演唱会相关词", "游戏类型和游戏里的常用词", "动漫、漫画和二次元常用词", "体育项目和赛事", "球类运动的术语", "桌游、棋牌和麻将的词", "摄影、绘画和手工的词", "网络小说和短视频直播的词", "古诗词和历史上的常见称呼（现代人仍常提）", "神话传说和民间故事里的名字", "星座、生肖和命理相关词", "中国传统文化和节气", "综艺和娱乐圈常用词"],
     "社会": ["新闻里常见的机构和政策词", "政府部门和公共服务", "交通出行的规则和证件手续", "社保、医保、公积金和税务", "教育体制相关词", "互联网平台和常见的 App 名称", "常见品牌和连锁店（餐饮、零售、服饰）", "常见的汽车品牌和车型叫法", "手机、电脑和电器的品牌与系列", "著名企业和公司（国内外）", "国际组织、条约和国际时事常用词", "军事和国防常用词（新闻里常见的）"],
 }
+# Added 2026-11-02: 茅山 (打 mao shan 只有毛山、猫山) and 武夷山, 张家界, 九寨沟, 长白山, 青城山, 莫干山 were in no dictionary.  The single 地方 category
+# 「中国的著名景点和山水」 is capped at 150 names per call for the whole country, so the long tail never came up.  These fine categories split it by
+# kind and by region; run with --groups 景区 (the shipped 地方 group stays as it was).
+REGIONS = ["北京、天津、河北", "山西、内蒙古", "辽宁、吉林、黑龙江", "上海、江苏", "浙江", "安徽、江西", "福建、台湾", "山东、河南", "湖北、湖南", "广东、广西、海南",
+           "重庆、四川", "贵州、云南", "西藏、陕西、甘肃", "青海、宁夏、新疆", "香港、澳门"]
+GROUPS["景区"] = ([f"{r}的旅游景区、名山、湖泊、古镇、古城和寺庙道观（游客常去的）" for r in REGIONS]
+                  + ["中国的名山（五岳、佛教四大名山、道教名山、各地常去的山）", "中国的国家5A级旅游景区", "中国的世界遗产和世界自然、文化遗产地",
+                     "中国的国家级风景名胜区和国家森林公园", "中国的国家地质公园、自然保护区和湿地", "中国著名的湖泊、瀑布、峡谷、海滩和岛屿",
+                     "中国的古镇、古村落和历史文化街区", "中国著名的寺庙、道观、石窟和古塔", "中国著名的古迹、陵墓、城墙和古建筑",
+                     "中国的主题乐园、动物园、植物园和度假区", "世界各国游客常去的著名景点和山河湖海"])
 PROMPT = """请尽量完整地列出「{category}」里常见的名称或说法，最多 150 个。要求：现代中国人日常会提到、会在输入法里打出来；包括常见的品种、型号、别称和口语叫法；不要编造；不要太冷僻或古旧；
 纯汉字，2 到 6 个字（含英文字母和数字的不要）。每行一个，格式：词=拼音（音节用空格隔开，不标声调，ü 写作 v），不要编号、不要解释。"""
 JUDGE = """下面每行是“词<TAB>类别”，是输入法候选的当代常用名称。请找出应当删除的：编造的、不存在的、几乎没人用的、生僻的、古旧或文言的、意思不通的、只是普通短句或片段而不是一个词的。
@@ -64,6 +75,12 @@ def call(prompt, timeout):
     return "", {}
 
 
+def plain_pinyin(p):
+    """The model sometimes writes tone marks (pǔ níng sì) despite the prompt; drop them, ü -> v."""
+    p = p.strip().lower().replace("ü", "v").replace("ǖ", "v").replace("ǘ", "v").replace("ǚ", "v").replace("ǜ", "v")
+    return "".join(c for c in unicodedata.normalize("NFD", p) if not unicodedata.combining(c))
+
+
 def generate(categories, calls, workers):
     jobs = [(group, category, k) for group, category in categories for k in range(calls)]
 
@@ -74,7 +91,7 @@ def generate(categories, calls, workers):
         for line in text.splitlines():
             if "=" in line:
                 w, p = line.split("=", 1)
-                rows.append((w.strip().strip("0123456789.、-* "), " ".join(p.strip().lower().replace("ü", "v").split())))
+                rows.append((w.strip().strip("0123456789.、-* "), " ".join(plain_pinyin(p).split())))
         return job, rows
 
     out = []

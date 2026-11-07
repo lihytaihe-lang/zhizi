@@ -185,13 +185,14 @@ pub enum LearningIntent {
     RequiredSegmentCommit,
 }
 
-/// Legacy consumers accepted different preedit spellings. Keep those views
-/// during the Rime migration; native decoders return the same exact boundary.
+/// Legacy consumers accepted different preedit spellings. Native decoders answer
+/// every purpose exactly from their own composition state; only editing recovery
+/// still reconstructs a boundary from the preedit.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BoundaryPurpose {
     /// An empty confirmed prefix is valid; None means recovery is uncertain.
     Editing,
-    /// Legacy Mixer returns None when it does not recognize a confirmed prefix.
+    /// Mixer's own composition work on the letters left after a picked segment.
     Mixing,
 }
 
@@ -201,29 +202,19 @@ pub struct CompositionBoundary {
     pub unconfirmed_raw: String,
 }
 
-pub(crate) fn default_composition_boundary(
-    snapshot: &DecoderSnapshot, purpose: BoundaryPurpose,
-) -> Option<CompositionBoundary> {
-    match purpose {
-        BoundaryPurpose::Editing => {
-            let confirmed = editing_confirmed_prefix(snapshot)?;
-            let spelling = |text: &str| text.chars().filter_map(|ch| match ch {
-                ' ' | '\'' => None,
-                'ü' | 'Ü' => Some('v'),
-                ch => Some(ch),
-            }).collect::<String>();
-            let suffix = spelling(&snapshot.preedit[confirmed.len()..]);
-            let start = snapshot.raw_input.char_indices().map(|(at, _)| at).find(|&at|
-                spelling(&snapshot.raw_input[at..]) == suffix)?;
-            Some(CompositionBoundary {
-                confirmed: confirmed.to_owned(), unconfirmed_raw: snapshot.raw_input[start..].to_owned(),
-            })
-        }
-        BoundaryPurpose::Mixing => {
-            let (confirmed, unconfirmed_raw) = crate::mixer::confirmed_prefix_and_rest(&snapshot.preedit)?;
-            Some(CompositionBoundary { confirmed: confirmed.to_owned(), unconfirmed_raw })
-        }
-    }
+pub(crate) fn default_composition_boundary(snapshot: &DecoderSnapshot) -> Option<CompositionBoundary> {
+    let confirmed = editing_confirmed_prefix(snapshot)?;
+    let spelling = |text: &str| text.chars().filter_map(|ch| match ch {
+        ' ' | '\'' => None,
+        'ü' | 'Ü' => Some('v'),
+        ch => Some(ch),
+    }).collect::<String>();
+    let suffix = spelling(&snapshot.preedit[confirmed.len()..]);
+    let start = snapshot.raw_input.char_indices().map(|(at, _)| at).find(|&at|
+        spelling(&snapshot.raw_input[at..]) == suffix)?;
+    Some(CompositionBoundary {
+        confirmed: confirmed.to_owned(), unconfirmed_raw: snapshot.raw_input[start..].to_owned(),
+    })
 }
 
 pub trait Decoder: Send {
@@ -233,7 +224,11 @@ pub trait Decoder: Send {
     /// Native editing does not need Session's Rime menu/selection restoration.
     fn native_editing(&self) -> bool { false }
     fn composition_boundary(&self, purpose: BoundaryPurpose) -> Option<CompositionBoundary> {
-        default_composition_boundary(&self.snapshot(), purpose)
+        // Only editing recovery reconstructs a boundary from the preedit; a
+        // mixing consumer needs the decoder's own exact answer.
+        (purpose == BoundaryPurpose::Editing)
+            .then(|| default_composition_boundary(&self.snapshot()))
+            .flatten()
     }
     fn configure_learning(&mut self, _mode: crate::zhixu::learning::LearningMode) -> Result<(), i32> { Ok(()) }
     fn configure_zhixu_whole(&mut self, _on: bool) -> Result<(), i32> { Ok(()) }
@@ -377,7 +372,7 @@ pub trait Decoder: Send {
     }
 }
 
-#[cfg(any(test, not(feature = "librime")))]
+#[cfg(test)]
 pub struct MockDecoder {
     raw: String,
     cursor: usize,
@@ -386,7 +381,7 @@ pub struct MockDecoder {
     secondary_enabled: bool,
 }
 
-#[cfg(any(test, not(feature = "librime")))]
+#[cfg(test)]
 impl Default for MockDecoder {
     fn default() -> Self {
         Self {
@@ -399,7 +394,7 @@ impl Default for MockDecoder {
     }
 }
 
-#[cfg(any(test, not(feature = "librime")))]
+#[cfg(test)]
 impl MockDecoder {
     fn all_candidates(&self) -> Vec<Candidate> {
         let words: &[&str] = match self.raw.as_str() {
@@ -463,7 +458,7 @@ impl MockDecoder {
     }
 }
 
-#[cfg(any(test, not(feature = "librime")))]
+#[cfg(test)]
 impl Decoder for MockDecoder {
     fn snapshot(&self) -> DecoderSnapshot {
         let total = self.all_candidates().len();
@@ -621,7 +616,6 @@ pub struct ResultModel {
 
 pub struct Session {
     decoder: Box<dyn Decoder>,
-    zhixu_switch: Option<bool>,
     mode: InputMode,
     app_id: String,
     context_profile: ContextProfile,
@@ -632,10 +626,10 @@ pub struct Session {
     host_previous_text_kind: Option<PreviousTextKind>,
     host_preceding_text: Option<String>,
     pending_selection_event_id: Cell<u64>,
+    secure_degraded: bool,
     /// Inline English started by a Shift+letter: following letters keep
     /// typing English (`LoRA`, `GPT4`) until Space/Enter commits it.
     inline_ascii: String,
-    editing_menu: Option<DecoderSnapshot>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -769,9 +763,8 @@ fn page_has_chinese_candidate(snapshot: &DecoderSnapshot) -> bool {
 impl Session {
     pub fn configure_zhixu_whole(&mut self, on: bool) -> Result<(), i32> {
         if self.composing() { return Err(-10); }
-        self.decoder.configure_zhixu_whole(on)?;
-        if let Some(value) = &mut self.zhixu_switch { *value = on; }
-        Ok(())
+        // The knob stays for the shells but no longer changes the inner decoder.
+        self.decoder.configure_zhixu_whole(on)
     }
 
     pub fn configure_learning(&mut self, mode: crate::zhixu::learning::LearningMode) -> Result<(), i32> {
@@ -783,11 +776,24 @@ impl Session {
     pub fn withdraw_learning(&mut self, raw: &str, text: &str) -> bool {
         self.decoder.withdraw_learning(raw, text)
     }
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn new(decoder: Box<dyn Decoder>, app_id: String) -> Self {
         Self::build(MixerDecoder::new(decoder, app_id.clone()), app_id)
     }
+    /// The product constructor: the native Zhixu decoder is the session's permanent
+    /// inner, over one fully deployed dictionary generation, learning in Zhixu.
+    /// The host's own learning/whole calls land on it exactly as before.
+    pub fn new_native(
+        app_id: String,
+        blacklist: Arc<Mutex<Store>>,
+        dictionary: Arc<crate::zhixu::Index>,
+    ) -> Result<Self, i32> {
+        let decoder = crate::mixer::MixerDecoder::new_native(app_id.clone(), blacklist, dictionary)?;
+        crate::zhixu::prewarm_whole();
+        Ok(Self::build(decoder, app_id))
+    }
 
-    #[cfg_attr(not(feature = "librime"), allow(dead_code))]
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn new_with_blacklist(
         decoder: Box<dyn Decoder>,
         app_id: String,
@@ -795,10 +801,7 @@ impl Session {
     ) -> Result<Self, i32> {
         let mut decoder = MixerDecoder::new(decoder, app_id.clone());
         decoder.apply_blacklist(blacklist);
-        decoder.enable_decoder_switch()?;
-        let mut session = Self::build(decoder, app_id);
-        session.zhixu_switch = Some(false);
-        Ok(session)
+        Ok(Self::build(decoder, app_id))
     }
 
     fn build(
@@ -817,7 +820,6 @@ impl Session {
         decoder.configure_code_ascii_bias(context_profile.app_class == AppClass::Code);
         Self {
             decoder: Box::new(decoder),
-            zhixu_switch: None,
             mode,
             app_id,
             context_profile,
@@ -828,8 +830,8 @@ impl Session {
             host_previous_text_kind: None,
             host_preceding_text: None,
             pending_selection_event_id: Cell::new(0),
+            secure_degraded: false,
             inline_ascii: String::new(),
-            editing_menu: None,
         }
     }
 
@@ -900,6 +902,20 @@ impl Session {
             return Vec::new();
         }
         self.decoder.composition_alternatives()
+    }
+
+    /// The texts of the page exactly as the digit keys resolve against it (the single source of truth for what
+    /// a shell may draw): shells that reorder or insert candidates for display must match this.
+    pub fn page_texts(&self) -> Vec<String> {
+        if !self.inline_ascii.is_empty() {
+            return Vec::new();
+        }
+        self.decoder.snapshot().candidates.into_iter().map(|candidate| candidate.text).collect()
+    }
+
+    /// Reads the complete current page without consuming a selection event or finishing composition.
+    pub fn current_result(&self) -> ResultModel {
+        self.result_from_snapshot(self.decoder.snapshot(), false, String::new(), 0)
     }
 
     pub fn composition_edits(&self) -> Vec<f64> {
@@ -981,7 +997,8 @@ impl Session {
         if mask & !0xff != 0 {
             return Err(-12);
         }
-        if self.zhixu_switch.is_some_and(|on| on || crate::mixer::zhixu_whole_enabled()) && self.composing() {
+        // A native session's live menu reads the mask itself and must not change.
+        if self.decoder.native_editing() && self.composing() {
             return Err(-10);
         }
         self.decoder.clear();
@@ -1019,29 +1036,35 @@ impl Session {
         if !security.degraded() && !commit_text.is_empty() {
             self.previous_text_kind = classify_last_text(&commit_text);
         }
-        let mut snapshot = self.decoder.snapshot();
-        if !self.decoder.native_editing() && let Some(menu) = &self.editing_menu {
-            if snapshot.raw_input == menu.raw_input
-                && !snapshot.raw_input.is_empty()
-                && snapshot.cursor_utf8 < snapshot.preedit.len()
-                && commit_text.is_empty()
-            {
-                // Keep the whole-reading menu while Rime refocuses the preedit
-                // around its caret. Only the four menu fields are frozen.
-                snapshot.candidates = menu.candidates.clone();
-                snapshot.page_no = menu.page_no;
-                snapshot.highlighted_index = menu.highlighted_index;
-                snapshot.is_last_page = menu.is_last_page;
-            } else {
-                self.editing_menu = None;
+        let snapshot = self.decoder.snapshot();
+        let composition_ended = snapshot.raw_input.is_empty();
+        self.secure_degraded = security.degraded();
+        let result = self.result_from_snapshot(snapshot, consumed, commit_text, status);
+        self.pending_selection_event_id.set(0);
+        if composition_ended {
+            self.host_preceding_text = None;
+            self.decoder.configure_preceding_text(None);
+            if let Some(profile) = self.pending_context_profile.take() {
+                self.context_profile = profile;
+                self.decoder
+                    .configure_code_ascii_bias(profile.app_class == AppClass::Code);
             }
         }
-        let composition_ended = snapshot.raw_input.is_empty();
+        result
+    }
+
+    fn result_from_snapshot(
+        &self,
+        snapshot: DecoderSnapshot,
+        consumed: bool,
+        commit_text: String,
+        status: i32,
+    ) -> ResultModel {
         let mut result = ResultModel {
             status,
             consumed,
             mode: self.mode,
-            secure_degraded: security.degraded(),
+            secure_degraded: self.secure_degraded,
             marked_text: snapshot.preedit,
             marked_cursor_utf8: snapshot.cursor_utf8,
             commit_text,
@@ -1050,7 +1073,7 @@ impl Session {
             highlighted_index: snapshot.highlighted_index,
             page_no: snapshot.page_no,
             is_last_page: snapshot.is_last_page,
-            selection_event_id: self.pending_selection_event_id.replace(0),
+            selection_event_id: self.pending_selection_event_id.get(),
         };
         if !self.inline_ascii.is_empty() {
             result.marked_text = self.inline_ascii.clone();
@@ -1060,15 +1083,6 @@ impl Session {
             result.highlighted_index = 0;
             result.page_no = 0;
             result.is_last_page = true;
-        }
-        if composition_ended {
-            self.host_preceding_text = None;
-            self.decoder.configure_preceding_text(None);
-            if let Some(profile) = self.pending_context_profile.take() {
-                self.context_profile = profile;
-                self.decoder
-                    .configure_code_ascii_bias(profile.app_class == AppClass::Code);
-            }
         }
         result
     }
@@ -1113,58 +1127,6 @@ impl Session {
                 Err(_) => self.decoder.commit_raw(),
             }
         }
-    }
-
-    fn select_editing_candidate(
-        &mut self, menu: DecoderSnapshot, index: usize, delivery_id: u64, confirmed_prefix: &str,
-    ) -> Result<String, i32> {
-        let candidate = menu.candidates.get(index).ok_or(-10)?;
-        // Restore the whole-reading menu before selecting through the normal
-        // learning boundary. Check before every Right: at the end Rime wraps.
-        let mut live = self.decoder.snapshot();
-        for _ in 0..=menu.raw_input.len() {
-            if live.cursor_utf8 >= live.preedit.len() { break; }
-            let commit = self.decoder.move_right()?;
-            if !commit.is_empty() { return Err(-10); }
-            live = self.decoder.snapshot();
-        }
-        if live.raw_input != menu.raw_input || live.cursor_utf8 < live.preedit.len() {
-            return Err(-10);
-        }
-        while live.page_no != menu.page_no {
-            let previous_page = live.page_no;
-            let commit = if live.page_no < menu.page_no {
-                self.decoder.page_down()?
-            } else {
-                self.decoder.page_up()?
-            };
-            if !commit.is_empty() { return Err(-10); }
-            live = self.decoder.snapshot();
-            if live.page_no == previous_page { return Err(-10); }
-        }
-        // Caret movement invalidates Mixer's model permutation. Restore the
-        // displayed order as well so learning uses the same slot as an end pick.
-        if live.candidates != menu.candidates {
-            let order = menu.candidates.iter().map(|shown| {
-                live.candidates.iter().position(|item| item.text == shown.text
-                    && item.reading_key == shown.reading_key).ok_or(-10)
-            }).collect::<Result<Vec<_>, _>>()?;
-            self.decoder.reorder_context_candidates(&order)?;
-        }
-        let intent = if menu.page_no > 0 || index > 0 {
-            LearningIntent::DeliberateSelection
-        } else {
-            LearningIntent::NoLearn
-        };
-        // Owner rule: commit the prefix confirmed before caret restoration plus
-        // exactly the displayed candidate, even when their characters repeat.
-        // Ok (including an empty commit or a full preview) only acknowledges that
-        // Rime accepted the selection; its text must not determine what we commit.
-        self.decoder.select_candidate(index, delivery_id, intent)?;
-        let commit = format!("{confirmed_prefix}{}", candidate.text);
-        self.decoder.clear_after_selection();
-        self.mark_selection_event(delivery_id);
-        Ok(commit)
     }
 
     fn should_use_fullwidth(&self, immediate_context: PreviousTextKind) -> bool {
@@ -1223,13 +1185,6 @@ impl Session {
 
     pub fn process(&mut self, event: KeyEvent) -> ResultModel {
         self.decoder.learning_key(&event, crate::personal_picks::now_ms());
-        let native_editing = self.decoder.native_editing();
-        if native_editing { self.editing_menu = None; }
-        let editing_selection = event.kind == KeyKind::Space
-            || (event.kind == KeyKind::Text && matches!(event.text.as_str(), "1" | "2" | "3" | "4" | "5"));
-        if !native_editing && !matches!(event.kind, KeyKind::Left | KeyKind::Right) && !editing_selection {
-            self.editing_menu = None;
-        }
         let host_previous_text_kind = self.host_previous_text_kind.take();
         let security = event.security;
         if security.degraded() {
@@ -1268,40 +1223,6 @@ impl Session {
 
         if !self.inline_ascii.is_empty() {
             return self.process_inline_ascii(event, security);
-        }
-
-        if !native_editing && editing_selection {
-            let live = self.decoder.snapshot();
-            if let Some(menu) = self.editing_menu.clone().filter(|menu|
-                live.raw_input == menu.raw_input && !live.raw_input.is_empty()
-                    && live.cursor_utf8 < live.preedit.len())
-            {
-                let index = if event.kind == KeyKind::Space { menu.highlighted_index }
-                    else { event.text.as_bytes()[0] as usize - b'1' as usize };
-                if index >= menu.candidates.len() {
-                    return self.finish(true, String::new(), 0, security);
-                }
-                // Save confirmed text before fallible restoration. If the raw
-                // suffix cannot establish a boundary, do not restore, clear, or
-                // commit any guessed prefix: retain the composition for recovery.
-                let Some(boundary) = self.decoder.composition_boundary(BoundaryPurpose::Editing) else {
-                    self.pending_selection_event_id.set(0);
-                    return self.finish(true, String::new(), -10, security);
-                };
-                let confirmed_prefix = boundary.confirmed;
-                self.editing_menu = None;
-                let result = self.select_editing_candidate(menu, index, event.delivery_id, &confirmed_prefix);
-                if let Err(status) = result {
-                    // Deliver confirmed text, discard the remaining pinyin, and
-                    // keep the error code. A clean decoder avoids retrying against
-                    // a half-restored menu without losing the user's confirmed words.
-                    self.decoder.clear();
-                    self.pending_selection_event_id.set(0);
-                    return self.finish(true, confirmed_prefix, status, security);
-                }
-                return self.apply_decoder_result(result, security);
-            }
-            self.editing_menu = None;
         }
 
         if matches!(event.kind, KeyKind::FocusLost | KeyKind::Deactivate) {
@@ -1365,14 +1286,6 @@ impl Session {
                 self.apply_decoder_result(result, security)
             }
             KeyKind::Left if self.composing() => {
-                if !native_editing {
-                    let snapshot = self.decoder.snapshot();
-                    if snapshot.cursor_utf8 >= snapshot.preedit.len() {
-                        self.editing_menu = Some(snapshot);
-                    }
-                }
-                // assumption, unconfirmed: single-segment pinyin keeps Rime's
-                // letter stepping; multi-segment input uses syllable boundaries.
                 let result = self.decoder.move_left();
                 self.apply_decoder_result(result, security)
             }
@@ -1671,6 +1584,144 @@ mod tests {
         assert_eq!(result.is_last_page, snapshot.is_last_page);
     }
 
+    fn assert_same_page(actual: &ResultModel, expected: &ResultModel) {
+        assert_eq!(actual.marked_text, expected.marked_text);
+        assert_eq!(actual.marked_cursor_utf8, expected.marked_cursor_utf8);
+        assert_eq!(actual.candidates, expected.candidates);
+        assert_eq!(actual.secondary_candidates, expected.secondary_candidates);
+        assert_eq!(actual.highlighted_index, expected.highlighted_index);
+        assert_eq!(actual.page_no, expected.page_no);
+        assert_eq!(actual.is_last_page, expected.is_last_page);
+        assert_eq!(actual.mode, expected.mode);
+        assert_eq!(actual.secure_degraded, expected.secure_degraded);
+    }
+
+    fn assert_current_result(actual: &ResultModel, expected: &ResultModel) {
+        assert_same_page(actual, expected);
+        assert_eq!(actual.status, 0);
+        assert!(!actual.consumed);
+        assert!(actual.commit_text.is_empty());
+        assert_eq!(actual.selection_event_id, expected.selection_event_id);
+    }
+
+    #[test]
+    fn current_result_matches_process_and_is_idempotent() {
+        let mut value = session();
+        value.decoder = Box::new(MockDecoder::default());
+        type_text(&mut value, "niha");
+        value.process(event(KeyKind::Down, ""));
+        let expected = value.process(event(KeyKind::Left, ""));
+        assert!(!expected.candidates.is_empty());
+        assert_eq!(expected.secondary_candidates.len(), 5);
+        assert!(!expected.secondary_candidates[0].comment.is_empty());
+        assert!(!expected.secondary_candidates[0].reading_key.is_empty());
+        assert_eq!(expected.highlighted_index, 1);
+        assert_eq!(expected.marked_cursor_utf8, 3);
+        let first = value.current_result();
+        let second = value.current_result();
+        assert_current_result(&first, &expected);
+        assert_current_result(&second, &first);
+    }
+
+    #[test]
+    fn current_result_matches_process_after_paging() {
+        let mut value = session();
+        let first = type_text(&mut value, "abc");
+        assert!(!first.is_last_page);
+        assert_current_result(&value.current_result(), &first);
+        for page_no in 1..=2 {
+            let page = value.process(event(KeyKind::PageDown, ""));
+            assert_eq!(page.page_no, page_no);
+            assert_ne!(page.candidates, first.candidates);
+            let highlighted = value.process(event(KeyKind::Down, ""));
+            assert_current_result(&value.current_result(), &highlighted);
+            assert_current_result(&value.current_result(), &highlighted);
+            if highlighted.is_last_page { break; }
+        }
+    }
+
+    #[test]
+    fn current_result_does_not_change_following_key_or_host_order() {
+        for (kind, text) in [(KeyKind::Text, "h"), (KeyKind::Left, ""),
+            (KeyKind::PageDown, ""), (KeyKind::Space, "")] {
+            let mut baseline = session();
+            let mut value = session();
+            for session in [&mut baseline, &mut value] {
+                type_text(session, "ni");
+                session.reorder_context_candidates(&[1, 0, 2]).unwrap();
+                session.process(event(KeyKind::Down, ""));
+            }
+            let before = value.page_texts();
+            assert_eq!(before[0], "呢");
+            value.current_result();
+            value.current_result();
+            assert_eq!(value.page_texts(), before);
+            let mut key = event(kind, text);
+            key.delivery_id = 941;
+            let expected = baseline.process(key.clone());
+            let actual = value.process(key);
+            assert_same_page(&actual, &expected);
+            assert_eq!(actual.status, expected.status);
+            assert_eq!(actual.consumed, expected.consumed);
+            assert_eq!(actual.commit_text, expected.commit_text);
+            assert_eq!(actual.selection_event_id, expected.selection_event_id);
+        }
+    }
+
+    #[test]
+    fn current_result_preserves_inline_ascii_mode_and_security() {
+        let mut value = session();
+        let mut uppercase = event(KeyKind::Text, "A");
+        uppercase.modifiers = MOD_SHIFT;
+        value.process(uppercase);
+        let inline = value.process(event(KeyKind::Text, "b"));
+        assert_eq!(inline.marked_text, "Ab");
+        assert_current_result(&value.current_result(), &inline);
+        assert_current_result(&value.current_result(), &inline);
+        assert!(inline.candidates.is_empty());
+        assert!(inline.secondary_candidates.is_empty());
+        assert_eq!((inline.page_no, inline.highlighted_index, inline.is_last_page), (0, 0, true));
+
+        for security in [SecurityState::Secure, SecurityState::Unknown, SecurityState::NonSecure] {
+            let mut key = event(KeyKind::Text, "n");
+            key.security = security;
+            let expected = value.process(key);
+            assert_eq!(expected.secure_degraded, security.degraded());
+            assert_current_result(&value.current_result(), &expected);
+        }
+        value.set_mode(InputMode::DirectEnglish);
+        let english = value.process(event(KeyKind::Unsupported, ""));
+        assert_eq!(english.mode, InputMode::DirectEnglish);
+        assert_current_result(&value.current_result(), &english);
+    }
+
+    #[test]
+    fn current_result_does_not_consume_selection_or_finish_pending_context() {
+        let mut value = session();
+        value.set_host_preceding_text("前文");
+        for text in ["n", "i"] {
+            value.process(event(KeyKind::Text, text));
+        }
+        value.configure_context_profile(2, 2).unwrap();
+        value.decoder.clear();
+        value.mark_selection_event(941);
+        for _ in 0..2 {
+            let current = value.current_result();
+            assert_eq!(current.selection_event_id, 941);
+            assert_eq!(current.status, 0);
+            assert!(!current.consumed);
+            assert!(current.commit_text.is_empty());
+            assert_eq!(value.pending_selection_event_id.get(), 941);
+            assert_eq!(value.host_preceding_text.as_deref(), Some("前文"));
+            assert!(value.pending_context_profile.is_some());
+        }
+        let finished = value.process(event(KeyKind::Unsupported, ""));
+        assert_eq!(finished.selection_event_id, 941);
+        assert_eq!(value.current_result().selection_event_id, 0);
+        assert!(value.host_preceding_text.is_none());
+        assert!(value.pending_context_profile.is_none());
+    }
+
     #[test]
     fn linear_defaults_match_selection_and_session_navigation() {
         for (linear, ordinary) in [(KeyKind::LinearNext, KeyKind::Down),
@@ -1713,12 +1764,6 @@ mod tests {
                 assert_eq!(actual.selection_event_id, expected.selection_event_id);
                 assert_menu_matches(&actual, &baseline.decoder.snapshot());
             }
-            let mut edited = session();
-            type_text(&mut edited, "abc");
-            edited.process(event(KeyKind::Left, ""));
-            assert!(edited.editing_menu.is_some());
-            edited.process(event(linear, ""));
-            assert!(edited.editing_menu.is_none());
         }
     }
 
@@ -1762,410 +1807,6 @@ mod tests {
         assert_eq!(KeyKind::from_u32(22), Some(KeyKind::Unsupported));
     }
 
-    // Rime refocuses the menu and resets page/highlight when the caret moves.
-    // A selection from that prefix menu must never stand in for the cached menu.
-    #[derive(Default)]
-    struct RefocusingDecoder {
-        inner: MockDecoder,
-        picks: Arc<Mutex<Vec<(usize, LearningIntent)>>>,
-        confirmed: String,
-        rime_partial: bool,
-    }
-
-    impl Decoder for RefocusingDecoder {
-        fn snapshot(&self) -> DecoderSnapshot {
-            let mut snapshot = self.inner.snapshot();
-            if self.rime_partial && self.inner.raw == "nihao" {
-                snapshot.candidates = ["你好", "你", "拟"].into_iter().map(|text| Candidate {
-                    text: text.into(), reading_key: "ni".into(), ..Candidate::default()
-                }).collect();
-            }
-            if self.rime_partial && self.inner.raw == "hao" {
-                snapshot.preedit = format!("{}hao", self.confirmed);
-                snapshot.cursor_utf8 = self.confirmed.len() + self.inner.cursor;
-            }
-            if self.inner.raw == "nihaoma" {
-                let words = if self.confirmed.is_empty() { vec!["你好吗", "你好"] }
-                    else { vec!["吗", "嘛", "马"] };
-                snapshot.candidates = words.into_iter().map(|text| Candidate {
-                    text: text.into(), reading_key: "ma".into(), ..Candidate::default()
-                }).collect();
-                if !self.confirmed.is_empty() {
-                    snapshot.preedit = format!("{}ma", self.confirmed);
-                    snapshot.cursor_utf8 = self.confirmed.len() + self.inner.cursor.saturating_sub(5);
-                }
-            }
-            if self.inner.cursor < self.inner.raw.len() {
-                snapshot.candidates = vec![Candidate {
-                    text: "你".into(), reading_key: "ni".into(), ..Candidate::default()
-                }];
-                snapshot.highlighted_index = 0;
-                snapshot.page_no = 0;
-            }
-            snapshot
-        }
-        fn input(&mut self, text: &str) -> Result<String, i32> { self.inner.input(text) }
-        fn backspace(&mut self) -> Result<String, i32> { self.inner.backspace() }
-        fn move_left(&mut self) -> Result<String, i32> {
-            self.inner.highlighted = 0;
-            self.inner.page_no = 0;
-            self.inner.move_left()
-        }
-        fn move_right(&mut self) -> Result<String, i32> {
-            assert!(self.inner.cursor < self.inner.raw.len(), "Right at end wraps in Rime");
-            self.inner.move_right()
-        }
-        fn page_up(&mut self) -> Result<String, i32> { self.inner.page_up() }
-        fn page_down(&mut self) -> Result<String, i32> { self.inner.page_down() }
-        fn select_previous(&mut self) -> Result<String, i32> { self.inner.select_previous() }
-        fn select_next(&mut self) -> Result<String, i32> { self.inner.select_next() }
-        fn select_candidate(&mut self, index: usize, _: u64, intent: LearningIntent) -> Result<String, i32> {
-            let text = self.snapshot().candidates.get(index).ok_or(-10)?.text.clone();
-            self.picks.lock().unwrap().push((index, intent));
-            if self.inner.raw == "nihaoma" && self.confirmed.is_empty() && index == 1 {
-                self.confirmed = "你好".into();
-                return Ok(String::new());
-            }
-            if self.rime_partial && self.inner.raw == "nihao" && index > 0 {
-                self.confirmed = text;
-                self.inner.raw = "hao".into();
-                self.inner.cursor = 3;
-                return Ok(String::new());
-            }
-            let text = format!("{}{text}", self.confirmed);
-            // A prefix selection can leave unconverted input in real Rime.
-            if self.inner.cursor >= self.inner.raw.len() && index == 0 { self.clear(); }
-            Ok(text)
-        }
-        fn delete_candidate(&mut self, index: usize) -> Result<(), i32> { self.inner.delete_candidate(index) }
-        fn commit_raw(&mut self) -> String { self.inner.commit_raw() }
-        fn clear(&mut self) { self.inner.clear(); self.confirmed.clear(); }
-    }
-
-    #[test]
-    fn editing_selection_uses_displayed_candidate_page_highlight_and_learning() {
-        for (raw, page, highlight, kind, text, slot) in [
-            ("nihao", 0, 0, KeyKind::Text, "1", 0),
-            ("nihao", 0, 0, KeyKind::Text, "2", 1),
-            ("nihao", 0, 1, KeyKind::Space, "", 1),
-            ("abc", 1, 2, KeyKind::Space, "", 2),
-            ("abc", 1, 0, KeyKind::Text, "2", 1),
-        ] {
-            let baseline_picks = Arc::new(Mutex::new(Vec::new()));
-            let mut baseline = Session::new(Box::new(RefocusingDecoder {
-                inner: MockDecoder::default(), picks: baseline_picks.clone(), ..Default::default()
-            }), format!("editing-baseline-{}", NEXT_APP.fetch_add(1, Ordering::Relaxed)));
-            type_text(&mut baseline, raw);
-            for _ in 0..page { baseline.process(event(KeyKind::PageDown, "")); }
-            for _ in 0..highlight { baseline.process(event(KeyKind::Down, "")); }
-            baseline.process(event(kind, text));
-            let picks = Arc::new(Mutex::new(Vec::new()));
-            let mut value = Session::new(Box::new(RefocusingDecoder {
-                inner: MockDecoder::default(), picks: picks.clone(), ..Default::default()
-            }), format!("editing-selection-{}", NEXT_APP.fetch_add(1, Ordering::Relaxed)));
-            type_text(&mut value, raw);
-            for _ in 0..page { value.process(event(KeyKind::PageDown, "")); }
-            for _ in 0..highlight { value.process(event(KeyKind::Down, "")); }
-            let displayed = value.decoder.snapshot();
-            let edited = value.process(event(KeyKind::Left, ""));
-            assert_menu_matches(&edited, &displayed);
-            let mut key = event(kind, text);
-            key.delivery_id = 901;
-            let selected = value.process(key);
-            assert_eq!(selected.commit_text, displayed.candidates[slot].text);
-            assert!(selected.marked_text.is_empty());
-            assert!(!value.composing());
-            assert_eq!(selected.selection_event_id, 901);
-            assert_eq!(*picks.lock().unwrap(), *baseline_picks.lock().unwrap());
-        }
-    }
-
-    #[test]
-    fn editing_reordered_selection_preserves_display_slot_and_learning_intent() {
-        for (kind, text, slot) in [(KeyKind::Text, "1", 0), (KeyKind::Text, "2", 1), (KeyKind::Space, "", 1)] {
-            let picks = Arc::new(Mutex::new(Vec::new()));
-            let mut value = Session::new(Box::new(RefocusingDecoder {
-                inner: MockDecoder::default(), picks: picks.clone(), ..Default::default()
-            }), format!("editing-reordered-{}", NEXT_APP.fetch_add(1, Ordering::Relaxed)));
-            type_text(&mut value, "ni");
-            value.reorder_context_candidates(&[1, 0, 2]).unwrap();
-            if kind == KeyKind::Space { value.process(event(KeyKind::Down, "")); }
-            let shown = value.decoder.snapshot();
-            let edited = value.process(event(KeyKind::Left, ""));
-            assert_menu_matches(&edited, &shown);
-            let mut key = event(kind, text);
-            key.delivery_id = 902;
-            let selected = value.process(key);
-            assert_eq!(selected.commit_text, shown.candidates[slot].text);
-            assert!(selected.marked_text.is_empty());
-            assert_eq!(selected.selection_event_id, 902);
-            assert_eq!(*picks.lock().unwrap(), vec![(if slot == 0 { 1 } else { 0 },
-                if slot == 0 { LearningIntent::NoLearn } else { LearningIntent::DeliberateSelection })]);
-        }
-    }
-
-    fn assert_confirmed_prefix_commit(edit: bool, kind: KeyKind, text: &str) {
-        let mut value = Session::new(Box::new(RefocusingDecoder::default()),
-            format!("editing-prefix-{}", NEXT_APP.fetch_add(1, Ordering::Relaxed)));
-        type_text(&mut value, "nihaoma");
-        let confirmed = value.process(event(KeyKind::Text, "2"));
-        assert_eq!(confirmed.status, 0);
-        assert!(confirmed.commit_text.is_empty());
-        assert_eq!(confirmed.marked_text, "你好ma");
-        assert_eq!(confirmed.candidates[0].text, "吗");
-        if edit {
-            let edited = value.process(event(KeyKind::Left, ""));
-            assert_eq!(edited.marked_text, "你好ma");
-            assert_eq!(edited.marked_cursor_utf8, 7);
-            assert_eq!(edited.candidates, confirmed.candidates);
-        }
-        let mut key = event(kind, text);
-        key.delivery_id = 903;
-        let result = value.process(key);
-        assert_eq!(result.status, 0);
-        assert_eq!(result.commit_text, "你好吗");
-        assert_eq!(result.selection_event_id, 903);
-        assert!(result.marked_text.is_empty());
-        assert!(result.candidates.is_empty());
-        assert!(!value.composing());
-        assert!(!value.process(event(KeyKind::Space, "")).consumed);
-    }
-
-    #[test]
-    fn editing_confirmed_prefix_is_kept_for_digit() {
-        assert_confirmed_prefix_commit(true, KeyKind::Text, "1");
-    }
-    #[test]
-    fn editing_confirmed_prefix_is_kept_for_space() {
-        assert_confirmed_prefix_commit(true, KeyKind::Space, "");
-    }
-    #[test]
-    fn confirmed_prefix_direct_digit_without_editing_is_unchanged() {
-        assert_confirmed_prefix_commit(false, KeyKind::Text, "1");
-    }
-
-    #[test]
-    fn editing_rime_partial_selection_finishes_displayed_candidate() {
-        for (raw, confirm_prefix, kind, text, slot, expected) in [
-            ("nihao", false, KeyKind::Text, "1", 0, "你好"),
-            ("nihao", false, KeyKind::Text, "2", 1, "你"),
-            ("nihao", false, KeyKind::Text, "3", 2, "拟"),
-            ("nihaoma", true, KeyKind::Text, "1", 0, "你好吗"),
-            ("nihaoma", true, KeyKind::Space, "", 0, "你好吗"),
-            ("nihaoma", true, KeyKind::Text, "2", 1, "你好嘛"),
-        ] {
-            let mut value = Session::new(Box::new(RefocusingDecoder {
-                rime_partial: true, ..Default::default()
-            }), format!("editing-rime-partial-{}", NEXT_APP.fetch_add(1, Ordering::Relaxed)));
-            type_text(&mut value, raw);
-            if confirm_prefix {
-                let partial = value.process(event(KeyKind::Text, "2"));
-                assert_eq!(partial.status, 0);
-                assert!(partial.commit_text.is_empty());
-                assert_eq!(partial.marked_text, "你好ma");
-            }
-            let shown = value.process(event(KeyKind::Left, ""));
-            assert_eq!(expected, format!("{}{}", if confirm_prefix { "你好" } else { "" }, shown.candidates[slot].text));
-            let mut key = event(kind, text);
-            key.delivery_id = 905;
-            let result = value.process(key);
-            assert_eq!(result.status, 0, "{raw} {text}");
-            assert_eq!(result.commit_text, expected);
-            assert!(result.commit_text.ends_with(&shown.candidates[slot].text));
-            assert!(result.marked_text.is_empty());
-            assert!(result.candidates.is_empty());
-            assert_eq!(result.selection_event_id, 905);
-            assert!(!value.composing());
-            assert!(!value.process(event(KeyKind::Space, "")).consumed);
-        }
-    }
-
-    #[derive(Clone, Copy, Debug, PartialEq)]
-    enum EditingFailure { MoveRight, PageDown, Reorder, Select, MismatchedCommit, UnexpectedMoveCommit }
-
-    // Inject after mutation to exercise a genuinely half-restored decoder. The
-    // session uses this MockDecoder wrapper directly so reorder can fail too.
-    struct FailingEditingDecoder {
-        inner: MockDecoder,
-        order: Vec<usize>,
-        failure: Option<EditingFailure>,
-    }
-
-    impl FailingEditingDecoder {
-        fn fail(&mut self, at: EditingFailure) -> Result<(), i32> {
-            if self.failure == Some(at) { self.failure = None; Err(-77) } else { Ok(()) }
-        }
-    }
-
-    impl Decoder for FailingEditingDecoder {
-        fn snapshot(&self) -> DecoderSnapshot {
-            let mut snapshot = self.inner.snapshot();
-            if !self.order.is_empty() {
-                snapshot.candidates = self.order.iter().map(|&i| snapshot.candidates[i].clone()).collect();
-            }
-            snapshot
-        }
-        fn input(&mut self, text: &str) -> Result<String, i32> { self.inner.input(text) }
-        fn backspace(&mut self) -> Result<String, i32> { self.inner.backspace() }
-        fn move_left(&mut self) -> Result<String, i32> {
-            self.order.clear();
-            self.inner.page_no = 0;
-            self.inner.move_left()
-        }
-        fn move_right(&mut self) -> Result<String, i32> {
-            self.inner.move_right()?;
-            self.fail(EditingFailure::MoveRight)?;
-            if self.failure == Some(EditingFailure::UnexpectedMoveCommit) {
-                self.failure = None;
-                return Ok("unexpected".into());
-            }
-            Ok(String::new())
-        }
-        fn page_up(&mut self) -> Result<String, i32> { self.inner.page_up() }
-        fn page_down(&mut self) -> Result<String, i32> {
-            self.inner.page_down()?;
-            self.fail(EditingFailure::PageDown)?;
-            Ok(String::new())
-        }
-        fn select_previous(&mut self) -> Result<String, i32> { self.inner.select_previous() }
-        fn select_next(&mut self) -> Result<String, i32> { self.inner.select_next() }
-        fn reorder_context_candidates(&mut self, order: &[usize]) -> Result<(), i32> {
-            self.order = order.to_vec();
-            self.fail(EditingFailure::Reorder)
-        }
-        fn select_candidate(&mut self, index: usize, _: u64, _: LearningIntent) -> Result<String, i32> {
-            let text = self.snapshot().candidates[index].text.clone();
-            self.order.clear();
-            self.fail(EditingFailure::Select)?;
-            if self.failure == Some(EditingFailure::MismatchedCommit) {
-                self.failure = None;
-                return Ok("wrong candidate".into());
-            }
-            self.inner.clear();
-            Ok(text)
-        }
-        fn delete_candidate(&mut self, index: usize) -> Result<(), i32> { self.inner.delete_candidate(index) }
-        fn commit_raw(&mut self) -> String { self.inner.commit_raw() }
-        fn clear(&mut self) { self.inner.clear(); self.order.clear(); }
-    }
-
-    fn assert_editing_failure_starts_next_key_from_empty(failure: EditingFailure) {
-        let mut value = session();
-        value.decoder = Box::new(FailingEditingDecoder {
-            inner: MockDecoder { raw: "abc".into(), cursor: 3, page_no: 1,
-                ..Default::default() },
-            order: vec![1, 0, 2, 3, 4], failure: Some(failure),
-        });
-        let edited = value.process(event(KeyKind::Left, ""));
-        assert_eq!(edited.page_no, 1);
-        assert_eq!(edited.candidates[0].text, "候选七");
-        assert!(value.editing_menu.is_some());
-        let mut key = event(KeyKind::Text, "1");
-        key.delivery_id = 904;
-        let failed = value.process(key);
-        assert_eq!(failed.status, if matches!(failure, EditingFailure::MismatchedCommit
-            | EditingFailure::UnexpectedMoveCommit) { -10 } else { -77 }, "{failure:?}");
-        assert!(failed.consumed);
-        assert!(failed.commit_text.is_empty());
-        assert_eq!(failed.selection_event_id, 0);
-        assert!(failed.marked_text.is_empty());
-        assert!(failed.candidates.is_empty());
-        assert_eq!(failed.marked_cursor_utf8, 0);
-        assert_eq!(failed.page_no, 0);
-        assert_eq!(failed.highlighted_index, 0);
-        assert!(value.editing_menu.is_none());
-        assert!(!value.composing());
-        let next = value.process(event(KeyKind::Space, ""));
-        assert!(!next.consumed);
-        assert!(next.commit_text.is_empty());
-        let typed = value.process(event(KeyKind::Text, "n"));
-        assert_eq!(typed.status, 0);
-        assert_eq!(typed.marked_text, "n");
-        assert_eq!(typed.marked_cursor_utf8, 1);
-        assert_eq!(typed.page_no, 0);
-        assert_eq!(typed.highlighted_index, 0);
-        assert_eq!(typed.candidates[0].text, "候选一");
-    }
-
-    #[test]
-    fn editing_move_right_failure_clears_composition_before_next_key() {
-        assert_editing_failure_starts_next_key_from_empty(EditingFailure::MoveRight);
-    }
-    #[test]
-    fn editing_page_down_failure_clears_composition_before_next_key() {
-        assert_editing_failure_starts_next_key_from_empty(EditingFailure::PageDown);
-    }
-    #[test]
-    fn editing_reorder_failure_clears_composition_before_next_key() {
-        assert_editing_failure_starts_next_key_from_empty(EditingFailure::Reorder);
-    }
-    #[test]
-    fn editing_select_failure_clears_composition_before_next_key() {
-        assert_editing_failure_starts_next_key_from_empty(EditingFailure::Select);
-    }
-    #[test]
-    fn editing_mismatched_commit_acknowledges_displayed_selection() {
-        let mut value = session();
-        value.decoder = Box::new(FailingEditingDecoder {
-            inner: MockDecoder { raw: "abc".into(), cursor: 3, page_no: 1,
-                ..Default::default() },
-            order: vec![1, 0, 2, 3, 4], failure: Some(EditingFailure::MismatchedCommit),
-        });
-        let edited = value.process(event(KeyKind::Left, ""));
-        assert_eq!(edited.page_no, 1);
-        assert_eq!(edited.candidates[0].text, "候选七");
-        assert!(value.editing_menu.is_some());
-        let mut key = event(KeyKind::Text, "1");
-        key.delivery_id = 904;
-        let selected = value.process(key);
-        assert_eq!(selected.status, 0);
-        assert!(selected.consumed);
-        assert_eq!(selected.commit_text, "候选七");
-        assert_eq!(selected.selection_event_id, 904);
-        assert!(selected.marked_text.is_empty());
-        assert!(selected.candidates.is_empty());
-        assert_eq!(selected.marked_cursor_utf8, 0);
-        assert_eq!(selected.page_no, 0);
-        assert_eq!(selected.highlighted_index, 0);
-        assert!(value.editing_menu.is_none());
-        assert!(!value.composing());
-        let next = value.process(event(KeyKind::Space, ""));
-        assert!(!next.consumed);
-        assert!(next.commit_text.is_empty());
-        let typed = value.process(event(KeyKind::Text, "n"));
-        assert_eq!(typed.status, 0);
-        assert_eq!(typed.marked_text, "n");
-        assert_eq!(typed.marked_cursor_utf8, 1);
-        assert_eq!(typed.page_no, 0);
-        assert_eq!(typed.highlighted_index, 0);
-        assert_eq!(typed.candidates[0].text, "候选一");
-    }
-    #[test]
-    fn editing_unexpected_move_commit_is_an_error_and_clears_composition() {
-        assert_editing_failure_starts_next_key_from_empty(EditingFailure::UnexpectedMoveCommit);
-    }
-
-    #[test]
-    fn editing_enter_keeps_raw_commit_and_page_down_discards_the_cache() {
-        for kind in [KeyKind::Enter, KeyKind::PageDown] {
-            let mut value = Session::new(Box::new(RefocusingDecoder {
-                inner: MockDecoder::default(), picks: Arc::new(Mutex::new(Vec::new())), ..Default::default()
-            }), format!("editing-other-{}", NEXT_APP.fetch_add(1, Ordering::Relaxed)));
-            type_text(&mut value, "nihao");
-            let edited = value.process(event(KeyKind::Left, ""));
-            assert_eq!(edited.candidates[0].text, "你好");
-            let result = value.process(event(kind, ""));
-            assert!(value.editing_menu.is_none());
-            if kind == KeyKind::Enter {
-                assert_eq!(result.commit_text, "nihao");
-                assert!(result.marked_text.is_empty());
-            } else {
-                assert_menu_matches(&result, &value.decoder.snapshot());
-                assert_eq!(result.candidates[0].text, "你");
-            }
-        }
-    }
-
     #[test]
     fn inline_ascii_arrows_commit_and_pass_through_and_system_arrows_do_not_move() {
         for kind in [KeyKind::Left, KeyKind::Right, KeyKind::Space] {
@@ -2187,86 +1828,6 @@ mod tests {
             assert!(!after.consumed);
             assert_eq!(after.marked_cursor_utf8, before.marked_cursor_utf8);
             assert_eq!(after.highlighted_index, before.highlighted_index);
-        }
-    }
-
-    #[test]
-    fn editing_menu_keeps_all_four_fields_while_caret_is_inside() {
-        let mut value = session();
-        type_text(&mut value, "abc");
-        value.process(event(KeyKind::Down, ""));
-        let whole = value.decoder.snapshot();
-        value.process(event(KeyKind::Left, ""));
-        // Simulate a decoder refocusing its menu after moving the caret.
-        value.decoder.page_down().unwrap();
-        let edited = value.finish(true, String::new(), 0, SecurityState::NonSecure);
-        assert_eq!(edited.marked_cursor_utf8, 2);
-        assert_menu_matches(&edited, &whole);
-        value.process(event(KeyKind::Left, ""));
-        let front = value.process(event(KeyKind::Left, ""));
-        assert_eq!(front.marked_cursor_utf8, 0);
-        assert_menu_matches(&front, &whole);
-    }
-
-    #[test]
-    fn editing_menu_returns_to_live_menu_at_end() {
-        let mut value = session();
-        type_text(&mut value, "abc");
-        value.process(event(KeyKind::Left, ""));
-        value.decoder.page_down().unwrap();
-        let ended = value.process(event(KeyKind::Right, ""));
-        assert_eq!(ended.marked_cursor_utf8, 3);
-        assert_menu_matches(&ended, &value.decoder.snapshot());
-        value.decoder.page_up().unwrap();
-        let fresh = value.finish(true, String::new(), 0, SecurityState::NonSecure);
-        assert_menu_matches(&fresh, &value.decoder.snapshot());
-    }
-
-    #[test]
-    fn editing_menu_invalidates_on_input_cancel_commit_and_other_keys() {
-        for (kind, text) in [
-            (KeyKind::Text, "d"),
-            (KeyKind::Backspace, ""),
-            (KeyKind::Escape, ""),
-            (KeyKind::Space, ""),
-            (KeyKind::Enter, ""),
-            (KeyKind::Down, ""),
-        ] {
-            let mut value = session();
-            type_text(&mut value, "abc");
-            value.process(event(KeyKind::Left, ""));
-            value.decoder.page_down().unwrap();
-            let changed = value.process(event(kind, text));
-            assert_menu_matches(&changed, &value.decoder.snapshot());
-            // Returning to the old raw input must never resurrect its old menu.
-            value.decoder.clear();
-            value.decoder.input("abc").unwrap();
-            value.decoder.move_left().unwrap();
-            value.decoder.page_down().unwrap();
-            let fresh = value.finish(true, String::new(), 0, SecurityState::NonSecure);
-            assert_menu_matches(&fresh, &value.decoder.snapshot());
-        }
-        // A decoder-side raw-input change must invalidate the cache too,
-        // even when it did not arrive through Session::process.
-        let mut value = session();
-        type_text(&mut value, "abc");
-        value.process(event(KeyKind::Left, ""));
-        value.decoder.input("d").unwrap();
-        let changed = value.finish(true, String::new(), 0, SecurityState::NonSecure);
-        assert_menu_matches(&changed, &value.decoder.snapshot());
-    }
-
-    #[test]
-    fn editing_menu_does_not_change_ordinary_input_snapshots() {
-        let mut value = session();
-        for character in "nihao".chars() {
-            let typed = value.process(event(KeyKind::Text, &character.to_string()));
-            let snapshot = value.decoder.snapshot();
-            println!("ordinary-snapshot: {typed:?}");
-            assert_eq!(typed.marked_text, snapshot.preedit);
-            assert_eq!(typed.marked_cursor_utf8, snapshot.cursor_utf8);
-            assert_eq!(typed.secondary_candidates, snapshot.secondary_candidates);
-            assert_menu_matches(&typed, &snapshot);
         }
     }
 
@@ -3159,10 +2720,11 @@ mod tests {
     }
 
     #[test]
-    fn product_trial_rejects_busy_fuzzy_switches_in_both_directions() {
-        let mut value = Session::new_with_blacklist(Box::new(MockDecoder::default()),
-            "y3.fuzzy-idle".into(), Arc::new(Mutex::new(Store::default()))).unwrap();
-        value.configure_zhixu_whole(true).unwrap();
+    fn product_native_rejects_busy_fuzzy_switches_in_both_directions() {
+        let dictionary = crate::zhixu::fallback();
+        let mut value = Session::new_native("y3.fuzzy-idle".into(),
+            Arc::new(Mutex::new(Store::default())), dictionary).unwrap();
+        assert!(value.decoder.native_editing());
         type_text(&mut value, "nihao");
         let before = value.decoder.snapshot();
         assert_eq!(value.configure_fuzzy(1), Err(-10));
@@ -3170,18 +2732,21 @@ mod tests {
         assert_eq!(value.decoder.snapshot().preedit, before.preedit);
         assert!(value.decoder.native_editing());
         value.decoder.clear();
+        // F2: Zhixu reads fuzzy spellings itself, so fuzzy input stays native.
         value.configure_fuzzy(1).unwrap();
-        assert!(value.decoder.native_editing(), "F2: fuzzy input stays on Zhixu");
+        assert!(value.decoder.native_editing());
         type_text(&mut value, "nihao");
         assert_eq!(value.configure_fuzzy(0), Err(-10));
         assert_eq!(value.decoder.snapshot().raw_input, "nihao");
         value.decoder.clear();
         value.configure_fuzzy(0).unwrap();
         assert!(value.decoder.native_editing());
+        // The retained whole knob changes neither the inner nor fuzzy behavior.
         value.configure_zhixu_whole(false).unwrap();
         type_text(&mut value, "nihao");
-        assert!(value.configure_fuzzy(1).is_ok());
-        assert!(value.decoder.snapshot().raw_input.is_empty(), "the disabled Rime route retains its previous fuzzy behavior");
+        assert!(value.decoder.native_editing());
+        assert_eq!(value.configure_fuzzy(1), Err(-10));
+        assert_eq!(value.decoder.snapshot().raw_input, "nihao", "rejection must not clear a composing session");
     }
 
     #[test]
@@ -3446,124 +3011,12 @@ mod tests {
         }
     }
 
-    // Already-confirmed preedit text remains pending until the phrase is committed.
-    // Wrap MockDecoder's restoration failures and vary only the selection response.
-    struct PrefixEditingDecoder {
-        native: bool,
-        inner: FailingEditingDecoder,
-        confirmed: String,
-        displayed: Option<String>,
-        selection_commit: Option<String>,
-    }
-
-    impl Decoder for PrefixEditingDecoder {
-        fn native_editing(&self) -> bool { self.native }
-        fn snapshot(&self) -> DecoderSnapshot {
-            let mut snapshot = self.inner.snapshot();
-            snapshot.preedit = format!("{}{}", self.confirmed, snapshot.preedit);
-            snapshot.cursor_utf8 += self.confirmed.len();
-            if let Some(text) = &self.displayed {
-                if let Some(candidate) = snapshot.candidates.first_mut() {
-                    candidate.text = text.clone();
-                }
-            }
-            snapshot
-        }
-        fn input(&mut self, text: &str) -> Result<String, i32> { self.inner.input(text) }
-        fn backspace(&mut self) -> Result<String, i32> { self.inner.backspace() }
-        fn move_left(&mut self) -> Result<String, i32> { self.inner.move_left() }
-        fn move_right(&mut self) -> Result<String, i32> { self.inner.move_right() }
-        fn page_up(&mut self) -> Result<String, i32> { self.inner.page_up() }
-        fn page_down(&mut self) -> Result<String, i32> { self.inner.page_down() }
-        fn select_previous(&mut self) -> Result<String, i32> { self.inner.select_previous() }
-        fn select_next(&mut self) -> Result<String, i32> { self.inner.select_next() }
-        fn reorder_context_candidates(&mut self, order: &[usize]) -> Result<(), i32> {
-            self.inner.reorder_context_candidates(order)
-        }
-        fn select_candidate(&mut self, index: usize, id: u64, intent: LearningIntent) -> Result<String, i32> {
-            let commit = self.inner.select_candidate(index, id, intent)?;
-            if self.native { self.confirmed.clear(); }
-            Ok(self.selection_commit.take().unwrap_or(commit))
-        }
-        fn delete_candidate(&mut self, index: usize) -> Result<(), i32> { self.inner.delete_candidate(index) }
-        fn commit_raw(&mut self) -> String { self.inner.commit_raw() }
-        fn clear(&mut self) { self.inner.clear(); self.confirmed.clear(); }
-    }
-
-    #[test]
-    fn native_editing_bypasses_freeze_restore_and_response_compensation() {
-        for failure in [EditingFailure::MoveRight, EditingFailure::PageDown, EditingFailure::Reorder] {
-            let mut value = session();
-            value.decoder = Box::new(PrefixEditingDecoder {
-                native: true,
-                inner: FailingEditingDecoder {
-                    inner: MockDecoder { raw: "nihao".into(), cursor: 5, ..Default::default() },
-                    order: Vec::new(), failure: Some(failure),
-                },
-                confirmed: "你好".into(), displayed: Some("你".into()),
-                selection_commit: Some("你好原生完整提交".into()),
-            });
-            let shown = value.decoder.snapshot();
-            let moved = value.process(event(KeyKind::Left, ""));
-            assert_eq!(moved.status, 0);
-            assert!(value.editing_menu.is_none(), "native editing must never freeze a menu");
-            // Even a stale menu from a replaced decoder cannot enter restoration.
-            value.editing_menu = Some(shown);
-            let mut key = event(KeyKind::Text, "1");
-            key.delivery_id = 940;
-            let selected = value.process(key);
-            assert_eq!(selected.status, 0, "{failure:?}");
-            assert_eq!(selected.commit_text, "你好原生完整提交");
-            assert!(selected.marked_text.is_empty());
-            assert_eq!(selected.selection_event_id, 940);
-            assert!(value.editing_menu.is_none());
-        }
-    }
-
-    fn assert_editing_selection_response(prefix: &str, displayed: &str, commit: &str) {
-        for (kind, text) in [(KeyKind::Text, "1"), (KeyKind::Space, "")] {
-            let mut value = session();
-            value.decoder = Box::new(PrefixEditingDecoder {
-                native: false,
-                inner: FailingEditingDecoder {
-                    inner: MockDecoder { raw: "nihao".into(), cursor: 5, ..Default::default() },
-                    order: Vec::new(), failure: None,
-                },
-                confirmed: prefix.into(), displayed: Some(displayed.into()), selection_commit: Some(commit.into()),
-            });
-            let edited = value.process(event(KeyKind::Left, ""));
-            assert_eq!(edited.marked_text, format!("{prefix}nihao"));
-            assert_eq!(edited.candidates[0].text, displayed);
-            let mut key = event(kind, text);
-            key.delivery_id = 906;
-            let selected = value.process(key);
-            assert_eq!(selected.status, 0, "prefix={prefix}, response={commit}");
-            assert_eq!(selected.commit_text, format!("{prefix}{displayed}"));
-            assert_eq!(selected.selection_event_id, 906);
-            assert!(selected.marked_text.is_empty());
-            assert!(selected.candidates.is_empty());
-            assert!(!value.composing());
-            assert!(!value.process(event(KeyKind::Space, "")).consumed);
-        }
-    }
-
-    #[test]
-    fn editing_selection_uses_prefix_and_display_for_all_decoder_responses() {
-        for prefix in ["", "你好"] {
-            // Full preview, partial selection, and candidate-only responses all
-            // acknowledge the same displayed choice. Neither suffix is authoritative.
-            for commit in [format!("{prefix}你好"), format!("{prefix}别人你"), String::new(), "你".into()] {
-                assert_editing_selection_response(prefix, "你", &commit);
-            }
-        }
-    }
-
     fn prefix_probe(raw: &str, preedit: &str) -> Option<String> {
         let snapshot = DecoderSnapshot {
             raw_input: raw.into(), preedit: preedit.into(), cursor_utf8: preedit.len(), ..Default::default()
         };
         let old = editing_confirmed_prefix(&snapshot).map(str::to_owned);
-        let boundary = default_composition_boundary(&snapshot, BoundaryPurpose::Editing);
+        let boundary = default_composition_boundary(&snapshot);
         assert_eq!(boundary.map(|value| value.confirmed), old);
         old
     }
@@ -3582,175 +3035,6 @@ mod tests {
     }
 
     #[test]
-    fn editing_selection_keeps_repeated_characters_in_prefix_and_candidate() {
-        for commit in ["你好", "你你好", "", "你你好你好"] {
-            assert_editing_selection_response("你", "你好", commit);
-        }
-    }
-
-    fn assert_editing_failure_keeps_confirmed_prefix(failure: EditingFailure) {
-        let mut value = session();
-        value.decoder = Box::new(PrefixEditingDecoder {
-            native: false,
-            inner: FailingEditingDecoder {
-                inner: MockDecoder { raw: "abc".into(), cursor: 3, page_no: 1, ..Default::default() },
-                order: vec![1, 0, 2, 3, 4], failure: Some(failure),
-            },
-            confirmed: "你好".into(), displayed: None, selection_commit: None,
-        });
-        let edited = value.process(event(KeyKind::Left, ""));
-        assert_eq!(edited.marked_text, "你好abc");
-        assert_eq!(edited.page_no, 1);
-        assert_eq!(edited.candidates[0].text, "候选七");
-        let mut key = event(KeyKind::Text, "1");
-        key.delivery_id = 907;
-        let failed = value.process(key);
-        assert_eq!(failed.status, -77, "{failure:?}");
-        assert!(failed.consumed);
-        assert_eq!(failed.commit_text, "你好", "{failure:?}");
-        assert_eq!(failed.selection_event_id, 0);
-        assert!(failed.marked_text.is_empty());
-        assert!(failed.candidates.is_empty());
-        assert_eq!(failed.marked_cursor_utf8, 0);
-        assert_eq!(failed.page_no, 0);
-        assert_eq!(failed.highlighted_index, 0);
-        assert!(value.editing_menu.is_none());
-        assert!(!value.composing());
-        let next = value.process(event(KeyKind::Space, ""));
-        assert!(!next.consumed);
-        assert!(next.commit_text.is_empty());
-        let typed = value.process(event(KeyKind::Text, "n"));
-        assert_eq!(typed.status, 0);
-        assert_eq!(typed.marked_text, "n");
-        assert_eq!(typed.marked_cursor_utf8, 1);
-        assert_eq!(typed.page_no, 0);
-        assert_eq!(typed.highlighted_index, 0);
-        assert_eq!(typed.candidates[0].text, "候选一");
-    }
-
-    #[test]
-    fn editing_move_right_failure_keeps_confirmed_prefix() {
-        assert_editing_failure_keeps_confirmed_prefix(EditingFailure::MoveRight);
-    }
-    #[test]
-    fn editing_page_down_failure_keeps_confirmed_prefix() {
-        assert_editing_failure_keeps_confirmed_prefix(EditingFailure::PageDown);
-    }
-    #[test]
-    fn editing_reorder_failure_keeps_confirmed_prefix() {
-        assert_editing_failure_keeps_confirmed_prefix(EditingFailure::Reorder);
-    }
-    #[test]
-    fn editing_select_failure_keeps_confirmed_prefix() {
-        assert_editing_failure_keeps_confirmed_prefix(EditingFailure::Select);
-    }
-
-    // Model Rime's whole raw input and separately formatted unconfirmed suffix.
-    struct SuffixEditingDecoder {
-        inner: PrefixEditingDecoder,
-        raw: String,
-        tail: String,
-    }
-
-    impl Decoder for SuffixEditingDecoder {
-        fn snapshot(&self) -> DecoderSnapshot {
-            let mut snapshot = self.inner.snapshot();
-            if !snapshot.raw_input.is_empty() {
-                snapshot.raw_input = self.raw.clone();
-                snapshot.preedit = format!("{}{}", self.inner.confirmed, self.tail);
-                snapshot.cursor_utf8 = self.inner.confirmed.len() + if self.inner.inner.inner.cursor == self.inner.inner.inner.raw.len() {
-                    self.tail.len()
-                } else { 0 };
-            }
-            snapshot
-        }
-        fn input(&mut self, text: &str) -> Result<String, i32> { self.inner.input(text) }
-        fn backspace(&mut self) -> Result<String, i32> { self.inner.backspace() }
-        fn move_left(&mut self) -> Result<String, i32> { self.inner.move_left() }
-        fn move_right(&mut self) -> Result<String, i32> { self.inner.move_right() }
-        fn page_up(&mut self) -> Result<String, i32> { self.inner.page_up() }
-        fn page_down(&mut self) -> Result<String, i32> { self.inner.page_down() }
-        fn select_previous(&mut self) -> Result<String, i32> { self.inner.select_previous() }
-        fn select_next(&mut self) -> Result<String, i32> { self.inner.select_next() }
-        fn select_candidate(&mut self, index: usize, id: u64, intent: LearningIntent) -> Result<String, i32> {
-            self.inner.select_candidate(index, id, intent)
-        }
-        fn delete_candidate(&mut self, index: usize) -> Result<(), i32> { self.inner.delete_candidate(index) }
-        fn commit_raw(&mut self) -> String { self.inner.commit_raw() }
-        fn clear(&mut self) { self.inner.clear(); }
-    }
-
-    fn suffix_editing_session(prefix: &str, raw: &str, tail: &str, failure: Option<EditingFailure>) -> Session {
-        let mut value = session();
-        value.decoder = Box::new(SuffixEditingDecoder {
-            inner: PrefixEditingDecoder {
-                native: false,
-                inner: FailingEditingDecoder {
-                    inner: MockDecoder { raw: "nihao".into(), cursor: 5, ..Default::default() },
-                    order: Vec::new(), failure,
-                },
-                confirmed: prefix.into(), displayed: Some("你".into()), selection_commit: None,
-            },
-            raw: raw.into(), tail: tail.into(),
-        });
-        value
-    }
-
-    #[test]
-    fn editing_ascii_confirmed_prefix_uses_raw_suffix_on_success() {
-        for prefix in ["你好AI", "你好2026", "你好 AI "] {
-            for (raw, tail) in [("nihao", "nihao"), ("nihaonihao", "ni hao")] {
-                for (kind, text) in [(KeyKind::Text, "1"), (KeyKind::Space, "")] {
-                    let mut value = suffix_editing_session(prefix, raw, tail, None);
-                    let edited = value.process(event(KeyKind::Left, ""));
-                    assert_eq!(edited.marked_text, format!("{prefix}{tail}"));
-                    assert_eq!(edited.candidates[0].text, "你");
-                    // Exercise Right while still editing, as in the review sequence.
-                    value.process(event(KeyKind::Right, ""));
-                    value.process(event(KeyKind::Left, ""));
-                    let selected = value.process(event(kind, text));
-                    assert_eq!(selected.status, 0, "{prefix:?}, {tail:?}");
-                    assert_eq!(selected.commit_text, format!("{prefix}你"));
-                    assert!(selected.marked_text.is_empty());
-                    assert!(!value.composing());
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn editing_ascii_confirmed_prefix_survives_injected_failure() {
-        for prefix in ["你好AI", "你好2026", "你好 AI "] {
-            for failure in [EditingFailure::MoveRight, EditingFailure::Select] {
-                let mut value = suffix_editing_session(prefix, "nihaonihao", "ni hao", Some(failure));
-                value.process(event(KeyKind::Left, ""));
-                let failed = value.process(event(KeyKind::Text, "1"));
-                assert_eq!(failed.status, -77, "{prefix:?}, {failure:?}");
-                assert_eq!(failed.commit_text, prefix);
-                assert_eq!(failed.selection_event_id, 0);
-                assert!(failed.marked_text.is_empty());
-                assert!(!value.composing());
-            }
-        }
-    }
-
-    #[test]
-    fn editing_unmatched_suffix_keeps_composition_without_committing_a_guess() {
-        let mut value = suffix_editing_session("你好AI", "nihao", "mismatch", None);
-        let edited = value.process(event(KeyKind::Left, ""));
-        let before = value.decoder.snapshot();
-        let failed = value.process(event(KeyKind::Text, "1"));
-        assert_eq!(failed.status, -10);
-        assert!(failed.consumed);
-        assert!(failed.commit_text.is_empty());
-        assert_eq!(failed.selection_event_id, 0);
-        assert_eq!(failed.marked_text, edited.marked_text);
-        assert_eq!(value.decoder.snapshot().raw_input, before.raw_input);
-        assert_eq!(value.decoder.snapshot().cursor_utf8, before.cursor_utf8);
-        assert!(value.composing());
-    }
-
-    #[test]
     fn editing_prefix_matches_complete_raw_suffix_tokens_and_umlaut() {
         for (raw, preedit, expected) in [
             ("nihaonihao", "你好AIni hao", Some("你好AI")),
@@ -3766,13 +3050,8 @@ mod tests {
         ] {
             let snapshot = DecoderSnapshot { raw_input: raw.into(), preedit: preedit.into(), ..Default::default() };
             assert_eq!(editing_confirmed_prefix(&snapshot), expected, "raw={raw:?}, preedit={preedit:?}");
-            assert_eq!(default_composition_boundary(&snapshot, BoundaryPurpose::Editing)
+            assert_eq!(default_composition_boundary(&snapshot)
                 .map(|value| value.confirmed), expected.map(str::to_owned));
-            let old_mixing = crate::mixer::confirmed_prefix_and_rest(&snapshot.preedit)
-                .map(|(confirmed, unconfirmed_raw)| CompositionBoundary {
-                    confirmed: confirmed.to_owned(), unconfirmed_raw,
-                });
-            assert_eq!(default_composition_boundary(&snapshot, BoundaryPurpose::Mixing), old_mixing);
         }
     }
 
@@ -3809,7 +3088,7 @@ mod tests {
         }
 
         // Re-run the existing Session assertions with only the inner decoder
-        // replaced. The ordinary copies above still exercise the Rime-style path.
+        // replaced. The ordinary copies above still exercise the test double.
         macro_rules! existing_key_test {
             ($name:ident) => { #[test] fn $name() { fixture(super::$name); } };
         }
@@ -3835,7 +3114,6 @@ mod tests {
         existing_key_test!(at_sign_is_left_alone_and_the_middle_dot_is_on_the_backtick_key);
         existing_key_test!(book_title_marks_map_in_chinese_and_ascii_angle_brackets_pass_in_english);
         existing_key_test!(inline_ascii_arrows_commit_and_pass_through_and_system_arrows_do_not_move);
-        existing_key_test!(editing_menu_does_not_change_ordinary_input_snapshots);
         existing_key_test!(host_context_digits_and_space_select_displayed_order_while_enter_remains_raw);
         existing_key_test!(decimal_period_stays_ascii_while_chinese_sentence_period_is_full_width);
         existing_key_test!(frozen_context_punctuation_examples_are_stable);
@@ -3883,6 +3161,25 @@ mod tests {
         }
 
         #[test]
+        fn ordinary_input_snapshots_match_the_live_native_decoder() {
+            fixture(|| {
+                let mut value = session();
+                for character in "nihaoma".chars() {
+                    let typed = value.process(event(KeyKind::Text, &character.to_string()));
+                    let snapshot = value.decoder.snapshot();
+                    assert_eq!(typed.marked_text, snapshot.preedit);
+                    assert_eq!(typed.marked_cursor_utf8, snapshot.cursor_utf8);
+                    assert_eq!(typed.secondary_candidates, snapshot.secondary_candidates);
+                    assert_menu_matches(&typed, &snapshot);
+                }
+                for kind in [KeyKind::Down, KeyKind::Left, KeyKind::Left, KeyKind::Right, KeyKind::PageDown] {
+                    let moved = value.process(event(kind, ""));
+                    assert_menu_matches(&moved, &value.decoder.snapshot());
+                }
+            });
+        }
+
+        #[test]
         fn caret_boundaries_keep_whole_menu_without_session_freezing() {
             fixture(|| {
                 // SogouKeyModelTests.testCoreCaretBoundariesKeepWholeReadingMenuAndReturnToEnd.
@@ -3897,7 +3194,6 @@ mod tests {
                         assert_eq!(moved.status, 0, "{raw}");
                         assert_eq!(moved.marked_cursor_utf8, boundary, "{raw}");
                         assert_menu_matches(&moved, &whole);
-                        assert!(value.editing_menu.is_none());
                     }
                     for &boundary in boundaries.iter().rev().skip(1) {
                         let moved = value.process(event(KeyKind::Right, ""));
@@ -3977,7 +3273,6 @@ mod tests {
                         let shown = value.decoder.snapshot();
                         let moved = value.process(event(KeyKind::Left, ""));
                         assert_menu_matches(&moved, &shown);
-                        assert!(value.editing_menu.is_none());
                         let mut key = event(kind, text);
                         key.delivery_id = 941;
                         let selected = value.process(key);
@@ -4005,7 +3300,6 @@ mod tests {
                     let moved = value.process(event(KeyKind::Left, ""));
                     let target = if confirmed { "吗" } else { "你" };
                     let slot = moved.candidates.iter().position(|item| item.text == target).unwrap();
-                    assert!(value.editing_menu.is_none());
                     let selected = if space {
                         for _ in 0..slot { value.process(event(KeyKind::Down, "")); }
                         value.process(event(KeyKind::Space, ""))

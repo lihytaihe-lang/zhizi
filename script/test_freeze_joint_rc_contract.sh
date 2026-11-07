@@ -6,7 +6,6 @@ FREEZE_TOOL="$ROOT_DIR/script/freeze_joint_rc.sh"
 JOINT_GATE="$ROOT_DIR/script/run_joint_rc_gates.sh"
 OFFICIAL_VALIDATOR="$ROOT_DIR/script/validate_official_input_bundle.sh"
 FAULT_GATE="$ROOT_DIR/script/run_rc_fault_drills.sh"
-USERDB_GATE="$ROOT_DIR/script/test_userdb_process_recovery.sh"
 DOGFOOD_VALIDATOR="$ROOT_DIR/scripts/dogfood_checkpoint.mjs"
 TEST_ROOT="$(/usr/bin/mktemp -d /tmp/agent-ime-freeze-contract.XXXXXX)"
 TEST_ROOT_INODE="$(/usr/bin/stat -f %i "$TEST_ROOT")"
@@ -39,7 +38,6 @@ require_literal() {
 /bin/bash -n "$JOINT_GATE"
 /bin/bash -n "$OFFICIAL_VALIDATOR"
 /bin/bash -n "$FAULT_GATE"
-/bin/bash -n "$USERDB_GATE"
 
 require_literal "$FREEZE_TOOL" 'renameatx_np(AT_FDCWD, source, AT_FDCWD, destination, UInt32(RENAME_EXCL))'
 require_literal "$FREEZE_TOOL" 'METADATA_BASENAME="FROZEN_ARTIFACTS"'
@@ -76,11 +74,7 @@ require_literal "$JOINT_GATE" 'chmod -R u+w "$RUNTIME_ROOT" || return 1'
 require_literal "$JOINT_GATE" 'remove_runtime_root || status=92'
 require_literal "$JOINT_GATE" 'RIME="$EXECUTION_BUNDLE/Contents/Resources/Rime"'
 require_literal "$JOINT_GATE" 'HOST="$EXECUTION_BUNDLE/Contents/MacOS/AgentInputMethod"'
-require_literal "$JOINT_GATE" '"$ROOT_DIR/script/test_userdb_process_recovery.sh" "$EXECUTION_BUNDLE" "$ARTIFACT_SHA"'
 require_literal "$JOINT_GATE" '"$ROOT_DIR/script/artifact_checksum.sh" "$EXECUTION_BUNDLE"'
-if /usr/bin/grep -Fq -- 'test_userdb_process_recovery.sh" "$BUNDLE"' "$JOINT_GATE"; then
-  fail "joint gate may not execute the UserDB process gate from the frozen source bundle"
-fi
 empty_publish_array_guards="$(/usr/bin/grep -Fc -- 'if (( ${#PUBLISH_TEMPS[@]} > 0 )); then' "$JOINT_GATE")"
 [[ "$empty_publish_array_guards" -eq 2 ]] || fail "joint gate cleanup must guard empty Bash 3.2 arrays"
 require_literal "$OFFICIAL_VALIDATOR" '\( -perm -0200 -o -perm -0020 -o -perm -0002 \)'
@@ -110,8 +104,6 @@ require_literal "$FAULT_GATE" 'error unknown protocol-version'
 require_literal "$FAULT_GATE" 'signed_stalled_backend_exit=5 configured_timeout_ms=250'
 require_literal "$FAULT_GATE" 'unsigned_cargo_test_supplement=PASS'
 require_literal "$FAULT_GATE" 'not_deployment_smoke=true'
-require_literal "$USERDB_GATE" '"team_identifier_sha256"'
-require_literal "$USERDB_GATE" '"leaf_authority_sha256"'
 require_literal "$DOGFOOD_VALIDATOR" '"team_identifier_sha256", "leaf_authority_sha256"'
 for forbidden_identity_literal in \
   "printf 'team_identifier=%s" \
@@ -120,7 +112,7 @@ for forbidden_identity_literal in \
   '"# team_identifier"' \
   '"# leaf_authority"'; do
   if /usr/bin/grep -Fq -- "$forbidden_identity_literal" \
-    "$FREEZE_TOOL" "$JOINT_GATE" "$OFFICIAL_VALIDATOR" "$FAULT_GATE" "$USERDB_GATE" "$DOGFOOD_VALIDATOR"; then
+    "$FREEZE_TOOL" "$JOINT_GATE" "$OFFICIAL_VALIDATOR" "$FAULT_GATE" "$DOGFOOD_VALIDATOR"; then
     fail "RC evidence producer or validator still persists a raw signing identity: $forbidden_identity_literal"
   fi
 done
@@ -128,7 +120,7 @@ if /usr/bin/grep -Fq -- '-perm -u+w' "$FREEZE_TOOL" "$OFFICIAL_VALIDATOR" "$FAUL
   fail "a formal frozen-artifact validator still checks only owner-write permission"
 fi
 if /usr/bin/grep -Eq -- '\$1 == key \{[^}]*exit|\$1 == "(TeamIdentifier|Authority)" \{[^}]*exit' \
-  "$FREEZE_TOOL" "$JOINT_GATE" "$OFFICIAL_VALIDATOR" "$FAULT_GATE" "$USERDB_GATE"; then
+  "$FREEZE_TOOL" "$JOINT_GATE" "$OFFICIAL_VALIDATOR" "$FAULT_GATE"; then
   fail "a codesign parser still exits before consuming verbose output under pipefail"
 fi
 if /usr/bin/grep -Fq -- 'build/native/release/Agent Input Method.inputmethod' "$JOINT_GATE"; then

@@ -51,7 +51,7 @@ private final class BehaviorVerifier {
                 let result = try type("ni", into: session)
                 try require(result.consumed && result.commitText.isEmpty, "letter-not-consumed")
                 try require(!result.markedText.isEmpty && !result.candidates.isEmpty, "no-real-candidates")
-                return "real-librime-composition"
+                return "real-zhixu-composition"
             }
 
         case "space-candidate":
@@ -87,7 +87,7 @@ private final class BehaviorVerifier {
                     "multi-segment-prefix-lost"
                 )
                 try require(committed.markedText.isEmpty, "multi-segment-did-not-clear")
-                return "real-librime-confirm-prefix-page-and-full-space-commit"
+                return "real-zhixu-confirm-prefix-page-and-full-space-commit"
             }
 
         case "space-no-candidate":
@@ -126,7 +126,7 @@ private final class BehaviorVerifier {
 
         case "page-contract":
             return try withSession(id) { session in
-                // The frozen librime first row is five candidates. Digit 6 is
+                // The frozen first row is five candidates. Digit 6 is
                 // reserved for the product's local second row and is covered by
                 // the learning-gesture fixture, not indexed into this array.
                 let digitKeyCodes: [UInt16] = [18, 19, 20, 21, 23]
@@ -164,7 +164,7 @@ private final class BehaviorVerifier {
                     session, keyCode: 116, characters: "", ignoringModifiers: ""
                 )
                 try require(pageUp.pageNumber == 0, "page-up-key-failed")
-                return "real-librime-five-slot-paging-and-digit-selection"
+                return "real-zhixu-five-slot-paging-and-digit-selection"
             }
 
         case "up-down":
@@ -181,7 +181,7 @@ private final class BehaviorVerifier {
                 )
                 try require(up.consumed && up.highlightedIndex == initial.highlightedIndex,
                             "up-highlight-mismatch")
-                return "real-librime-highlight-navigation"
+                return "real-zhixu-highlight-navigation"
             }
 
         case "left-right":
@@ -224,7 +224,7 @@ private final class BehaviorVerifier {
                 try require(result.markedCursorUTF8 < initial.markedCursorUTF8, "backspace-cursor-mismatch")
                 try require(!result.markedText.isEmpty && result.markedText != initial.markedText,
                             "backspace-preedit-mismatch")
-                return "real-librime-composition-delete"
+                return "real-zhixu-composition-delete"
             }
 
         case "enter":
@@ -263,7 +263,7 @@ private final class BehaviorVerifier {
                 _ = try type("an", into: session)
                 let raw = try process(session, kind: .enter)
                 try require(raw.commitText == "xi'an", "apostrophe-raw-input-mismatch")
-                return "real-librime-syllable-separator"
+                return "real-zhixu-syllable-separator"
             }
 
         case "punctuation":
@@ -619,7 +619,7 @@ private final class BehaviorVerifier {
             try type(query, into: session).candidates.map { $0.text }
         }
         try require(after == before, "security-changed-userdb-order")
-        return "real-librime-fail-closed-no-selection-learning"
+        return "real-zhixu-fail-closed-no-selection-learning"
     }
 
     private func verifyMultiSession() throws -> String {
@@ -641,7 +641,7 @@ private final class BehaviorVerifier {
         try require(secondProbe.markedText == secondComposition.markedText,
                     "second-session-state-mismatch")
         try require(firstProbe.markedText != secondProbe.markedText, "sessions-converged-unexpectedly")
-        return "two-real-librime-sessions-isolated"
+        return "two-real-zhixu-sessions-isolated"
     }
 
     private func verifyPerAppMode() throws -> String {
@@ -693,7 +693,7 @@ private final class BehaviorVerifier {
             userDirectory: userDirectory,
             appIdentifier: identifier
         ) else {
-            throw BehaviorHarnessError.failed("real-librime-session-create-failed")
+            throw BehaviorHarnessError.failed("real-zhixu-session-create-failed")
         }
         return session
     }
@@ -744,7 +744,7 @@ private final class BehaviorVerifier {
                 return (query, result)
             }
         }
-        throw BehaviorHarnessError.failed("no-candidate-real-librime-fixture-unavailable")
+        throw BehaviorHarnessError.failed("no-candidate-real-zhixu-fixture-unavailable")
     }
 
     private func keyEvent(
@@ -937,9 +937,9 @@ do {
         "artifact_checksum=\(artifactChecksum)",
         "artifact_version=\(ReleaseVersion.current)",
         "frozen_golden_sha256=\(sha256(goldenData))",
-        "execution_path=swift-coresession-c-abi-rust-state-librime",
+        "execution_path=swift-coresession-c-abi-rust-state-zhixu",
         "core_abi_version=\(aim_core_abi_version())",
-        "real_decoder=librime",
+        "real_decoder=zhixu",
         "frozen_cases=\(rows.count)",
         "semantic_cases_passed=\(passed)",
         "semantic_cases_failed=\(rows.count - passed)",

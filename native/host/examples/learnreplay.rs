@@ -1,6 +1,7 @@
 //! Learning replay (local only): the owner's cases in time order, each typed, scored
 //! (first candidate and first page) and then committed the way the owner did, so what
-//! Rime learns shapes the later cases. Use a fresh user directory per policy.
+//! the Zhixu learning store retains shapes the later cases. Use a fresh user
+//! directory per policy.
 //!
 //!   cargo run --release --example learnreplay -- <shared> <user dir> <cases.jsonl> <out.jsonl>
 //! with ZHIZI_ORT / ZHIZI_MODEL / ZHIZI_ITOS as for `eval`; ZHIZI_SINGLE_LEARN picks the policy.

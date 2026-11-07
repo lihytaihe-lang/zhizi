@@ -344,7 +344,7 @@ final class QualityRecorderTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
         try writeConfig(root: root, enabled: true, expiresAtMs: 20_000)
         try writeConsent(root: root)
-        let directories = try RealRimeProcessFixture.directories.get()
+        let directories = try RealZhixuProcessFixture.directories.get()
         let core = try XCTUnwrap(CoreSession(sharedDirectory: directories.shared,
             userDirectory: directories.user, appIdentifier: "test.i1.withdraw"))
         defer { core.close() }
@@ -590,7 +590,7 @@ final class QualityRecorderTests: XCTestCase {
         try writeConsent(root: root)
         let recorder = QualityRecorder(root: root, now: { 1_000 })
         recorder.waitForIdle()
-        let directories = try RealRimeProcessFixture.directories.get()
+        let directories = try RealZhixuProcessFixture.directories.get()
         let core = try XCTUnwrap(CoreSession(sharedDirectory: directories.shared,
             userDirectory: directories.user, appIdentifier: "com.agentinputlayer.c1-1-record"))
         defer { core.close() }
@@ -656,7 +656,7 @@ final class QualityRecorderTests: XCTestCase {
                 try writeConsent(root: root)
                 let recorder = QualityRecorder(root: root, now: { 1_000 })
                 recorder.waitForIdle()
-                let directories = try RealRimeProcessFixture.directories.get()
+                let directories = try RealZhixuProcessFixture.directories.get()
                 let core = try XCTUnwrap(CoreSession(sharedDirectory: directories.shared,
                     userDirectory: directories.user, appIdentifier: "sogou-editing-quality-\(reading)-\(text)"))
                 defer { core.close() }
@@ -723,7 +723,7 @@ final class QualityRecorderTests: XCTestCase {
             try writeConsent(root: root)
             let recorder = QualityRecorder(root: root, now: { 1_000 })
             recorder.waitForIdle()
-            let directories = try RealRimeProcessFixture.directories.get()
+            let directories = try RealZhixuProcessFixture.directories.get()
             let core = try XCTUnwrap(CoreSession(sharedDirectory: directories.shared,
                 userDirectory: directories.user, appIdentifier: "sogou-prefix-quality-\(combination)"))
             defer { core.close() }
@@ -823,7 +823,7 @@ final class QualityRecorderTests: XCTestCase {
         try writeConsent(root: root)
         let recorder = QualityRecorder(root: root, now: { 1_000 })
         recorder.waitForIdle()
-        let directories = try RealRimeProcessFixture.directories.get()
+        let directories = try RealZhixuProcessFixture.directories.get()
         let core = try XCTUnwrap(CoreSession(sharedDirectory: directories.shared,
             userDirectory: directories.user, appIdentifier: "com.agentinputlayer.c1-1-secondary"))
         defer { core.close() }

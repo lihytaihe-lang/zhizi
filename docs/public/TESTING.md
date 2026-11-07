@@ -7,8 +7,8 @@ Use the commands below from the checkout root to run source tests. These tests d
 - Rust: install the Rust toolchain and prepare the dependency cache before running Cargo. Keep `--offline --locked` enabled and use writable `CARGO_TARGET_DIR` directories as shown. Public manager tests require `--no-default-features`.
 - Frontend: install the project's npm dependencies, including TypeScript, before running `node scripts/run-frontend-tests.mjs`. Each fresh checkout needs its own dependencies.
 - Python: the sprite-sheet tests require numpy/Pillow. Alignment batching requires Python 3.10+ for `zip(strict=True)`; use Python 3.11 or newer for the command below.
-- Host: the command below builds only. Its default librime feature compiles a C shim and requires librime headers/libraries and a prepared `.build-deps` cache.
-- Swift: the `swift_tests` gate requires macOS/Xcode, the Swift package at `native/macos`, the current Rust core, librime dylib and `codesign`. The gate runs `swift build` and `swift test` with `--disable-automatic-resolution`; see `script/test_all.sh:82` for the full preparation sequence.
+- Host: the command below builds only. It needs a prepared `.build-deps` cache; librime is no longer part of the build.
+- Swift: the `swift_tests` gate requires macOS/Xcode, the Swift package at `native/macos`, the current Rust core and `codesign`. The gate runs `swift build` and `swift test` with `--disable-automatic-resolution`; see `script/test_all.sh:82` for the full preparation sequence.
 
 ```sh
 CARGO_TARGET_DIR=/tmp/zhizi-public-core cargo test --offline --locked --manifest-path native/core/Cargo.toml
@@ -71,7 +71,7 @@ Known limits: sparse cold-start performance samples can occasionally exceed the 
 
 | Gate | Category | Evidence and availability |
 | --- | --- | --- |
-| `bootstrap_native` | 4 | `script/test_all.sh:39; script/bootstrap_native.sh:257,296` — Downloads pinned librime and rime-pinyin-simp when cache absent; macOS bootstrap. |
+| `bootstrap_native` | 4 | `script/test_all.sh:39; script/bootstrap_native.sh:257,296` — Downloads the pinned rime-pinyin-simp dictionary and Rust licence files when the cache is absent; macOS bootstrap. |
 | `heavy_garble_words_check` | 1 | `script/test_all.sh:40; scripts/generate_heavy_garble_words.mjs:12-24` — Reads pinned .build-deps pinyin dictionary and vendored Rime dictionaries; requires prepared cache. |
 | `context_disambig_check` | 1 | `script/test_all.sh:41; scripts/check_context_disambig.mjs:9-13` — Reads third_party/context-disambig and quality/mined targets; omitted public inputs, privacy not established. |
 | `freeze_corpus_check` | 1 | `script/test_all.sh:42; scripts/freeze_candidate_corpus.mjs:8-12` — Reads base/fuzzy ground-truth and generalization corpus; omitted inputs, not automatically private. |
@@ -94,8 +94,8 @@ Known limits: sparse cold-start performance samples can occasionally exceed the 
 | `cargo_test_core` | 1 | `script/test_all.sh:73; native/core/agent-ime-core/src/state.rs:1638,2254` — Synthetic embedded corpus included; 218 passed, 6 ignored. |
 | `cargo_test_core_latency` | 1 | `script/test_all.sh:74; ` — Same synthetic core data, release latency benchmark; timing sensitive, no recorded run. |
 | `cargo_test_ipc` | 1 | `script/test_all.sh:75; native/ipc/Cargo.toml:1` — Rust IPC crate tests; cached Cargo dependencies required, not separately run. |
-| `cargo_build_core_release` | 1 | `script/test_all.sh:76; native/core/agent-ime-core/src/rime.rs:1` — Requires prepared librime cache/toolchain; synthetic input. Release build no recorded run. |
-| `swift_tests` | 2 | `script/test_all.sh:82; ` — Swift package, librime dylib, codesign; macOS/Xcode required. |
+| `cargo_build_core_release` | 1 | `script/test_all.sh:76` — Requires a prepared dependency cache and toolchain; synthetic input. Release build no recorded run. |
+| `swift_tests` | 2 | `script/test_all.sh:82; ` — Swift package, codesign; macOS/Xcode required. |
 | `build_release` | 2 | `script/test_all.sh:85; script/build_native.sh:33,47-60,100-101` — macOS bundle and public model optional; bootstrap may need network (4); omitted third_party assets currently block. |
 | `core_network_boundary` | 2 | `script/test_all.sh:90; script/check_core_network_boundary.sh:125-142` — Inspects built macOS bundle Mach-O and source; no actual networking. |
 | `artifact_checksum_equivalence` | 2 | `script/test_all.sh:97; script/test_artifact_checksum.sh:9` — Creates synthetic checksum fixtures but also requires a real macOS bundle. |

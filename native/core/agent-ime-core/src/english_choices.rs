@@ -1,5 +1,3 @@
-#![cfg_attr(not(any(test, feature = "librime")), allow(dead_code))]
-
 //! The English the owner picked for an input (`mini` -> mini over 迷你, `opencode` ->
 //! opencode). A deliberate pick of English remembers it, so the next time the same
 //! input leads with it; a later deliberate pick of Chinese for that input forgets it.
@@ -172,7 +170,6 @@ pub(crate) fn valid(input: &str, text: &str) -> bool {
         && text.to_ascii_lowercase().starts_with(input)
 }
 
-#[cfg_attr(not(feature = "librime"), allow(dead_code))]
 pub(crate) fn shared(user_dir: &Path) -> io::Result<Arc<Mutex<Store>>> {
     static STORES: OnceLock<Mutex<std::collections::HashMap<PathBuf, Weak<Mutex<Store>>>>> =
         OnceLock::new();

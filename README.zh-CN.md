@@ -4,7 +4,7 @@
 
 知字输入法是一个简体中文全拼输入法，运行在 macOS（Apple Silicon）与 Windows 11（x64）。输入核心完全离线；内置的「顺手·知字」小型上下文模型随包在本机运行，按光标前的文字给候选重新排序。
 
-当前版本 0.1.5，更新记录见 [CHANGELOG.md](CHANGELOG.md)。
+当前版本见 [VERSION](VERSION) 文件，更新记录见 [CHANGELOG.md](CHANGELOG.md)。GitHub 上发布的 macOS 版（v0.1.5）比本仓库的源码旧。
 
 ## 功能
 
@@ -14,7 +14,7 @@
 - 上下文排序：光标前的文字参与候选排序；Windows 按应用里的真实内容读取光标前文，代码类应用无前文时标点默认半角。
 - 中英混输：拼音串下直接给出英文候选；Shift 单击切换中英文（Windows 弹「中/英」提示、任务栏模式跟随、按应用记忆）。
 - `=` 键展开四行候选，方向键在格子里移动选择。
-- 用户词学习（UserDB）；Ctrl+Backspace 删除高亮候选的学习记录，Ctrl+Shift+Backspace 拉黑该候选。
+- 根据你自己的选择学习（只存在本机）；Ctrl+Backspace 删除高亮候选的学习记录，Ctrl+Shift+Backspace 拉黑该候选。
 - 候选框皮肤：静态与动画皮肤（支持动作序列、探出框外的装饰）、皮肤管理窗口；皮肤格式见 `native/resources/Skins/skin.schema.json`。
 - 词库分层：基础词库之上叠加日常新词层（按类别收录日常名称）、口语短语层与成语、IT、财经扩展层。专业词库包（诗词、CAD、工业、AI 与英文术语）不在本仓库内：它们在 zhizi-lexicon 词库仓库，下载与投稿词条都去那里。
 - 离线运行：输入法核心与模型不发起网络请求（发布门里有网络边界自动检查 `script/check_core_network_boundary.sh`）。
@@ -35,7 +35,7 @@
 ```
 
 - 需要 Apple Silicon macOS、Xcode 命令行工具、Rust 与 Node.js（版本以仓库锁定为准）。
-- 首次构建时 `script/bootstrap_native.sh` 会把 librime 1.16.1、rime-pinyin-simp 基础词库与 Rust 标准库许可文件下载并按 SHA-256 锁定到 `.build-deps/`（该目录不进 Git）；之后可离线构建。
+- 首次构建时 `script/bootstrap_native.sh` 会把 rime-pinyin-simp 基础词库与 Rust 标准库许可文件下载（已不再使用 librime）并按 SHA-256 锁定到 `.build-deps/`（该目录不进 Git）；之后可离线构建。
 - 上下文模型不在本仓库里。构建前可选择运行 `python3 scripts/context_model/fetch_public_model.py` 下载并编译模型（见[模型与词库](#模型与词库)）；不运行则得到无模型的构建，排序质量下降。
 - 产物是 `build/native/release/Agent Input Method.inputmethod`。装进系统属于另外的发布验证步骤，编译通过本身不算一次发布。
 
@@ -45,12 +45,12 @@
 powershell -NoProfile -ExecutionPolicy Bypass -File script\build_windows.ps1 -Package
 ```
 
-- 需要 Windows 11 x64 与 MSVC 工具链；librime、ONNX Runtime、VC 运行库、Inno Setup 等依赖的准备方式与目录布局，见脚本本身。
+- 需要 Windows 11 x64 与 MSVC 工具链。注意：`script/build_windows.ps1` 仍针对更早的 librime 引擎，没有按当前核心更新和测试；已发布的 Windows 安装包早于这次引擎更换。请把 Windows 构建当作迁移中，而不是可用的构建说明。
 
 ## 模型与词库
 
 - 模型：顺手·知字（shunshou-zhizi-30m），候选重排用的小型上下文模型，随输入法分发，Mac 经 Core ML、Windows 经 ONNX Runtime 在本机执行。模型卡（训练数据、评测、记忆抽取检查）与许可（CC BY-SA 4.0）见：<https://huggingface.co/DabbleCove/shunshou-zhizi-30m>
-- 词库：对外发布的词库在独立的 zhizi-lexicon 仓库维护（与本仓库同一账号下）。本仓库内的 `native/resources/Rime/` 是随输入法打包的派生词库，由生成脚本产出，请勿手改。
+- 词库：对外发布的词库在独立的 zhizi-lexicon 仓库维护（与本仓库同一账号下）。本仓库内的 `native/resources/Rime/`（目录名是历史遗留，已不再使用 librime）是随输入法打包的派生词库，由生成脚本产出，请勿手改。
 
 ### 从源码构建时如何拿到模型（macOS）
 
@@ -70,7 +70,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File script\build_windows.ps1 -Pa
 | `native/ipc/` | 进程间通信组件 |
 | `native/macos/` | macOS 输入法（Swift Package：InputMethodKit 宿主、候选窗、测试） |
 | `native/windows/` | Windows TSF 外壳、加载器与 Inno Setup 安装器 |
-| `native/resources/` | 随包资源：Rime 词库与皮肤（派生/冻结文件） |
+| `native/resources/` | 随包资源：词库文件（沿用 Rime 的 `.dict.yaml` 格式）与皮肤（派生/冻结文件） |
 | `script/` | bash 构建安装与回归入口（`build_native.sh`、`build_windows.ps1`、`test_all.sh`） |
 | `scripts/` | Node/Python 生成器与校验器 |
 | `src/`、`src-tauri/` | 管理台（Tauri 2 + React + TypeScript），提供皮肤管理等设置界面 |

@@ -13,23 +13,14 @@ if (bundleArgumentIndex >= 0 && (!bundle || !path.isAbsolute(bundle))) {
 const manifestPath = path.join(root, "docs/current/licenses/NATIVE_LICENSE_ASSETS.json");
 const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
 const expectedComponents = [
-  "Boost",
-  "Darts-clone",
-  "LevelDB",
-  "OpenCC",
-  "RapidJSON",
   "Rust standard library Apache license",
   "Rust standard library MIT license",
   "Rust standard library copyright notices",
-  "glog",
-  "librime",
   "jieba dictionary",
   "pypinyin phrase dictionary",
-  "marisa-trie",
   "rime-pinyin-simp",
   "rime-pinyin-simp AUTHORS",
   "THUOCL lexicons (chengyu, IT, caijing)",
-  "yaml-cpp",
 ].sort();
 
 function assert(condition, message) {

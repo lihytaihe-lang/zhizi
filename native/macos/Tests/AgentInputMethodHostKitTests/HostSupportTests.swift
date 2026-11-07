@@ -198,239 +198,6 @@ final class HostSupportTests: XCTestCase {
         XCTAssertNil(EventMapper().map(mouse))
     }
 
-    func testIncompatibleUserDBIsQuarantinedAndLastValidBackupRestored() throws {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("agent-ime-userdb-manager-\(UUID().uuidString)", isDirectory: true)
-        defer { try? FileManager.default.removeItem(at: root) }
-        let database = root.appendingPathComponent("Rime/pinyin_simp.userdb", isDirectory: true)
-        try FileManager.default.createDirectory(at: database, withIntermediateDirectories: true)
-        try Data("MANIFEST-000001\n".utf8).write(to: database.appendingPathComponent("CURRENT"))
-        try Data("fixture".utf8).write(to: database.appendingPathComponent("MANIFEST-000001"))
-        let initial = try UserDBManager.prepare(root: root)
-        XCTAssertTrue(initial.backedUp)
-        let rootMode = try FileManager.default.attributesOfItem(atPath: root.path)[.posixPermissions] as? NSNumber
-        let rimeMode = try FileManager.default.attributesOfItem(atPath: root.appendingPathComponent("Rime").path)[.posixPermissions] as? NSNumber
-        XCTAssertEqual(rootMode?.intValue, 0o700)
-        XCTAssertEqual(rimeMode?.intValue, 0o700)
-        try Data("../invalid\n".utf8).write(to: database.appendingPathComponent("CURRENT"), options: .atomic)
-        let recovered = try UserDBManager.prepare(root: root)
-        XCTAssertTrue(recovered.quarantined)
-        XCTAssertTrue(recovered.restored)
-        XCTAssertTrue(UserDBManager.isStructurallyValid(database))
-        let quarantine = root.appendingPathComponent("IncompatibleUserDB")
-        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: quarantine.path).count, 1)
-    }
-
-    func testMissingUserDBAfterInterruptedQuarantineRestoresNewestValidatedBackup() throws {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("agent-ime-userdb-interrupted-\(UUID().uuidString)", isDirectory: true)
-        defer { try? FileManager.default.removeItem(at: root) }
-        let database = root.appendingPathComponent("Rime/pinyin_simp.userdb", isDirectory: true)
-        try writeValidUserDB(database, marker: "pre-interruption-database")
-        let initial = try UserDBManager.prepare(root: root)
-        XCTAssertTrue(initial.backedUp)
-
-        // Model a process exit immediately after quarantine move and before
-        // the restore stage is copied into the live database path.
-        let interruptedQuarantine = root.appendingPathComponent(
-            "IncompatibleUserDB/interrupted/pinyin_simp.userdb", isDirectory: true
-        )
-        try FileManager.default.createDirectory(
-            at: interruptedQuarantine.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        try FileManager.default.moveItem(at: database, to: interruptedQuarantine)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: database.path))
-
-        let recovered = try UserDBManager.prepare(root: root)
-        XCTAssertFalse(recovered.quarantined)
-        XCTAssertTrue(recovered.restored)
-        XCTAssertTrue(recovered.backedUp)
-        XCTAssertTrue(UserDBManager.isStructurallyValid(database))
-        XCTAssertEqual(
-            try String(contentsOf: database.appendingPathComponent("TEST_MARKER"), encoding: .utf8),
-            "pre-interruption-database"
-        )
-        XCTAssertEqual(
-            try String(
-                contentsOf: interruptedQuarantine.appendingPathComponent("TEST_MARKER"),
-                encoding: .utf8
-            ),
-            "pre-interruption-database"
-        )
-    }
-
-    func testUserDBManagerRejectsDatabaseSymlinkWithoutMovingTarget() throws {
-        let base = FileManager.default.temporaryDirectory
-            .appendingPathComponent("agent-ime-userdb-symlink-\(UUID().uuidString)", isDirectory: true)
-        defer { try? FileManager.default.removeItem(at: base) }
-        let root = base.appendingPathComponent("root", isDirectory: true)
-        let rime = root.appendingPathComponent("Rime", isDirectory: true)
-        let external = base.appendingPathComponent("external.userdb", isDirectory: true)
-        try FileManager.default.createDirectory(at: rime, withIntermediateDirectories: true)
-        try writeValidUserDB(external, marker: "external-database")
-        let externalMarker = external.appendingPathComponent("TEST_MARKER")
-        try FileManager.default.setAttributes([.posixPermissions: 0o750], ofItemAtPath: external.path)
-        try FileManager.default.setAttributes([.posixPermissions: 0o640], ofItemAtPath: externalMarker.path)
-        let externalModeBefore = try posixMode(external)
-        let markerModeBefore = try posixMode(externalMarker)
-        let database = rime.appendingPathComponent("pinyin_simp.userdb", isDirectory: true)
-        try FileManager.default.createSymbolicLink(at: database, withDestinationURL: external)
-
-        XCTAssertThrowsError(try UserDBManager.prepare(root: root))
-        XCTAssertTrue(try database.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink == true)
-        XCTAssertEqual(
-            try String(contentsOf: externalMarker, encoding: .utf8),
-            "external-database"
-        )
-        XCTAssertEqual(try posixMode(external), externalModeBefore)
-        XCTAssertEqual(try posixMode(externalMarker), markerModeBefore)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("IncompatibleUserDB").path))
-    }
-
-    func testUserDBManagerRejectsCurrentSymlinkWithoutQuarantiningDatabase() throws {
-        let base = FileManager.default.temporaryDirectory
-            .appendingPathComponent("agent-ime-userdb-current-link-\(UUID().uuidString)", isDirectory: true)
-        defer { try? FileManager.default.removeItem(at: base) }
-        let root = base.appendingPathComponent("root", isDirectory: true)
-        let database = root.appendingPathComponent("Rime/pinyin_simp.userdb", isDirectory: true)
-        try FileManager.default.createDirectory(at: database, withIntermediateDirectories: true)
-        try Data("fixture".utf8).write(to: database.appendingPathComponent("MANIFEST-000001"))
-        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        let externalCurrent = base.appendingPathComponent("external-CURRENT")
-        try Data("MANIFEST-000001\n".utf8).write(to: externalCurrent)
-        try FileManager.default.setAttributes([.posixPermissions: 0o640], ofItemAtPath: externalCurrent.path)
-        let externalModeBefore = try posixMode(externalCurrent)
-        try FileManager.default.createSymbolicLink(
-            at: database.appendingPathComponent("CURRENT"), withDestinationURL: externalCurrent
-        )
-
-        XCTAssertThrowsError(try UserDBManager.prepare(root: root))
-        XCTAssertTrue(FileManager.default.fileExists(atPath: database.appendingPathComponent("MANIFEST-000001").path))
-        XCTAssertEqual(try String(contentsOf: externalCurrent, encoding: .utf8), "MANIFEST-000001\n")
-        XCTAssertEqual(try posixMode(externalCurrent), externalModeBefore)
-    }
-
-    func testUserDBManagerRejectsSymlinkedBackupBeforeMutatingCurrentDatabase() throws {
-        let base = FileManager.default.temporaryDirectory
-            .appendingPathComponent("agent-ime-userdb-backup-link-\(UUID().uuidString)", isDirectory: true)
-        defer { try? FileManager.default.removeItem(at: base) }
-        let root = base.appendingPathComponent("root", isDirectory: true)
-        let database = root.appendingPathComponent("Rime/pinyin_simp.userdb", isDirectory: true)
-        let backupRoot = root.appendingPathComponent("UserDBBackups", isDirectory: true)
-        let externalBackup = base.appendingPathComponent("external-backup", isDirectory: true)
-        try writeValidUserDB(database, marker: "current-database")
-        try writeValidUserDB(
-            externalBackup.appendingPathComponent("pinyin_simp.userdb", isDirectory: true),
-            marker: "external-backup"
-        )
-        let externalMarker = externalBackup.appendingPathComponent("pinyin_simp.userdb/TEST_MARKER")
-        try FileManager.default.setAttributes([.posixPermissions: 0o640], ofItemAtPath: externalMarker.path)
-        let externalModeBefore = try posixMode(externalMarker)
-        try FileManager.default.createDirectory(at: backupRoot, withIntermediateDirectories: true)
-        try FileManager.default.createSymbolicLink(
-            at: backupRoot.appendingPathComponent("linked-backup"),
-            withDestinationURL: externalBackup
-        )
-
-        XCTAssertThrowsError(try UserDBManager.prepare(root: root))
-        XCTAssertEqual(
-            try String(contentsOf: database.appendingPathComponent("TEST_MARKER"), encoding: .utf8),
-            "current-database"
-        )
-        XCTAssertEqual(
-            try String(
-                contentsOf: externalMarker,
-                encoding: .utf8
-            ),
-            "external-backup"
-        )
-        XCTAssertEqual(try posixMode(externalMarker), externalModeBefore)
-    }
-
-    func testUserDBManagerRejectsHardLinkedCurrentAndManifestWithoutMutatingExternalFiles() throws {
-        let fixtures: [(leaf: String, contents: String)] = [
-            ("CURRENT", "MANIFEST-000001\n"),
-            ("MANIFEST-000001", "fixture"),
-            ("000001.ldb", "leveldb-table-fixture"),
-        ]
-
-        for fixture in fixtures {
-            let base = FileManager.default.temporaryDirectory
-                .appendingPathComponent("agent-ime-userdb-hardlink-\(fixture.leaf)-\(UUID().uuidString)", isDirectory: true)
-            defer { try? FileManager.default.removeItem(at: base) }
-            let root = base.appendingPathComponent("root", isDirectory: true)
-            let database = root.appendingPathComponent("Rime/pinyin_simp.userdb", isDirectory: true)
-            let external = base.appendingPathComponent("external-\(fixture.leaf)")
-            try FileManager.default.createDirectory(at: database, withIntermediateDirectories: true)
-            try Data(fixture.contents.utf8).write(to: external)
-            try FileManager.default.setAttributes([.posixPermissions: 0o640], ofItemAtPath: external.path)
-            try FileManager.default.linkItem(at: external, to: database.appendingPathComponent(fixture.leaf))
-
-            if fixture.leaf != "CURRENT" {
-                try Data("MANIFEST-000001\n".utf8).write(to: database.appendingPathComponent("CURRENT"))
-            }
-            if fixture.leaf != "MANIFEST-000001" {
-                try Data("fixture".utf8).write(to: database.appendingPathComponent("MANIFEST-000001"))
-            }
-
-            let contentBefore = try Data(contentsOf: external)
-            let modeBefore = try XCTUnwrap(
-                FileManager.default.attributesOfItem(atPath: external.path)[.posixPermissions] as? NSNumber
-            )
-            let linkCountBefore = try XCTUnwrap(
-                FileManager.default.attributesOfItem(atPath: external.path)[.referenceCount] as? NSNumber
-            )
-            XCTAssertEqual(linkCountBefore.uint64Value, 2)
-
-            XCTAssertThrowsError(try UserDBManager.prepare(root: root))
-            XCTAssertEqual(try Data(contentsOf: external), contentBefore)
-            let modeAfter = try XCTUnwrap(
-                FileManager.default.attributesOfItem(atPath: external.path)[.posixPermissions] as? NSNumber
-            )
-            XCTAssertEqual(modeAfter.uint16Value, modeBefore.uint16Value)
-            let linkCountAfter = try XCTUnwrap(
-                FileManager.default.attributesOfItem(atPath: external.path)[.referenceCount] as? NSNumber
-            )
-            XCTAssertEqual(linkCountAfter.uint64Value, linkCountBefore.uint64Value)
-            XCTAssertTrue(FileManager.default.fileExists(atPath: database.path))
-            XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("IncompatibleUserDB").path))
-        }
-    }
-
-    func testUserDBManagerRejectsAnyHardLinkedBackupFileBeforeMutatingCurrentDatabase() throws {
-        let base = FileManager.default.temporaryDirectory
-            .appendingPathComponent("agent-ime-userdb-backup-hardlink-\(UUID().uuidString)", isDirectory: true)
-        defer { try? FileManager.default.removeItem(at: base) }
-        let root = base.appendingPathComponent("root", isDirectory: true)
-        let current = root.appendingPathComponent("Rime/pinyin_simp.userdb", isDirectory: true)
-        let backup = root.appendingPathComponent(
-            "UserDBBackups/fixture/pinyin_simp.userdb", isDirectory: true
-        )
-        try writeValidUserDB(current, marker: "current-database")
-        try writeValidUserDB(backup, marker: "backup-database")
-
-        let external = base.appendingPathComponent("external-leveldb-table")
-        try Data("external-backup-table".utf8).write(to: external)
-        try FileManager.default.setAttributes([.posixPermissions: 0o640], ofItemAtPath: external.path)
-        let linked = backup.appendingPathComponent("000001.ldb")
-        try FileManager.default.linkItem(at: external, to: linked)
-        let externalContentsBefore = try Data(contentsOf: external)
-        let externalModeBefore = try posixMode(external)
-        let externalLinksBefore = try referenceCount(external)
-
-        XCTAssertThrowsError(try UserDBManager.prepare(root: root))
-        XCTAssertEqual(
-            try String(contentsOf: current.appendingPathComponent("TEST_MARKER"), encoding: .utf8),
-            "current-database"
-        )
-        XCTAssertEqual(try Data(contentsOf: external), externalContentsBefore)
-        XCTAssertEqual(try posixMode(external), externalModeBefore)
-        XCTAssertEqual(try referenceCount(external), externalLinksBefore)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: linked.path))
-        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("IncompatibleUserDB").path))
-    }
-
     func testUserDBManagerRejectsAncestorSymlinkWithoutTouchingExternalTree() throws {
         let base = URL(fileURLWithPath: "/private/tmp", isDirectory: true)
             .appendingPathComponent("agent-ime-userdb-ancestor-link-\(UUID().uuidString)", isDirectory: true)
@@ -456,33 +223,6 @@ final class HostSupportTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: externalSentinel), Data("must-not-change".utf8))
         XCTAssertEqual(try posixMode(externalParent), parentMode)
         XCTAssertEqual(try posixMode(externalSentinel), sentinelMode)
-    }
-
-    func testUserDBManagerRejectsOversizedSparseFileBeforeBackupOrQuarantine() throws {
-        let base = URL(fileURLWithPath: "/private/tmp", isDirectory: true)
-            .appendingPathComponent("agent-ime-userdb-oversize-\(UUID().uuidString)", isDirectory: true)
-        defer { try? FileManager.default.removeItem(at: base) }
-        let root = base.appendingPathComponent("root", isDirectory: true)
-        let database = root.appendingPathComponent("Rime/pinyin_simp.userdb", isDirectory: true)
-        try writeValidUserDB(database, marker: "current-database")
-        let sparse = database.appendingPathComponent("oversized.ldb")
-        XCTAssertTrue(FileManager.default.createFile(atPath: sparse.path, contents: Data()))
-        let handle = try FileHandle(forWritingTo: sparse)
-        try handle.truncate(
-            atOffset: UInt64(LocalSecureTreeLimits.userDB.maximumSingleFileBytes + 1)
-        )
-        try handle.close()
-
-        XCTAssertThrowsError(try UserDBManager.prepare(root: root))
-        XCTAssertEqual(
-            try String(contentsOf: database.appendingPathComponent("TEST_MARKER"), encoding: .utf8),
-            "current-database"
-        )
-        let backups = root.appendingPathComponent("UserDBBackups", isDirectory: true)
-        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: backups.path), [])
-        XCTAssertFalse(FileManager.default.fileExists(
-            atPath: root.appendingPathComponent("IncompatibleUserDB").path
-        ))
     }
 
     func testUserDBDescriptorOperationsFailClosedAfterAncestorReplacement() throws {
@@ -583,42 +323,35 @@ final class HostSupportTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.path))
     }
 
-    func testRuntimeStorageUsesPrivateEphemeralFallbackForRejectedPrimaryUserDB() throws {
-        for fixture in ["database-symlink", "current-hardlink"] {
+    func testRuntimeStorageUsesPrivateEphemeralFallbackForRejectedPrimaryUserDirectory() throws {
+        for fixture in ["rime-symlink", "rime-regular-file"] {
             let base = FileManager.default.temporaryDirectory.appendingPathComponent(
                 "agent-ime-runtime-storage-\(fixture)-\(UUID().uuidString)", isDirectory: true
             )
             defer { try? FileManager.default.removeItem(at: base) }
             let primary = base.appendingPathComponent("primary", isDirectory: true)
-            let database = primary.appendingPathComponent("Rime/pinyin_simp.userdb", isDirectory: true)
             let fallbackParent = base.appendingPathComponent("fallback", isDirectory: true)
-            try FileManager.default.createDirectory(
-                at: primary.appendingPathComponent("Rime", isDirectory: true),
-                withIntermediateDirectories: true
-            )
+            try FileManager.default.createDirectory(at: primary, withIntermediateDirectories: true)
             try FileManager.default.createDirectory(at: fallbackParent, withIntermediateDirectories: true)
             try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: fallbackParent.path)
 
-            let external: URL
-            if fixture == "database-symlink" {
-                external = base.appendingPathComponent("external.userdb", isDirectory: true)
-                try writeValidUserDB(external, marker: "external-userdb")
-                try FileManager.default.createSymbolicLink(at: database, withDestinationURL: external)
+            // Both fixtures make the primary's Rime user directory unusable: a
+            // symlink escaping the tree (the core must never follow it) or a
+            // non-directory occupying the name.
+            let sentinel: URL
+            if fixture == "rime-symlink" {
+                let external = base.appendingPathComponent("external-user-tree", isDirectory: true)
+                try FileManager.default.createDirectory(at: external, withIntermediateDirectories: true)
+                sentinel = external.appendingPathComponent("TEST_MARKER")
+                try Data("external-user-tree".utf8).write(to: sentinel)
+                try FileManager.default.createSymbolicLink(
+                    at: primary.appendingPathComponent("Rime", isDirectory: true),
+                    withDestinationURL: external
+                )
             } else {
-                try FileManager.default.createDirectory(at: database, withIntermediateDirectories: true)
-                external = base.appendingPathComponent("external-CURRENT")
-                try Data("MANIFEST-000001\n".utf8).write(to: external)
-                try FileManager.default.linkItem(
-                    at: external,
-                    to: database.appendingPathComponent("CURRENT")
-                )
-                try Data("fixture".utf8).write(
-                    to: database.appendingPathComponent("MANIFEST-000001")
-                )
+                sentinel = primary.appendingPathComponent("Rime")
+                try Data("not-a-directory".utf8).write(to: sentinel)
             }
-            let sentinel = fixture == "database-symlink"
-                ? external.appendingPathComponent("TEST_MARKER")
-                : external
             try FileManager.default.setAttributes([.posixPermissions: 0o640], ofItemAtPath: sentinel.path)
             let sentinelData = try Data(contentsOf: sentinel)
             let sentinelMode = try posixMode(sentinel)
@@ -629,7 +362,7 @@ final class HostSupportTests: XCTestCase {
                 fallbackParent: fallbackParent
             )
             XCTAssertTrue(lease.location.degraded)
-            XCTAssertNotEqual(lease.location.userDirectory.standardizedFileURL, database.deletingLastPathComponent())
+            XCTAssertNotEqual(lease.location.userDirectory.standardizedFileURL, primary.appendingPathComponent("Rime"))
             let canonicalFallback = try LocalSecureDirectory.canonicalAbsoluteURL(fallbackParent)
             XCTAssertTrue(lease.location.rootDirectory.path.hasPrefix(canonicalFallback.path + "/"))
             XCTAssertEqual(try posixMode(lease.location.rootDirectory), 0o700)
@@ -653,17 +386,8 @@ final class HostSupportTests: XCTestCase {
         )
         defer { try? FileManager.default.removeItem(at: base) }
         let primary = base.appendingPathComponent("primary", isDirectory: true)
-        let external = base.appendingPathComponent("external.userdb", isDirectory: true)
         let fallbackParent = base.appendingPathComponent("fallback", isDirectory: true)
-        try FileManager.default.createDirectory(
-            at: primary.appendingPathComponent("Rime", isDirectory: true),
-            withIntermediateDirectories: true
-        )
-        try writeValidUserDB(external, marker: "external-userdb")
-        try FileManager.default.createSymbolicLink(
-            at: primary.appendingPathComponent("Rime/pinyin_simp.userdb", isDirectory: true),
-            withDestinationURL: external
-        )
+        _ = try rejectPrimaryThroughSymlinkedRime(primary: primary, base: base, marker: "external-user-tree")
         try FileManager.default.createDirectory(at: fallbackParent, withIntermediateDirectories: true)
         let lease = try RuntimeStorageLease.resolve(
             primaryRoot: primary,
@@ -689,14 +413,7 @@ final class HostSupportTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: base) }
         let primary = base.appendingPathComponent("primary", isDirectory: true)
         let fallbackParent = base.appendingPathComponent("fallback", isDirectory: true)
-        let rejectedTarget = base.appendingPathComponent("rejected.userdb", isDirectory: true)
-        let rejectedDatabase = primary.appendingPathComponent("Rime/pinyin_simp.userdb", isDirectory: true)
-        try FileManager.default.createDirectory(
-            at: rejectedDatabase.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        try writeValidUserDB(rejectedTarget, marker: "rejected")
-        try FileManager.default.createSymbolicLink(at: rejectedDatabase, withDestinationURL: rejectedTarget)
+        _ = try rejectPrimaryThroughSymlinkedRime(primary: primary, base: base, marker: "rejected")
         try FileManager.default.createDirectory(at: fallbackParent, withIntermediateDirectories: true)
 
         let lease = try RuntimeStorageLease.resolve(
@@ -728,19 +445,7 @@ final class HostSupportTests: XCTestCase {
             defer { try? FileManager.default.removeItem(at: base) }
             let primary = base.appendingPathComponent("primary", isDirectory: true)
             let fallbackParent = base.appendingPathComponent("fallback", isDirectory: true)
-            let rejectedTarget = base.appendingPathComponent("rejected.userdb", isDirectory: true)
-            let rejectedDatabase = primary.appendingPathComponent(
-                "Rime/pinyin_simp.userdb", isDirectory: true
-            )
-            try FileManager.default.createDirectory(
-                at: rejectedDatabase.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
-            try writeValidUserDB(rejectedTarget, marker: "rejected")
-            try FileManager.default.createSymbolicLink(
-                at: rejectedDatabase,
-                withDestinationURL: rejectedTarget
-            )
+            _ = try rejectPrimaryThroughSymlinkedRime(primary: primary, base: base, marker: "rejected")
             try FileManager.default.createDirectory(at: fallbackParent, withIntermediateDirectories: true)
             let lease = try RuntimeStorageLease.resolve(
                 primaryRoot: primary,
@@ -777,20 +482,8 @@ final class HostSupportTests: XCTestCase {
             )
             defer { try? FileManager.default.removeItem(at: base) }
             let primary = base.appendingPathComponent("primary", isDirectory: true)
-            let rejectedDatabase = primary.appendingPathComponent(
-                "Rime/pinyin_simp.userdb", isDirectory: true
-            )
-            let rejectedTarget = base.appendingPathComponent("rejected.userdb", isDirectory: true)
             let fallbackParent = base.appendingPathComponent("fallback", isDirectory: true)
-            try FileManager.default.createDirectory(
-                at: rejectedDatabase.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
-            try writeValidUserDB(rejectedTarget, marker: "rejected-target")
-            try FileManager.default.createSymbolicLink(
-                at: rejectedDatabase,
-                withDestinationURL: rejectedTarget
-            )
+            _ = try rejectPrimaryThroughSymlinkedRime(primary: primary, base: base, marker: "rejected-target")
             try FileManager.default.createDirectory(at: fallbackParent, withIntermediateDirectories: true)
             let lease = try RuntimeStorageLease.resolve(
                 primaryRoot: primary,
@@ -841,11 +534,21 @@ final class HostSupportTests: XCTestCase {
         }
     }
 
-    private func writeValidUserDB(_ database: URL, marker: String) throws {
-        try FileManager.default.createDirectory(at: database, withIntermediateDirectories: true)
-        try Data("MANIFEST-000001\n".utf8).write(to: database.appendingPathComponent("CURRENT"))
-        try Data("fixture".utf8).write(to: database.appendingPathComponent("MANIFEST-000001"))
-        try Data(marker.utf8).write(to: database.appendingPathComponent("TEST_MARKER"))
+    /// Builds the rejected-primary fixture used by the runtime-storage tests:
+    /// `primary/Rime` becomes a symlink to an external tree carrying a marker
+    /// sentinel, so the lease must reject the primary without touching the
+    /// external tree. Returns the sentinel URL.
+    private func rejectPrimaryThroughSymlinkedRime(primary: URL, base: URL, marker: String) throws -> URL {
+        try FileManager.default.createDirectory(at: primary, withIntermediateDirectories: true)
+        let external = base.appendingPathComponent("external-user-tree", isDirectory: true)
+        try FileManager.default.createDirectory(at: external, withIntermediateDirectories: true)
+        let sentinel = external.appendingPathComponent("TEST_MARKER")
+        try Data(marker.utf8).write(to: sentinel)
+        try FileManager.default.createSymbolicLink(
+            at: primary.appendingPathComponent("Rime", isDirectory: true),
+            withDestinationURL: external
+        )
+        return sentinel
     }
 
     private func posixMode(_ url: URL) throws -> UInt16 {
@@ -1543,7 +1246,7 @@ final class HostSupportTests: XCTestCase {
     }
 
     func testZanWithFuzzyGroupsKeepsExactCommonCharactersOnFirstPage() throws {
-        let directories = try RealRimeProcessFixture.directories.get()
+        let directories = try RealZhixuProcessFixture.directories.get()
         let session = try XCTUnwrap(CoreSession(
             sharedDirectory: directories.shared,
             userDirectory: directories.user,
@@ -1576,7 +1279,7 @@ final class HostSupportTests: XCTestCase {
     }
 
     func testRealRimeLongReadingPrioritizesFirstSyllableSinglesOnlyFromThirdPage() throws {
-        let directories = try RealRimeProcessFixture.directories.get()
+        let directories = try RealZhixuProcessFixture.directories.get()
         let session = try XCTUnwrap(CoreSession(
             sharedDirectory: directories.shared,
             userDirectory: directories.user,
@@ -1613,12 +1316,12 @@ final class HostSupportTests: XCTestCase {
         XCTAssertTrue(committed.consumed)
         XCTAssertTrue(
             committed.commitText == page2.candidates[0].text || !committed.markedText.isEmpty,
-            "single-character selection must either commit or confirm a real librime segment"
+            "single-character selection must either commit or confirm a real decoder segment"
         )
     }
 
     func testPart05FuzzyKeepsBaseEraseRulesAndRealZToZhMatches() throws {
-        let directories = try RealRimeProcessFixture.directories.get()
+        let directories = try RealZhixuProcessFixture.directories.get()
         let session = try XCTUnwrap(CoreSession(
             sharedDirectory: directories.shared,
             userDirectory: directories.user,
@@ -1685,7 +1388,7 @@ final class HostSupportTests: XCTestCase {
     func testCoreABIVersionAndSessionLifecycle() throws {
         XCTAssertEqual(aim_core_abi_version(), 6)
         XCTAssertEqual(aim_live_session_count(), 0)
-        let directories = try RealRimeProcessFixture.directories.get()
+        let directories = try RealZhixuProcessFixture.directories.get()
         let session = try XCTUnwrap(CoreSession(
             sharedDirectory: directories.shared,
             userDirectory: directories.user,
@@ -1698,7 +1401,7 @@ final class HostSupportTests: XCTestCase {
     }
 
     func testContextProfileConsumesHostPrecedingScriptWithoutPersistingSecureText() throws {
-        let directories = try RealRimeProcessFixture.directories.get()
+        let directories = try RealZhixuProcessFixture.directories.get()
         let session = try XCTUnwrap(CoreSession(
             sharedDirectory: directories.shared,
             userDirectory: directories.user,
@@ -1727,7 +1430,7 @@ final class HostSupportTests: XCTestCase {
 
     @MainActor
     func testControllerCapturesApprovedThirtyTwoUnitHostContextForCompositionAndPunctuation() throws {
-        let directories = try RealRimeProcessFixture.directories.get()
+        let directories = try RealZhixuProcessFixture.directories.get()
         let chinese = try XCTUnwrap(InputControllerPerformanceSession(
             sharedDirectory: directories.shared,
             userDirectory: directories.user,
@@ -1768,7 +1471,7 @@ final class HostSupportTests: XCTestCase {
 
     @MainActor
     func testAppActivationWaitsForCurrentCompositionBoundary() throws {
-        let directories = try RealRimeProcessFixture.directories.get()
+        let directories = try RealZhixuProcessFixture.directories.get()
         let session = try XCTUnwrap(InputControllerPerformanceSession(
             sharedDirectory: directories.shared,
             userDirectory: directories.user,

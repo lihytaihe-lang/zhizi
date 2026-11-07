@@ -3,7 +3,7 @@
   python3 scripts/eval/lattice_upper_bound.py <Rime resources dir> <traced eval output.jsonl> [dump.tsv]
 
 A miss is "never produced" when the target is not on the first page, not among the whole-reading
-channel's alternatives (`alternatives`) and not on Rime's next pages (`onNextPages`); the output
+channel's alternatives (`alternatives`) and not on the decoder's next pages (`onNextPages`); the output
 must come from a ZHIZI_EVAL_TRACE=1 run. For each such miss the target is cut into pieces that are
 dictionary entries (words or single characters); each piece must match a slice of the typed keys,
 syllable by syllable, where a syllable may be typed whole or as any prefix of it (hais = 还是).

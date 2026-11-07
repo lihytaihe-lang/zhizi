@@ -556,7 +556,10 @@ validate_bundle() {
   # the current VERSION, or the 0.3.0 internal version line that earlier installs and backups carry (rollback must still validate)
   [[ "$version" == "$(tr -d '[:space:]' < "$ROOT_DIR/VERSION")" || "$version" == "0.3.0" ]] \
     || { echo "unexpected version: $version" >&2; return 2; }
-  for executable in AgentInputMethod AgentIMEInputSourceCtl AgentIMEPersonalReplayHarness AgentIMEUserDBCtl; do
+  # Older installed and backup bundles additionally carry AgentIMEUserDBCtl
+  # and the librime dylib; validate_bundle only requires what every supported
+  # bundle generation ships, so rollback of a pre-zhixu bundle keeps working.
+  for executable in AgentInputMethod AgentIMEInputSourceCtl AgentIMEPersonalReplayHarness; do
     [[ -f "$bundle/Contents/MacOS/$executable" && -x "$bundle/Contents/MacOS/$executable" ]] \
       || { echo "missing executable input method payload: $executable" >&2; return 2; }
   done

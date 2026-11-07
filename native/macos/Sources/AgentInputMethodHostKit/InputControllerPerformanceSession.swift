@@ -57,6 +57,8 @@ public final class InputControllerPerformanceSession {
     public var contextRankingCalls: Int { controller?.contextRankingCallsForPerformance ?? 0 }
     public var contextRankingElapsedNanoseconds: UInt64 { controller?.contextRankingElapsedForPerformance ?? 0 }
     public func enableContextRanking() { controller?.enableContextRankingForPerformance() }
+    func enableDeferredRankingForTesting() { controller?.enableDeferredRankingForTesting() }
+    var latestCandidateTextsForTesting: [String]? { controller?.latestCandidateTextsForTesting }
 
     public func processText(_ text: String) -> InputControllerPerformanceSample? {
         process(characters: text, keyCode: 0)

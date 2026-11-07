@@ -10,7 +10,7 @@ final class EditingSelectionAndPagingTests: XCTestCase {
     }
 
     private func canonicalPages(reading: String, fuzzyMask: UInt32) throws -> [[String]] {
-        let directories = try RealRimeProcessFixture.directories.get()
+        let directories = try RealZhixuProcessFixture.directories.get()
         let session = try XCTUnwrap(CoreSession(sharedDirectory: directories.shared,
             userDirectory: directories.user, appIdentifier: "com.agentinputlayer.editing-paging-canonical"))
         defer { session.close() }
@@ -78,7 +78,7 @@ final class EditingSelectionAndPagingTests: XCTestCase {
             if let originalMode { UserDefaults.standard.set(originalMode, forKey: modeKey) }
             else { UserDefaults.standard.removeObject(forKey: modeKey) }
         }
-        let directories = try RealRimeProcessFixture.directories.get()
+        let directories = try RealZhixuProcessFixture.directories.get()
         defer {
             let restored = CoreSession(sharedDirectory: directories.shared,
                 userDirectory: directories.user, appIdentifier: "editing-paging-fuzzy-restore")
@@ -193,7 +193,7 @@ extension EditingSelectionAndPagingTests {
             if let originalMode { UserDefaults.standard.set(originalMode, forKey: modeKey) }
             else { UserDefaults.standard.removeObject(forKey: modeKey) }
         }
-        let directories = try RealRimeProcessFixture.directories.get()
+        let directories = try RealZhixuProcessFixture.directories.get()
         defer {
             let restored = CoreSession(sharedDirectory: directories.shared,
                 userDirectory: directories.user, appIdentifier: "round6-fuzzy-restore")

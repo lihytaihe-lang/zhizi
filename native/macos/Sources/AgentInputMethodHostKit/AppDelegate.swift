@@ -1,3 +1,4 @@
+import AgentIMECoreBridge
 import AppKit
 import InputMethodKit
 
@@ -97,7 +98,7 @@ public final class InputMethodAppDelegate: NSObject, NSApplicationDelegate {
         // and process-generation binding attempt above. They never contain a
         // rejected path or input text.
         if runtimeStorageLease?.location.degraded == true {
-            DiagnosticsRecorder.shared.recordSystem(eventKind: "userdb-ephemeral-fallback")
+            DiagnosticsRecorder.shared.recordSystem(eventKind: "storage-ephemeral-fallback")
         }
         guard
             let connectionName = Bundle.main.object(forInfoDictionaryKey: "InputMethodConnectionName") as? String,
@@ -191,6 +192,12 @@ public final class InputMethodAppDelegate: NSObject, NSApplicationDelegate {
            !ContextRankingModelLoader.shared.waitForPendingLoad(timeout: 5) {
             FileHandle.standardError.write(Data("agent-ime-cold-model-load-drain-timeout\n".utf8))
         }
+        // Same drain for the persisted index cache: this short-lived probe
+        // would otherwise exit before the background write of the cache it
+        // just built reaches the disk, and every later probe would rebuild.
+        if aim_index_cache_flush(2000) != 0 {
+            FileHandle.standardError.write(Data("agent-ime-index-cache-flush-timeout\n".utf8))
+        }
         releaseRuntimeStorage()
         exit(0)
     }
@@ -216,7 +223,7 @@ public final class InputMethodAppDelegate: NSObject, NSApplicationDelegate {
         recoveryMarker?.stop()
         NSWorkspace.shared.notificationCenter.removeObserver(self)
         // Main-queue delivery is synchronous here: close every controller's
-        // librime/LevelDB handle before deleting an owned ephemeral fallback.
+        // core session before deleting an owned ephemeral fallback.
         NotificationCenter.default.post(name: .agentInputWillTerminate, object: nil)
         server = nil
         let sessionsClosed = CoreSession.liveSessionCount == 0
@@ -230,14 +237,6 @@ public final class InputMethodAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func releaseRuntimeStorage(cleanupOwnedFallback: Bool = true) {
-        if cleanupOwnedFallback,
-           let location = runtimeStorageLease?.location,
-           !location.degraded {
-            // Every controller has already closed on the normal termination
-            // and cold-probe paths. Back up the now-quiescent UserDB here,
-            // outside the registered first-candidate availability endpoint.
-            _ = try? UserDBManager.prepare(root: location.rootDirectory)
-        }
         InputMethodRuntimeStorage.clear()
         if cleanupOwnedFallback {
             runtimeStorageLease?.cleanup()

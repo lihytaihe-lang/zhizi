@@ -4,6 +4,8 @@ mod session_contract;
 use crate::state::{BoundaryPurpose, CompositionBoundary, Decoder, DecoderSnapshot, LearningIntent};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 #[derive(Clone, Debug, PartialEq)]
 enum Action {
@@ -214,33 +216,21 @@ fn legacy_editing_prefix(snapshot: &DecoderSnapshot) -> Option<&str> {
     })
 }
 
-fn legacy_mixing_boundary(snapshot: &DecoderSnapshot) -> Option<CompositionBoundary> {
-    let at = snapshot.preedit.find(|ch: char| ch.is_ascii_alphabetic())?;
-    let (prefix, tail) = snapshot.preedit.split_at(at);
-    if prefix.is_ascii() { return None; }
-    let rest: String = tail.chars().filter_map(|ch| match ch {
-        'ü' | 'Ü' => Some('v'),
-        ch if ch.is_ascii_alphabetic() => Some(ch.to_ascii_lowercase()),
-        _ => None,
-    }).collect();
-    (!rest.is_empty()).then(|| CompositionBoundary { confirmed: prefix.into(), unconfirmed_raw: rest })
-}
-
-fn legacy_boundary_errors(snapshot: &DecoderSnapshot, editing: Option<CompositionBoundary>,
-    mixing: Option<CompositionBoundary>) -> Vec<String> {
+fn legacy_boundary_errors(snapshot: &DecoderSnapshot, editing: Option<CompositionBoundary>) -> Vec<String> {
+    // The legacy mixing view (splitting the preedit into picked text and letters)
+    // left with the Rime fallback: a non-native decoder now answers no mixing
+    // boundary at all. Only the editing recovery view keeps its legacy result.
     let mut errors = Vec::new();
     if editing.as_ref().map(|boundary| boundary.confirmed.as_str()) != legacy_editing_prefix(snapshot) {
         errors.push("editing_boundary_changed_legacy_result".into());
     }
-    if mixing != legacy_mixing_boundary(snapshot) { errors.push("mixing_boundary_changed_legacy_result".into()); }
     errors
 }
 
 fn query_contract(decoder: &dyn Decoder, page: &DecoderSnapshot) -> (Queries, Vec<String>) {
     let mut errors = Vec::new();
     if !decoder.native_editing() {
-        errors.extend(legacy_boundary_errors(page, decoder.composition_boundary(BoundaryPurpose::Editing),
-            decoder.composition_boundary(BoundaryPurpose::Mixing)));
+        errors.extend(legacy_boundary_errors(page, decoder.composition_boundary(BoundaryPurpose::Editing)));
     } else {
         let boundary = decoder.composition_boundary(BoundaryPurpose::Editing);
         if boundary != decoder.composition_boundary(BoundaryPurpose::Mixing)
@@ -385,7 +375,7 @@ fn trace_script_with_spans(factory: &mut dyn FnMut() -> Box<dyn Decoder>, action
             line: *line, delivery_id, action: format!("{action:?}"), state: observed_state, result, shapes,
             candidate_texts: page.candidates.iter().map(|c| c.text.clone()).collect(),
             secondary_count: page.secondary_candidates.len(), queries, observation_errors: errors,
-            legacy_boundary_checks: if decoder.native_editing() { 0 } else { 2 },
+            legacy_boundary_checks: if decoder.native_editing() { 0 } else { 1 },
         });
     }
     steps
@@ -521,323 +511,118 @@ fn compare_zhixu(left: &[ScriptTrace], right: &[ScriptTrace]) -> Summary {
     summary
 }
 
-#[cfg(feature = "librime")]
-mod real {
-    use super::*;
-    use std::fs;
-    use std::path::{Path, PathBuf};
-    use std::process::{Command, Stdio};
-
-    fn script_paths(path: &Path) -> Vec<PathBuf> {
-        if path.is_file() { return vec![path.to_path_buf()]; }
-        let mut files = Vec::new();
-        for entry in fs::read_dir(path).unwrap() {
-            let path = entry.unwrap().path();
-            if path.is_dir() { files.extend(script_paths(&path)); }
-            else if path.extension().is_some_and(|ext| ext == "keys") { files.push(path); }
-        }
-        files.sort();
-        files
+fn script_paths(path: &Path) -> Vec<PathBuf> {
+    if path.is_file() { return vec![path.to_path_buf()]; }
+    let mut files = Vec::new();
+    for entry in fs::read_dir(path).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_dir() { files.extend(script_paths(&path)); }
+        else if path.extension().is_some_and(|ext| ext == "keys") { files.push(path); }
     }
+    files.sort();
+    files
+}
 
-    // Future Decoder implementations are added here, without changing the runner
-    // or comparator. trace_script also accepts any test-supplied Decoder factory.
-    fn decoder(kind: &str, shared: &str, user: &str) -> Box<dyn Decoder> {
-        match kind {
-            "rime" => Box::new(crate::rime::RimeDecoder::new(shared, user).expect("real librime")),
-            "mock" => Box::<crate::state::MockDecoder>::default(),
-            "zhixu" => Box::new(crate::zhixu::decoder::ZhixuDecoder::new()),
-            _ => panic!("unknown tested Decoder {kind:?}"),
+// The Rime reference retired with the engine: Y0 now re-runs the zhixu side over
+// the frozen corpus and byte-compares the trace with the archive taken while the
+// reference still ran. The corpus is rebuilt from the archive itself — (line,
+// action) is the whole parse of a script — so the entry needs neither librime
+// nor a separately stored resolved corpus.
+fn frozen_script(steps: &[(usize, String)]) -> String {
+    let mut lines = Vec::new();
+    for (line, action) in steps {
+        while lines.len() + 1 < *line {
+            lines.push("# reconstructed from the frozen trace".into());
         }
+        lines.push(render_action(action));
     }
+    lines.join("\n") + "\n"
+}
 
-    fn materialize(source: &str, factory: &mut dyn FnMut() -> Box<dyn Decoder>, next_id: &mut u64) -> String {
-        let mut lines = Vec::new();
-        let mut resolve = false;
-        for line in source.lines() {
-            if line.trim() == "# resolve_last_page" {
-                loop {
-                    let actions = parse_script(&lines.join("\n")).unwrap();
-                    *next_id += 1;
-                    let trace = trace_script(factory, &actions, *next_id, next_id);
-                    let last = trace.last().unwrap();
-                    assert!(!last.shapes.is_empty() && last.observation_errors.is_empty(), "last-page resolution needs valid candidates");
-                    if last.state.is_last_page {
-                        lines.push(format!("# resolved_last_page page={}", last.state.page_no));
-                        break;
-                    }
-                    if trace.len() >= 2 && last.action == "PageDown" {
-                        assert!(last.state.page_no > trace[trace.len() - 2].state.page_no, "pager did not reach the end");
-                    }
-                    lines.push("pagedown".into());
-                }
-                continue;
-            }
-            if line.trim() == "# resolve_prefix" { resolve = true; continue; }
-            if resolve && !line.trim().is_empty() && !line.trim().starts_with('#') {
-                assert!(matches!(parse_script(line).unwrap()[0].1, Action::Select(_, LearningIntent::DeliberateSelection)));
-                loop {
-                    let actions = parse_script(&lines.join("\n")).unwrap();
-                    *next_id += 1;
-                    let trace = trace_script(factory, &actions, *next_id, next_id);
-                    let last = trace.last().unwrap();
-                    assert!(last.observation_errors.is_empty(), "cannot resolve from an uncertain observation: {last:?}");
-                    if let Some(slot) = last.shapes.iter().position(|shape| !shape.whole && shape.covered_letters.is_some_and(|n| n > 0)) {
-                        lines.push(format!("# resolved_prefix page={} covered_letters={}", last.state.page_no, last.shapes[slot].covered_letters.unwrap()));
-                        lines.push(format!("select {slot} deliberate"));
-                        break;
-                    }
-                    assert!(!last.state.is_last_page && !last.shapes.is_empty(), "no partial candidate for {source}");
-                    if trace.len() >= 2 && last.action == "PageDown" {
-                        assert!(last.state.page_no > trace[trace.len() - 2].state.page_no, "partial-candidate pager made no progress");
-                    }
-                    lines.push("pagedown".into());
-                }
-                resolve = false;
-            } else { lines.push(line.to_string()); }
-        }
-        assert!(!resolve, "dangling resolve_prefix marker");
-        lines.join("\n") + "\n"
+fn render_action(action: &str) -> String {
+    if let Some(letter) = action.strip_prefix("Type(\"").and_then(|rest| rest.strip_suffix("\")")) {
+        return format!("type {letter}");
     }
-
-    #[test]
-    #[ignore]
-    fn decoder_contract_worker() {
-        let Ok(kind) = std::env::var("Y0_WORKER_KIND") else { panic!("run decoder_contract_compare, not the worker directly") };
-        let suite = PathBuf::from(std::env::var_os("Y0_SCRIPTS").expect("Y0_SCRIPTS"));
-        let shared = std::env::var("Y0_SHARED").expect("Y0_SHARED");
-        let output = PathBuf::from(std::env::var_os("Y0_WORKER_OUTPUT").unwrap());
-        let user = output.with_extension("user");
-        fs::create_dir(&user).unwrap();
-        // Prevent diagnostic shadow selections from teaching subsequent sessions.
-        // Only this newly created directory is writable; production resources stay untouched.
-        fs::write(user.join("agent_pinyin.custom.yaml"), "patch:\n  translator/enable_user_dict: false\n  translator/enable_encoder: false\n  translator/encode_commit_history: false\n").unwrap();
-        // Both implementations read exactly this public fixture. Pinning also
-        // removes background dictionary-publication timing from the comparison.
-        let dictionary = crate::zhixu::loader::load(Path::new(&shared), &user).expect("public-only dictionary");
-        let _dictionary = crate::zhixu::pin_snapshot(Some(std::sync::Arc::new(crate::zhixu::Index::from_data(dictionary))));
-        let _learning = crate::zhixu::pin_learning(None);
-        let mut factory = || decoder(if kind == "resolve" { "rime" } else { &kind }, &shared, user.to_str().unwrap());
-        drop(factory());
-        if kind == "rime" || kind == "resolve" {
-            let deployed = fs::read_to_string(user.join("build/agent_pinyin.schema.yaml")).unwrap();
-            assert!(deployed.contains("enable_user_dict: false"), "probe must disable UserDB");
-        }
-        let paths = script_paths(&suite);
-        assert!(!paths.is_empty(), "no scripts");
-        let mut traces = Vec::new();
-        let mut next_id = 0;
-        if kind == "resolve" { fs::create_dir(&output).unwrap(); }
-        for (script_index, path) in paths.into_iter().enumerate() {
-            let relative = if suite.is_file() { Path::new(path.file_name().unwrap()) } else { path.strip_prefix(&suite).unwrap() };
-            let name = relative.display().to_string();
-            let source = fs::read_to_string(&path).unwrap();
-            if kind == "resolve" {
-                let resolved = materialize(&source, &mut factory, &mut next_id);
-                let destination = output.join(relative);
-                fs::create_dir_all(destination.parent().unwrap()).unwrap();
-                fs::write(destination, resolved).unwrap();
-                println!("Y0_RESOLVED\t{name}");
-                continue;
-            }
-            assert!(!source.lines().any(|line| matches!(line.trim(), "# resolve_prefix" | "# resolve_last_page")), "unresolved script {name}");
-            let actions = parse_script(&source).unwrap_or_else(|error| panic!("{name}: {error}"));
-            let steps = if kind == "zhixu" {
-                let mut observed = crate::zhixu::decoder::ZhixuDecoder::new();
-                let mut observed_steps = 0;
-                let mut observe = |prefix: &[(usize, Action)], page: &DecoderSnapshot| {
-                    for (index, (_, action)) in prefix.iter().enumerate().skip(observed_steps) {
-                        let _ = apply(&mut observed, action, (1 << 63) | (index as u64 + 1));
-                    }
-                    observed_steps = prefix.len();
-                    let spans = (0..page.candidates.len()).map(|slot| observed.candidate_covered_letters(slot)).collect();
-                    SpanObservation { spans, snapshot_matches: same_snapshot(page, &observed.snapshot()),
-                        forks: Some((0..page.candidates.len()).map(|_| Box::new(observed.fork_unlearned_composition()) as Box<dyn Decoder>).collect()) }
-                };
-                trace_script_with_spans(&mut factory, &actions, script_index as u64 + 1, &mut next_id, Some(&mut observe))
-            } else { trace_script(&mut factory, &actions, script_index as u64 + 1, &mut next_id) };
-            println!("Y0_SCRIPT\t{kind}\t{name}\tsteps={}", steps.len());
-            traces.push(ScriptTrace { name, steps });
-        }
-        if kind != "resolve" { fs::write(output, serde_json::to_vec(&traces).unwrap()).unwrap(); }
+    if let Some(rest) = action.strip_prefix("Select(").and_then(|rest| rest.strip_suffix(")")) {
+        let (index, intent) = rest.split_once(", ").expect("frozen Select fields");
+        let intent = match intent {
+            "DeliberateSelection" => "deliberate",
+            "NoLearn" => "no_learn",
+            "RequiredSegmentCommit" => "required",
+            other => panic!("unknown frozen learning intent {other:?}"),
+        };
+        return format!("select {index} {intent}");
     }
+    match action {
+        "Backspace" => "backspace",
+        "Left" => "left",
+        "Right" => "right",
+        "PageDown" => "pagedown",
+        "PageUp" => "pageup",
+        "Next" => "next",
+        "Prev" => "prev",
+        "NextLinear" => "next_linear",
+        "PrevLinear" => "prev_linear",
+        "CommitRaw" => "commit_raw",
+        "Clear" => "clear",
+        "ClearAfterSelection" => "clear_after_selection",
+        other => panic!("unknown frozen action {other:?}"),
+    }.into()
+}
 
-    #[test]
-    #[ignore]
-    fn decoder_contract_compare() {
-        let suite = std::env::var_os("Y0_SCRIPTS").expect("set Y0_SCRIPTS to a .keys file or directory");
-        let shared = std::env::var_os("Y0_SHARED").expect("set Y0_SHARED to isolated public Rime resources");
-        let tested = std::env::var("Y0_TESTED").unwrap_or_else(|_| "rime".into());
-        let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
-        let output = std::env::temp_dir().join(format!("zhixu-y0-{}-{stamp}", std::process::id()));
-        fs::create_dir(&output).unwrap();
-        println!("Y0_OUTPUT\t{}", output.display());
-        let mut sides = Vec::new();
-        let resolved = output.join("scripts");
-        for (label, kind) in [("resolve", "resolve"), ("reference", "rime"), ("tested", tested.as_str())] {
-            let trace = if kind == "resolve" { resolved.clone() } else { output.join(format!("{label}.json")) };
-            let log = fs::File::create(output.join(format!("{label}.log"))).unwrap();
-            let result = Command::new(std::env::current_exe().unwrap())
-                .args(["--exact", "mixer::decoder_contract::real::decoder_contract_worker", "--ignored", "--nocapture", "--test-threads=1"])
-                .env("Y0_WORKER_KIND", kind).env("Y0_WORKER_OUTPUT", &trace)
-                .env("Y0_SCRIPTS", if kind == "resolve" { suite.as_os_str() } else { resolved.as_os_str() }).env("Y0_SHARED", &shared)
-                .env("ZHIZI_SINGLE_LEARN", "0")
-                .stdout(Stdio::from(log.try_clone().unwrap())).stderr(Stdio::from(log))
-                .status().unwrap();
-            assert!(result.success(), "{label} worker failed: {}", output.join(format!("{label}.log")).display());
-            if kind != "resolve" {
-                sides.push(serde_json::from_slice::<Vec<ScriptTrace>>(&fs::read(trace).unwrap()).unwrap());
-            }
-        }
-        let summary = if tested == "zhixu" { compare_zhixu(&sides[0], &sides[1]) }
-            else { compare(&sides[0], &sides[1]) };
-        fs::write(output.join("summary.json"), serde_json::to_vec_pretty(&summary).unwrap()).unwrap();
-        for first in &summary.first_differences { println!("Y0_FIRST\t{first}"); }
-        println!("Y0_SUMMARY\ttested={tested}\tscripts={}\tsteps={}\tmismatched_scripts={}\tmismatched_steps={}\tby_kind={:?}",
-            summary.scripts, summary.steps, summary.mismatched_scripts, summary.mismatched_steps, summary.by_kind);
-        println!("Y1_SUMMARY\ttotal={}\tskipped={}\tstate_mismatched_steps={}\tfinal_input_structure={}/{}",
-            summary.total_scripts, summary.skipped_scripts.len(), summary.state_mismatched_steps,
-            summary.final_input_structure_matches, summary.final_input_scripts);
-        println!("Y2_SUMMARY\tintentional_sogou_steps={}\tresidual_mismatched_steps={}\tintentional_by_kind={:?}",
-            summary.intentional_sogou_steps, summary.residual_mismatched_steps, summary.intentional_sogou_by_kind);
-        if tested == "mock" {
-            assert!(summary.by_kind.contains_key("candidate_structure"), "negative control must detect structural differences");
-            assert!(summary.by_kind.contains_key("preedit"), "negative control must detect state differences");
-        } else {
-            assert!(summary.passed(), "Decoder contract differences or no executed scripts; see summary.json");
-        }
+#[test]
+#[ignore]
+fn decoder_contract_zhixu_frozen_baseline() {
+    let shared = PathBuf::from(std::env::var_os("Y0_SHARED").expect("Y0_SHARED isolated public-only fixture"));
+    let baseline = PathBuf::from(std::env::var_os("Y0_BASELINE").expect("Y0_BASELINE decompressed frozen tested.json"));
+    let expected = fs::read(&baseline).unwrap();
+    let archived: Vec<ScriptTrace> = serde_json::from_slice(&expected).unwrap();
+    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+    let output = std::env::temp_dir().join(format!("zhixu-y0-frozen-{}-{stamp}", std::process::id()));
+    let suite = output.join("scripts");
+    for trace in &archived {
+        let path = suite.join(&trace.name);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let steps: Vec<(usize, String)> = trace.steps.iter().map(|step| (step.line, step.action.clone())).collect();
+        fs::write(&path, frozen_script(&steps)).unwrap();
     }
-
-    // Faster repair aid only: it deliberately omits candidate-selection shadows
-    // and cannot replace decoder_contract_compare's complete acceptance run.
-    #[test]
-    #[ignore]
-    fn decoder_contract_state_diagnostics() {
-        let shared = std::env::var("Y0_SHARED").expect("isolated public-only fixture");
-        let suite = PathBuf::from(std::env::var_os("Y0_SCRIPTS").unwrap());
-        let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
-        let output = std::env::temp_dir().join(format!("zhixu-y2-state-diagnostic-{}-{stamp}.json", std::process::id()));
-        let user = output.with_extension("user");
-        fs::create_dir(&user).unwrap();
-        fs::write(user.join("agent_pinyin.custom.yaml"), "patch:\n  translator/enable_user_dict: false\n  translator/enable_encoder: false\n  translator/encode_commit_history: false\n").unwrap();
-        let dictionary = crate::zhixu::loader::load(Path::new(&shared), &user).unwrap();
-        let _dictionary = crate::zhixu::pin_snapshot(Some(std::sync::Arc::new(crate::zhixu::Index::from_data(dictionary))));
-        let _learning = crate::zhixu::pin_learning(None);
-        let mut traces = [Vec::new(), Vec::new()];
-        for (script_index, path) in script_paths(&suite).iter().enumerate() {
-            let name = path.strip_prefix(&suite).unwrap_or(path).display().to_string();
-            let actions = parse_script(&fs::read_to_string(path).unwrap()).unwrap();
-            for (side, kind) in ["rime", "zhixu"].iter().enumerate() {
-                let mut decoder = decoder(kind, &shared, user.to_str().unwrap());
-                let mut steps = Vec::new();
-                for (index, (line, action)) in actions.iter().enumerate() {
-                    let delivery_id = ((script_index as u64 + 1) << 32) | (index as u64 + 1);
-                    let result = apply(decoder.as_mut(), action, delivery_id);
-                    let snapshot = decoder.snapshot();
-                    let boundary = observed_boundary(decoder.as_ref(), &snapshot);
-                    let mut observed = state(&snapshot);
-                    observed.confirmed = boundary.as_ref().map(|(prefix, _)| prefix.clone());
-                    observed.remaining_letters = boundary.map(|(_, count)| count);
-                    let (queries, observation_errors) = query_contract(decoder.as_ref(), &snapshot);
-                    steps.push(Step { line: *line, delivery_id, action: format!("{action:?}"), state: observed,
-                        result, shapes: Vec::new(), candidate_texts: snapshot.candidates.iter().map(|item| item.text.clone()).collect(),
-                        secondary_count: snapshot.secondary_candidates.len(), queries, observation_errors,
-                        legacy_boundary_checks: if decoder.native_editing() { 0 } else { 2 } });
-                }
-                traces[side].push(ScriptTrace { name: name.clone(), steps });
+    let user = output.join("user");
+    fs::create_dir(&user).unwrap();
+    // Keep the retired worker's fixture shape: only this newly created directory
+    // is writable; production resources stay untouched.
+    fs::write(user.join("agent_pinyin.custom.yaml"),
+        "patch:\n  translator/enable_user_dict: false\n  translator/enable_encoder: false\n  translator/encode_commit_history: false\n").unwrap();
+    let dictionary = crate::zhixu::loader::load(&shared, &user).expect("public-only dictionary");
+    let _dictionary = crate::zhixu::pin_snapshot(Some(std::sync::Arc::new(crate::zhixu::Index::from_data(dictionary))));
+    let _learning = crate::zhixu::pin_learning(None);
+    let mut factory = || Box::new(crate::zhixu::decoder::ZhixuDecoder::new()) as Box<dyn Decoder>;
+    drop(factory());
+    let mut traces = Vec::new();
+    let mut next_id = 0;
+    for (script_index, path) in script_paths(&suite).into_iter().enumerate() {
+        let name = path.strip_prefix(&suite).unwrap().display().to_string();
+        let actions = parse_script(&fs::read_to_string(&path).unwrap())
+            .unwrap_or_else(|error| panic!("{name}: {error}"));
+        let mut observed = crate::zhixu::decoder::ZhixuDecoder::new();
+        let mut observed_steps = 0;
+        let mut observe = |prefix: &[(usize, Action)], page: &DecoderSnapshot| {
+            for (index, (_, action)) in prefix.iter().enumerate().skip(observed_steps) {
+                let _ = apply(&mut observed, action, (1 << 63) | (index as u64 + 1));
             }
-        }
-        let mut mismatches = Vec::new();
-        for (reference, tested) in traces[0].iter().zip(&traces[1]) {
-            for (index, (left, right)) in reference.steps.iter().zip(&tested.steps).enumerate() {
-                let kinds = differences(left, right);
-                if !kinds.is_empty() { mismatches.push(serde_json::json!({
-                    "script": reference.name, "step": index + 1, "kinds": kinds, "reference": left, "tested": right,
-                })); }
-            }
-        }
-        let report = serde_json::json!({"diagnostic_only": true, "omits": "candidate-selection coverage shadows",
-            "summary": compare_zhixu(&traces[0], &traces[1]), "differences": mismatches});
-        fs::write(&output, serde_json::to_vec_pretty(&report).unwrap()).unwrap();
-        println!("Y2_STATE_DIAGNOSTIC_ONLY\t{}", output.display());
+            observed_steps = prefix.len();
+            let spans = (0..page.candidates.len()).map(|slot| observed.candidate_covered_letters(slot)).collect();
+            SpanObservation { spans, snapshot_matches: same_snapshot(page, &observed.snapshot()),
+                forks: Some((0..page.candidates.len()).map(|_| Box::new(observed.fork_unlearned_composition()) as Box<dyn Decoder>).collect()) }
+        };
+        let steps = trace_script_with_spans(&mut factory, &actions, script_index as u64 + 1, &mut next_id, Some(&mut observe));
+        println!("Y0_SCRIPT\tzhixu\t{name}\tsteps={}", steps.len());
+        traces.push(ScriptTrace { name, steps });
     }
-
-
-    #[test]
-    #[ignore]
-    fn decoder_contract_native_menu_matches_fresh_complete_sequence() {
-        let shared = std::env::var("Y0_SHARED").expect("isolated public-only fixture");
-        let suite = PathBuf::from(std::env::var_os("Y0_SCRIPTS").unwrap());
-        let comparison = PathBuf::from(std::env::var_os("Y2_COMPARISON").expect("completed formal comparison directory"));
-        let reference: Vec<ScriptTrace> = serde_json::from_slice(&fs::read(comparison.join("reference.json")).unwrap()).unwrap();
-        let tested: Vec<ScriptTrace> = serde_json::from_slice(&fs::read(comparison.join("tested.json")).unwrap()).unwrap();
-        let mut wanted = BTreeMap::new();
-        for (left, right) in reference.iter().zip(&tested) {
-            assert_eq!(left.name, right.name);
-            assert_eq!(left.steps.len(), right.steps.len());
-            for (index, (left, step)) in left.steps.iter().zip(&right.steps).enumerate() {
-                if !differences(left, step).is_empty() { wanted.insert((right.name.clone(), index + 1), step.clone()); }
-            }
-        }
-        assert!(!wanted.is_empty(), "no reviewed differences");
-        let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
-        let user = std::env::temp_dir().join(format!("zhixu-y2-menu-proof-{}-{stamp}", std::process::id()));
-        fs::create_dir(&user).unwrap();
-        let dictionary = crate::zhixu::loader::load(Path::new(&shared), &user).unwrap();
-        let _dictionary = crate::zhixu::pin_snapshot(Some(std::sync::Arc::new(crate::zhixu::Index::from_data(dictionary))));
-        let _learning = crate::zhixu::pin_learning(None);
-        let mut cache = BTreeMap::new();
-        let mut proof = Vec::new();
-        for (script_index, path) in script_paths(&suite).iter().enumerate() {
-            let name = path.strip_prefix(&suite).unwrap_or(path).display().to_string();
-            let actions = parse_script(&fs::read_to_string(path).unwrap()).unwrap();
-            let mut decoder = crate::zhixu::decoder::ZhixuDecoder::new();
-            for (index, (_, action)) in actions.iter().enumerate() {
-                let result = apply(&mut decoder, action, ((script_index as u64 + 1) << 32) | (index as u64 + 1));
-                let Some(expected) = wanted.get(&(name.clone(), index + 1)) else { continue; };
-                let page = decoder.snapshot();
-                let boundary = decoder.composition_boundary(BoundaryPurpose::Editing).unwrap();
-                let mut actual = state(&page);
-                actual.confirmed = Some(boundary.confirmed.clone());
-                actual.remaining_letters = Some(boundary.unconfirmed_raw.bytes().filter(u8::is_ascii_alphabetic).count());
-                assert_eq!(actual, expected.state, "formal trace changed: {name}:{}", index + 1);
-                assert_eq!(result, expected.result);
-                assert_eq!(page.candidates.iter().map(|item| item.text.clone()).collect::<Vec<_>>(), expected.candidate_texts);
-                let fresh = cache.entry(boundary.unconfirmed_raw.clone()).or_insert_with(|| {
-                    let mut fresh = crate::zhixu::decoder::ZhixuDecoder::new();
-                    fresh.input(&boundary.unconfirmed_raw).unwrap();
-                    fresh
-                });
-                let complete = decoder.snapshot_all_candidates().unwrap();
-                assert_eq!(complete.candidates, fresh.snapshot_all_candidates().unwrap().candidates,
-                    "whole sequence differs: {name}:{}", index + 1);
-                let mut paged = fresh.fork_unlearned_composition();
-                for _ in 0..page.page_no { paged.page_down().unwrap(); }
-                for _ in 0..page.highlighted_index { paged.select_next().unwrap(); }
-                let fresh_page = paged.snapshot();
-                assert_eq!(page.candidates, fresh_page.candidates);
-                assert_eq!((page.page_no, page.highlighted_index, page.is_last_page),
-                    (fresh_page.page_no, fresh_page.highlighted_index, fresh_page.is_last_page));
-                let live_queries = query_contract(&decoder, &page);
-                assert!(live_queries.1.is_empty());
-                assert_eq!(live_queries.0, expected.queries);
-                assert_eq!(live_queries, query_contract(&paged, &fresh_page));
-                proof.push(serde_json::json!({"script": name, "step": index + 1,
-                    "raw": page.raw_input, "confirmed": boundary.confirmed, "unconfirmed_raw": boundary.unconfirmed_raw,
-                    "page_no": page.page_no, "highlighted_index": page.highlighted_index,
-                    "complete_candidates": complete.candidates.len(), "matches_formal_trace": true,
-                    "fresh_end_complete_sequence_and_paged_queries_match": true}));
-            }
-        }
-        assert_eq!(proof.len(), wanted.len(), "every formal difference needs evidence");
-        let output = comparison.join("native-menu-proof.json");
-        fs::write(&output, serde_json::to_vec_pretty(&serde_json::json!({
-            "checked_steps": proof.len(), "fresh_raw_compositions": cache.len(), "steps": proof,
-            "does_not_waive_strict_differences": true,
-        })).unwrap()).unwrap();
-        println!("Y2_NATIVE_MENU_PROOF\tsteps={}\tfresh_raw_compositions={}\t{}", proof.len(), cache.len(), output.display());
-    }
-
+    let fresh = serde_json::to_vec(&traces).unwrap();
+    fs::write(output.join("tested.json"), &fresh).unwrap();
+    assert!(fresh == expected,
+        "zhixu Y0 trace differs from the frozen baseline; fresh copy: {}", output.join("tested.json").display());
+    println!("Y0_BASELINE_MATCH\t{}", output.display());
 }
 
 #[test]
@@ -1040,24 +825,22 @@ fn decoder_contract_sogou_classification_requires_retained_menu_and_never_hides_
 }
 
 #[test]
-fn decoder_contract_checks_both_legacy_boundary_views_independently() {
-    for (raw, preedit, prefix, mixing) in [
-        ("nihao", "ni hao", Some(""), None),
-        ("nihao", "你hao", Some("你"), Some(("你", "hao"))),
-        ("nvlvse", "女lü se", Some("女"), Some(("女", "lvse"))),
-        ("nihaoma", "你hao'ma", Some("你"), Some(("你", "haoma"))),
-        ("jvhao", "ju hao", None, None),
-        ("nvhao", "API女hao", Some("API女"), None),
-        ("nihao", "你好", None, None),
+fn decoder_contract_keeps_the_legacy_editing_boundary_view() {
+    for (raw, preedit, prefix) in [
+        ("nihao", "ni hao", Some("")),
+        ("nihao", "你hao", Some("你")),
+        ("nvlvse", "女lü se", Some("女")),
+        ("nihaoma", "你hao'ma", Some("你")),
+        ("jvhao", "ju hao", None),
+        ("nvhao", "API女hao", Some("API女")),
+        ("nihao", "你好", None),
     ] {
         let snapshot = DecoderSnapshot { raw_input: raw.into(), preedit: preedit.into(), ..Default::default() };
         assert_eq!(legacy_editing_prefix(&snapshot), prefix);
         let editing = prefix.map(|confirmed| CompositionBoundary { confirmed: confirmed.into(), unconfirmed_raw: String::new() });
-        let mixing = mixing.map(|(confirmed, unconfirmed_raw)| CompositionBoundary { confirmed: confirmed.into(), unconfirmed_raw: unconfirmed_raw.into() });
-        assert!(legacy_boundary_errors(&snapshot, editing.clone(), mixing.clone()).is_empty());
+        assert!(legacy_boundary_errors(&snapshot, editing.clone()).is_empty());
         let wrong = Some(CompositionBoundary { confirmed: "wrong".into(), unconfirmed_raw: "wrong".into() });
-        assert_eq!(legacy_boundary_errors(&snapshot, wrong.clone(), mixing).len(), 1);
-        assert_eq!(legacy_boundary_errors(&snapshot, editing, wrong).len(), 1);
+        assert_eq!(legacy_boundary_errors(&snapshot, wrong).len(), 1);
     }
 }
 

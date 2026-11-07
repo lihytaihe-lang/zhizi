@@ -6,7 +6,7 @@ import XCTest
 /// `+` expands the panel to four rows of pages (owner 2026-10-09).
 final class ExpandedPanelTests: XCTestCase {
     func testCorePeekReturnsTheFollowingPagesAndLeavesThePageAlone() throws {
-        let directories = try RealRimeProcessFixture.directories.get()
+        let directories = try RealZhixuProcessFixture.directories.get()
         let session = try XCTUnwrap(CoreSession(sharedDirectory: directories.shared,
             userDirectory: directories.user, appIdentifier: "com.agentinputlayer.peek"))
         defer { session.close() }
@@ -40,7 +40,7 @@ final class ExpandedPanelTests: XCTestCase {
     }
 
     func testPlusExpandsArrowsMoveInTheGridAndSpaceCommitsTheHighlightedCandidate() throws {
-        let directories = try RealRimeProcessFixture.directories.get()
+        let directories = try RealZhixuProcessFixture.directories.get()
         let client = SerializationTextInputClient()
         let controller = try XCTUnwrap(AgentInputController(
             performanceSharedDirectory: directories.shared,
@@ -101,7 +101,7 @@ final class ExpandedPanelTests: XCTestCase {
     /// Arrow keys carry on past the four rows (owner 2026-10-12): Down on the last row slides the
     /// window into the next page, Up on the first row slides it back, and both stop at the ends.
     func testArrowKeysSlideTheGridPastItsLastAndFirstRow() throws {
-        let directories = try RealRimeProcessFixture.directories.get()
+        let directories = try RealZhixuProcessFixture.directories.get()
         let client = SerializationTextInputClient()
         let controller = try XCTUnwrap(AgentInputController(
             performanceSharedDirectory: directories.shared,

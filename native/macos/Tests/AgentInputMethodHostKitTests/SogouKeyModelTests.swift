@@ -19,7 +19,7 @@ final class SogouKeyModelTests: XCTestCase {
     private func makeController(
         _ suffix: String, client: inout SogouProbingTextInputClient?, isolatedUser: Bool = false
     ) throws -> AgentInputController {
-        let directories = try RealRimeProcessFixture.directories.get()
+        let directories = try RealZhixuProcessFixture.directories.get()
         let created = SogouProbingTextInputClient()
         client = created
         // A test that commits through Rime teaches the shared user dictionary, which reorders the candidates of the next
@@ -40,7 +40,7 @@ final class SogouKeyModelTests: XCTestCase {
     /// The pages real paging shows for `shi`, from an independent session
     /// (same approach as ExpandedPanelUpNavigationTests.canonicalShiPages).
     private func canonicalShiPages(reading: String = "shi", fuzzyMask: UInt32 = 0) throws -> [[String]] {
-        let directories = try RealRimeProcessFixture.directories.get()
+        let directories = try RealZhixuProcessFixture.directories.get()
         let session = try XCTUnwrap(CoreSession(sharedDirectory: directories.shared,
             userDirectory: directories.user, appIdentifier: "com.agentinputlayer.sogou-keys-canonical"))
         defer { session.close() }
@@ -405,7 +405,7 @@ final class SogouKeyModelTests: XCTestCase {
     /// that our core refocuses the list on the caret prefix — this test
     /// pins the gap at the same layer that must fix it.
     func testCoreKeepsWholeStringCandidatesWhileCaretInside() throws {
-        let directories = try RealRimeProcessFixture.directories.get()
+        let directories = try RealZhixuProcessFixture.directories.get()
         let session = try XCTUnwrap(CoreSession(sharedDirectory: directories.shared,
             userDirectory: directories.user, appIdentifier: "com.agentinputlayer.sogou-keys-h-core"))
         defer { session.close() }
@@ -456,7 +456,7 @@ final class SogouKeyModelTests: XCTestCase {
     /// when the caret is at zero. Single-segment letter stepping is an
     /// assumption, unconfirmed for Sogou; this asserts Rime's retained behavior.
     func testCoreCaretBoundariesKeepWholeReadingMenuAndReturnToEnd() throws {
-        let directories = try RealRimeProcessFixture.directories.get()
+        let directories = try RealZhixuProcessFixture.directories.get()
         for (input, boundaries) in [
             ("nihao", [2, 0]), ("biru", [2, 0]), ("bi'ru", [3, 0]),
             ("xian", [3, 2, 1, 0]), ("zhonghua", [5, 0]),
@@ -489,7 +489,7 @@ final class SogouKeyModelTests: XCTestCase {
     /// P3: previous/next selection really is a continuous list; paging keeps
     /// the column and peeking must not change either page or column (Z2/Z3).
     func testCoreSelectionBoundariesAndPeekPreservePagingColumn() throws {
-        let directories = try RealRimeProcessFixture.directories.get()
+        let directories = try RealZhixuProcessFixture.directories.get()
         let session = try XCTUnwrap(CoreSession(sharedDirectory: directories.shared,
             userDirectory: directories.user, appIdentifier: "com.agentinputlayer.sogou-paging"))
         defer { session.close() }
@@ -600,7 +600,7 @@ final class SogouKeyModelTests: XCTestCase {
                 defer { controller.inputControllerWillClose() }
                 let client = try XCTUnwrap(clientBox)
                 let key = try keyFixture(controller: controller, client: client)
-                let directories = try RealRimeProcessFixture.directories.get()
+                let directories = try RealZhixuProcessFixture.directories.get()
                 let canonical = try XCTUnwrap(CoreSession(sharedDirectory: directories.shared,
                     userDirectory: directories.user, appIdentifier: "sogou-editing-canonical"))
                 defer { canonical.close() }
@@ -716,7 +716,7 @@ final class SogouKeyModelTests: XCTestCase {
             else { UserDefaults.standard.removeObject(forKey: modeKey) }
         }
         let canonical = try canonicalShiPages(fuzzyMask: 1)
-        let directories = try RealRimeProcessFixture.directories.get()
+        let directories = try RealZhixuProcessFixture.directories.get()
         defer {
             let restored = CoreSession(sharedDirectory: directories.shared,
                 userDirectory: directories.user, appIdentifier: "sogou-fuzzy-restore")

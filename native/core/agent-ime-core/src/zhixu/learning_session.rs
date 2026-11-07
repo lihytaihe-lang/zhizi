@@ -433,7 +433,12 @@ impl LearningSession {
             event.kind,
             KeyKind::FocusLost | KeyKind::Deactivate | KeyKind::Sleep | KeyKind::Resume
         ) {
-            if !composing { self.flush_pending(now); }
+            if !composing {
+                // Switching away or losing focus confirms what was committed (Q15);
+                // sleep and resume cannot tell, so they only keep what already matured.
+                let confirmed = matches!(event.kind, KeyKind::FocusLost | KeyKind::Deactivate);
+                self.flush_pending(now, confirmed);
+            }
             self.clear_segments();
             self.pending.clear();
             return;
@@ -450,10 +455,10 @@ impl LearningSession {
         }
         // Do not change the page between displaying a candidate and receiving
         // its digit. Mature observations can wait for the next idle boundary.
-        if !composing { self.flush_pending(now); }
+        if !composing { self.flush_pending(now, false); }
     }
 
-    fn flush_pending(&mut self, now: u64) {
+    fn flush_pending(&mut self, now: u64, confirmed: bool) {
         let Ok(mut knowledge) = self.knowledge.lock() else {
             return;
         };
@@ -474,7 +479,9 @@ impl LearningSession {
         while self
             .pending
             .front()
-            .is_some_and(|pending| now.saturating_sub(pending.committed_ms) >= RETENTION_MS)
+            .is_some_and(|pending| {
+                confirmed || now.saturating_sub(pending.committed_ms) >= RETENTION_MS
+            })
         {
             let pending = self.pending.pop_front().unwrap();
             if pending
@@ -704,7 +711,7 @@ mod tests {
         assert!(session.whole_overlay().is_none());
         assert!(session.overlay().is_none());
         assert_eq!(session.pending.len(), 1);
-        session.flush_pending(now + RETENTION_MS);
+        session.flush_pending(now + RETENTION_MS, false);
         assert_eq!(session.entries().len(), 1);
         assert_eq!(session.entries()[0].text, "到");
         drop(peer);
@@ -737,7 +744,7 @@ mod tests {
         peer.stage(Some(choice("dao", "到")), 4);
         peer.commit("到", 4, now);
         deleting.forget(" ZAI ", "再").unwrap();
-        peer.flush_pending(now + RETENTION_MS);
+        peer.flush_pending(now + RETENTION_MS, false);
         let saved = LearningStore::load(&dir, now + RETENTION_MS);
         assert_eq!(saved.entries().len(), 1, "old peer observations must not restore a deleted word or its assembled group");
         assert_eq!(saved.entries()[0].text, "到");
@@ -745,7 +752,7 @@ mod tests {
         assert_eq!(saved.choices()[0].text, "到");
         peer.stage(Some(choice("zai", "再")), 5);
         peer.commit("再", 5, now + RETENTION_MS + 1);
-        peer.flush_pending(now + RETENTION_MS * 2 + 1);
+        peer.flush_pending(now + RETENTION_MS * 2 + 1, false);
         let saved = LearningStore::load(&dir, now + RETENTION_MS * 2 + 1);
         assert_eq!(saved.entries().len(), 2);
         assert_eq!(saved.entries().iter().find(|entry| entry.text == "再").unwrap().count, 1);
@@ -763,12 +770,12 @@ mod tests {
         assert_eq!(session.segments[0].0.text, "搞");
         assert!(session.invalid_segment);
         session.commit("再搞", 2, 100);
-        session.flush_pending(5100);
+        session.flush_pending(5100, false);
         assert!(session.entries().is_empty());
         session.stage(Some(choice("dao", "到")), 3);
         session.forget_pending("zai", "再");
         session.commit("到", 3, 200);
-        session.flush_pending(5200);
+        session.flush_pending(5200, false);
         assert_eq!(session.entries()[0].text, "到");
     }
 
@@ -790,7 +797,7 @@ mod tests {
         assert!(session.pending.is_empty(), "a failed save must not replay observations queued before deletion");
         assert_eq!(fs::read(dir.join(super::super::learning::FILE_NAME)).unwrap(), original);
         fs::remove_file(temporary).unwrap();
-        session.flush_pending(now + RETENTION_MS);
+        session.flush_pending(now + RETENTION_MS, false);
         assert!(LearningStore::load(&dir, now + RETENTION_MS).entries().is_empty());
         session.forget("dao", "到").unwrap();
         assert!(LearningStore::load(&dir, now).entries().is_empty());
@@ -823,13 +830,7 @@ mod tests {
 
     #[test]
     fn deleted_or_unverified_commits_never_learn() {
-        for kind in [
-            KeyKind::Backspace,
-            KeyKind::FocusLost,
-            KeyKind::Deactivate,
-            KeyKind::Sleep,
-            KeyKind::Resume,
-        ] {
+        for kind in [KeyKind::Backspace, KeyKind::Sleep, KeyKind::Resume] {
             let mut session = session();
             session.stage(Some(choice("cai wo", "裁我")), 1);
             session.commit("裁我", 1, 100);
@@ -860,6 +861,24 @@ mod tests {
         assert!(session.entries().is_empty(), "the displayed selection cannot move under its key");
         session.key(&key(KeyKind::Text), false, 5200);
         assert_eq!(session.entries()[0].text, "裁我");
+    }
+
+    #[test]
+    fn switching_away_confirms_a_commit_that_has_not_waited_out_retention() {
+        for kind in [KeyKind::FocusLost, KeyKind::Deactivate] {
+            let mut session = session();
+            session.stage(Some(choice("cai wo", "裁我")), 1);
+            session.commit("裁我", 1, 100);
+            session.key(&key(kind), false, 1000);
+            assert_eq!(session.entries().len(), 1, "{kind:?}");
+        }
+        // Mid-composition the page must not move, and a deleted commit still never learns.
+        let mut session = session();
+        session.stage(Some(choice("cai wo", "裁我")), 1);
+        session.commit("裁我", 1, 100);
+        session.key(&key(KeyKind::Backspace), false, 500);
+        session.key(&key(KeyKind::FocusLost), false, 1000);
+        assert!(session.entries().is_empty());
     }
 
     #[test]

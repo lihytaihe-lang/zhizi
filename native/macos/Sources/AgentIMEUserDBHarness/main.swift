@@ -1,4 +1,3 @@
-import AgentIMEUserDBTestSupport
 import AgentInputMethodHostKit
 import AppKit
 import Foundation
@@ -114,14 +113,6 @@ func writeJSON(_ object: [String: Any], to output: URL) throws {
     try data.write(to: output, options: .atomic)
 }
 
-func preparationReport(_ preparation: UserDBPreparation) -> [String: Any] {
-    [
-        "backedUp": preparation.backedUp,
-        "quarantined": preparation.quarantined,
-        "restored": preparation.restored,
-    ]
-}
-
 func recursiveFiles(in root: URL) -> [URL] {
     guard let enumerator = FileManager.default.enumerator(
         at: root,
@@ -131,35 +122,6 @@ func recursiveFiles(in root: URL) -> [URL] {
     return enumerator.compactMap { $0 as? URL }.filter {
         (try? $0.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true
     }
-}
-
-func syncedLearningEntries(root: URL, queryText: String, target: String) -> [String] {
-    recursiveFiles(in: root)
-        .filter { $0.lastPathComponent == "pinyin_simp.userdb.txt" }
-        .flatMap { (try? String(contentsOf: $0, encoding: .utf8))?.split(separator: "\n") ?? [] }
-        .map(String.init)
-        .filter { !$0.hasPrefix("#") && $0.contains(queryText) && $0.contains(target) }
-        .sorted()
-}
-
-func waitForSyncedLearningEntries(
-    root: URL,
-    queryText: String,
-    target: String,
-    differentFrom previous: [String]? = nil
-) -> [String] {
-    var latest: [String] = []
-    for _ in 0..<100 {
-        let entries = syncedLearningEntries(root: root, queryText: queryText, target: target)
-        latest = entries
-        if let previous {
-            if entries != previous { return entries }
-        } else if !entries.isEmpty {
-            return entries
-        }
-        Thread.sleep(forTimeInterval: 0.05)
-    }
-    return latest
 }
 
 private struct SelectionDiagnostic: Decodable {
@@ -177,34 +139,12 @@ func selectionDiagnosticCount(directory: URL, identifier: UInt64) -> Int {
     }
 }
 
-func markerValues(in root: URL) -> [String] {
-    recursiveFiles(in: root).filter { $0.lastPathComponent == "TEST_MARKER" }.compactMap {
-        try? String(contentsOf: $0, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
-    }.sorted()
-}
-
-func selectionProbeReport() -> [String: Any] {
-    var count: UInt64 = 0
-    var reinforce: Int32 = -1
-    var requiresRegularSelection: Int32 = -1
-    let observed = aim_userdb_test_selection_probe_read(
-        &count, &reinforce, &requiresRegularSelection
-    ) != 0
-    return [
-        "observed": observed,
-        "count": String(count),
-        "reinforce": observed ? reinforce != 0 : NSNull(),
-        "requiresRegularSelection": observed ? requiresRegularSelection != 0 : NSNull(),
-    ]
-}
-
 func runLearningGesture(
     _ gesture: String,
     session: CoreSession,
     timestamp: UInt64,
     secondaryFixture: Data?
 ) -> (IMEViewModel, [String: Any]) {
-    aim_userdb_test_selection_probe_reset()
     let deliveryID = selectionDeliveryID(timestamp: timestamp, candidateIndex: 0)
 
     switch gesture {
@@ -365,7 +305,6 @@ func runLearningGesture(
                 "remainingCandidates": confirmed.candidates.map(\.text),
             ])
         }
-        aim_userdb_test_selection_probe_reset()
         guard let result = session.process(
             kind: .space, security: .nonSecure, deliveryID: deliveryID
         ) else { fatalError("multi-segment full commit returned no result") }
@@ -468,16 +407,12 @@ func runProcessMode() throws -> Bool {
             )
             session.close()
         }
-        guard aim_userdb_test_sync_user_data() != 0 else {
-            fatalError("learning-period userdb sync failed")
-        }
         guard let lastResult else { fatalError("learning-period returned no result") }
         try writeJSON([
             "gesture": gesture,
             "iterations": iterations,
             "commitText": lastResult.commitText,
             "selectionEventID": String(lastResult.selectionEventID),
-            "selectionProbe": selectionProbeReport(),
             "detail": lastDetail,
         ], to: output)
 
@@ -503,20 +438,11 @@ func runProcessMode() throws -> Bool {
             timestamp: timestamp,
             secondaryFixture: secondaryFixture
         )
-        let probe = selectionProbeReport()
         session.close()
-        let syncAttempted = gesture != "owner-verified-dakle"
-        if syncAttempted {
-            guard aim_userdb_test_sync_user_data() != 0 else {
-                fatalError("userdb sync failed")
-            }
-        }
         try writeJSON([
             "gesture": gesture,
             "commitText": result.commitText,
             "selectionEventID": String(result.selectionEventID),
-            "selectionProbe": probe,
-            "userDataSyncAttempted": syncAttempted,
             "detail": detail,
         ], to: output)
 
@@ -607,7 +533,6 @@ func runProcessMode() throws -> Bool {
             "commitText": selected.commitText,
             "selectionEventID": String(selected.selectionEventID),
         ], to: output)
-
     case "--process-mixed-language-learning":
         guard arguments.count == 6, let deliveryTimestamp = UInt64(arguments[5]) else {
             fatalError("invalid process-mixed-language-learning arguments")
@@ -615,32 +540,22 @@ func runProcessMode() throws -> Bool {
         let shared = URL(fileURLWithPath: arguments[2], isDirectory: true)
         let root = URL(fileURLWithPath: arguments[3], isDirectory: true)
         let output = URL(fileURLWithPath: arguments[4])
-        let preparation = try UserDBManager.prepare(root: root)
+        _ = try UserDBManager.prepare(root: root)
         let user = root.appendingPathComponent("Rime", isDirectory: true)
-        let learningEntriesBefore = syncedLearningEntries(
-            root: user, queryText: queryText, target: target
-        )
         let session = makeSession(
-            sharedDirectory: shared, userDirectory: user,
+            sharedDirectory: shared,
+            userDirectory: user,
             appIdentifier: "com.agentinputlayer.mixed-language-learning"
         )
         let (result, candidates, selectionElapsed) = selectTarget(
             session, queryText: queryText, target: target, deliveryTimestamp: deliveryTimestamp
         )
         session.close()
-        guard aim_userdb_test_sync_user_data() != 0 else { fatalError("userdb sync failed") }
-        let learningEntries = waitForSyncedLearningEntries(
-            root: user, queryText: queryText, target: target,
-            differentFrom: learningEntriesBefore
-        )
-        guard !learningEntries.isEmpty else { fatalError("mixed-language learning entry unavailable") }
         try writeJSON([
             "eventID": String(result.selectionEventID),
             "selectionElapsedNanoseconds": String(selectionElapsed),
             "candidateWasTop1": candidates.first == target,
             "candidatesBefore": candidates,
-            "learningEntries": learningEntries,
-            "preparation": preparationReport(preparation),
         ], to: output)
 
     case "--process-select-once":
@@ -651,13 +566,11 @@ func runProcessMode() throws -> Bool {
         let root = URL(fileURLWithPath: arguments[3], isDirectory: true)
         let diagnostics = URL(fileURLWithPath: arguments[4], isDirectory: true)
         let output = URL(fileURLWithPath: arguments[5])
-        let preparation = try UserDBManager.prepare(root: root)
+        _ = try UserDBManager.prepare(root: root)
         let user = root.appendingPathComponent("Rime", isDirectory: true)
-        let learningEntriesBefore = syncedLearningEntries(
-            root: user, queryText: queryText, target: target
-        )
         let session = makeSession(
-            sharedDirectory: shared, userDirectory: user,
+            sharedDirectory: shared,
+            userDirectory: user,
             appIdentifier: "com.agentinputlayer.userdb-process-control"
         )
         let (result, candidates, selectionElapsed) = selectTarget(
@@ -670,12 +583,6 @@ func runProcessMode() throws -> Bool {
         )
         recorder.flush()
         session.close()
-        guard aim_userdb_test_sync_user_data() != 0 else { fatalError("userdb sync failed") }
-        let learningEntries = waitForSyncedLearningEntries(
-            root: user, queryText: queryText, target: target,
-            differentFrom: learningEntriesBefore
-        )
-        guard !learningEntries.isEmpty else { fatalError("synced learning entry unavailable") }
         try writeJSON([
             "eventID": String(result.selectionEventID),
             "deliveryTimestamp": String(deliveryTimestamp),
@@ -684,10 +591,7 @@ func runProcessMode() throws -> Bool {
                 directory: diagnostics, identifier: result.selectionEventID
             ),
             "candidatesBefore": candidates,
-            "learningEntries": learningEntries,
-            "preparation": preparationReport(preparation),
         ], to: output)
-
     case "--process-select-with-delivery-id":
         guard arguments.count == 7, let deliveryID = UInt64(arguments[6]), deliveryID != 0 else {
             fatalError("invalid process-select-with-delivery-id arguments")
@@ -696,7 +600,7 @@ func runProcessMode() throws -> Bool {
         let root = URL(fileURLWithPath: arguments[3], isDirectory: true)
         let diagnostics = URL(fileURLWithPath: arguments[4], isDirectory: true)
         let output = URL(fileURLWithPath: arguments[5])
-        let preparation = try UserDBManager.prepare(root: root)
+        _ = try UserDBManager.prepare(root: root)
         let user = root.appendingPathComponent("Rime", isDirectory: true)
         let session = makeSession(
             sharedDirectory: shared, userDirectory: user,
@@ -712,10 +616,6 @@ func runProcessMode() throws -> Bool {
         )
         recorder.flush()
         session.close()
-        guard aim_userdb_test_sync_user_data() != 0 else { fatalError("userdb sync failed") }
-        let learningEntries = waitForSyncedLearningEntries(
-            root: user, queryText: queryText, target: target
-        )
         try writeJSON([
             "eventID": String(result.selectionEventID),
             "committedTarget": result.commitText == target,
@@ -724,114 +624,14 @@ func runProcessMode() throws -> Bool {
                 directory: diagnostics, identifier: result.selectionEventID
             ),
             "candidatesBefore": candidates,
-            "learningEntries": learningEntries,
-            "preparation": preparationReport(preparation),
         ], to: output)
-
-    case "--process-claim-and-wait":
-        guard arguments.count == 6, let deliveryTimestamp = UInt64(arguments[5]) else {
-            fatalError("invalid process-claim-and-wait arguments")
-        }
-        let shared = URL(fileURLWithPath: arguments[2], isDirectory: true)
-        let root = URL(fileURLWithPath: arguments[3], isDirectory: true)
-        let preselect = URL(fileURLWithPath: arguments[4])
-        let preparation = try UserDBManager.prepare(root: root)
-        let user = root.appendingPathComponent("Rime", isDirectory: true)
-        let session = makeSession(
-            sharedDirectory: shared, userDirectory: user,
-            appIdentifier: "com.agentinputlayer.userdb-process-pre-select"
-        )
-        let candidates = query(session, queryText).candidates.map(\.text)
-        guard let index = candidates.firstIndex(of: target), index < 9 else {
-            fatalError("pre-select target unavailable")
-        }
-        let deliveryID = selectionDeliveryID(timestamp: deliveryTimestamp, candidateIndex: index)
-        try writeJSON([
-            "eventID": String(deliveryID),
-            "deliveryTimestamp": String(deliveryTimestamp),
-            "candidatesBefore": candidates,
-            "databaseStructurallyValid": UserDBManager.isStructurallyValid(
-                user.appendingPathComponent("pinyin_simp.userdb", isDirectory: true)
-            ),
-            "preparation": preparationReport(preparation),
-        ], to: preselect)
-        _ = session.process(
-            kind: .text, text: String(index + 1), security: .nonSecure, deliveryID: deliveryID
-        )
-        fatalError("pre-select claim hook did not stop the process")
-
-    case "--process-train-and-wait":
-        guard arguments.count == 6, let deliveryTimestamp = UInt64(arguments[5]) else {
-            fatalError("invalid process-train-and-wait arguments")
-        }
-        let shared = URL(fileURLWithPath: arguments[2], isDirectory: true)
-        let root = URL(fileURLWithPath: arguments[3], isDirectory: true)
-        let preselect = URL(fileURLWithPath: arguments[4])
-        let preparation = try UserDBManager.prepare(root: root)
-        let user = root.appendingPathComponent("Rime", isDirectory: true)
-        let session = makeSession(
-            sharedDirectory: shared, userDirectory: user,
-            appIdentifier: "com.agentinputlayer.userdb-process-crash"
-        )
-        let candidates = query(session, queryText).candidates.map(\.text)
-        guard let index = candidates.firstIndex(of: target), index < 9 else {
-            fatalError("crash target unavailable")
-        }
-        let deliveryID = selectionDeliveryID(timestamp: deliveryTimestamp, candidateIndex: index)
-        try writeJSON([
-            "eventID": String(deliveryID),
-            "deliveryTimestamp": String(deliveryTimestamp),
-            "candidatesBefore": candidates,
-            "databaseStructurallyValid": UserDBManager.isStructurallyValid(
-                user.appendingPathComponent("pinyin_simp.userdb", isDirectory: true)
-            ),
-            "preparation": preparationReport(preparation),
-        ], to: preselect)
-        _ = session.process(
-            kind: .text, text: String(index + 1), security: .nonSecure, deliveryID: deliveryID
-        )
-        fatalError("after-select test hook did not stop the process")
-
-    case "--process-sync-and-wait":
-        guard arguments.count == 7, let deliveryTimestamp = UInt64(arguments[5]) else {
-            fatalError("invalid process-sync-and-wait arguments")
-        }
-        let shared = URL(fileURLWithPath: arguments[2], isDirectory: true)
-        let root = URL(fileURLWithPath: arguments[3], isDirectory: true)
-        let output = URL(fileURLWithPath: arguments[4])
-        let preparation = try UserDBManager.prepare(root: root)
-        let user = root.appendingPathComponent("Rime", isDirectory: true)
-        let session = makeSession(
-            sharedDirectory: shared, userDirectory: user,
-            appIdentifier: "com.agentinputlayer.userdb-process-post-sync"
-        )
-        let (result, candidates, _) = selectTarget(
-            session, queryText: queryText, target: target, deliveryTimestamp: deliveryTimestamp
-        )
-        session.close()
-        guard aim_userdb_test_sync_user_data() != 0 else { fatalError("userdb sync failed") }
-        let learningEntries = waitForSyncedLearningEntries(
-            root: user, queryText: queryText, target: target
-        )
-        guard !learningEntries.isEmpty else { fatalError("synced learning entry unavailable") }
-        try writeJSON([
-            "eventID": String(result.selectionEventID),
-            "deliveryTimestamp": String(deliveryTimestamp),
-            "candidatesBefore": candidates,
-            "learningEntries": learningEntries,
-            "preparation": preparationReport(preparation),
-        ], to: output)
-        guard arguments[6].withCString({ aim_userdb_test_stop_after_sync($0) }) != 0 else {
-            fatalError("post-sync stop hook failed")
-        }
-        fatalError("post-sync process unexpectedly resumed")
 
     case "--process-select-zero-id":
         guard arguments.count == 5 else { fatalError("invalid process-select-zero-id arguments") }
         let shared = URL(fileURLWithPath: arguments[2], isDirectory: true)
         let root = URL(fileURLWithPath: arguments[3], isDirectory: true)
         let output = URL(fileURLWithPath: arguments[4])
-        let preparation = try UserDBManager.prepare(root: root)
+        _ = try UserDBManager.prepare(root: root)
         let user = root.appendingPathComponent("Rime", isDirectory: true)
         let session = makeSession(
             sharedDirectory: shared, userDirectory: user,
@@ -841,47 +641,18 @@ func runProcessMode() throws -> Bool {
             session, queryText: queryText, target: target, deliveryTimestamp: nil
         )
         session.close()
-        guard aim_userdb_test_sync_user_data() != 0 else { fatalError("userdb sync failed") }
-        let learningEntries = waitForSyncedLearningEntries(
-            root: user, queryText: queryText, target: target
-        )
         try writeJSON([
             "eventID": String(result.selectionEventID),
             "candidatesBefore": candidates,
-            "learningEntries": learningEntries,
-            "preparation": preparationReport(preparation),
         ], to: output)
 
-    case "--process-hook-reset":
-        guard arguments.count == 3 else { fatalError("invalid process-hook-reset arguments") }
-        guard arguments[2].withCString({ aim_userdb_test_control_reset($0) }) != 0 else {
-            fatalError("unable to reset process hook control")
-        }
-
-    case "--process-hook-inspect":
-        guard arguments.count == 4 else { fatalError("invalid process-hook-inspect arguments") }
-        var selectCalls: UInt64 = 0
-        var hookState: UInt64 = 0
-        var processID: Int64 = 0
-        var selectedResult: Int64 = 0
-        guard arguments[2].withCString({ path in
-            aim_userdb_test_control_read(
-                path, &selectCalls, &hookState, &processID, &selectedResult
-            )
-        }) != 0 else { fatalError("unable to inspect process hook control") }
-        try writeJSON([
-            "selectCalls": String(selectCalls),
-            "hookState": String(hookState),
-            "processID": String(processID),
-            "selectedResult": String(selectedResult),
-        ], to: URL(fileURLWithPath: arguments[3]))
 
     case "--process-inspect":
         guard arguments.count == 5 else { fatalError("invalid process-inspect arguments") }
         let shared = URL(fileURLWithPath: arguments[2], isDirectory: true)
         let root = URL(fileURLWithPath: arguments[3], isDirectory: true)
         let output = URL(fileURLWithPath: arguments[4])
-        let preparation = try UserDBManager.prepare(root: root)
+        _ = try UserDBManager.prepare(root: root)
         let user = root.appendingPathComponent("Rime", isDirectory: true)
         let session = makeSession(
             sharedDirectory: shared, userDirectory: user,
@@ -889,19 +660,10 @@ func runProcessMode() throws -> Bool {
         )
         let candidates = query(session, queryText).candidates.map(\.text)
         session.close()
-        guard aim_userdb_test_sync_user_data() != 0 else { fatalError("userdb sync failed") }
-        let learningEntries = waitForSyncedLearningEntries(
-            root: user, queryText: queryText, target: target
-        )
         try writeJSON([
             "selectionCalls": 0,
             "candidates": candidates,
             "targetIndex": candidates.firstIndex(of: target) as Any,
-            "databaseStructurallyValid": UserDBManager.isStructurallyValid(
-                user.appendingPathComponent("pinyin_simp.userdb", isDirectory: true)
-            ),
-            "learningEntries": learningEntries,
-            "preparation": preparationReport(preparation),
         ], to: output)
 
     case "--process-retry-diagnostic":
@@ -925,22 +687,6 @@ func runProcessMode() throws -> Bool {
         try writeJSON([
             "eventID": String(identifier),
             "diagnosticCount": selectionDiagnosticCount(directory: diagnostics, identifier: identifier),
-        ], to: output)
-
-    case "--process-prepare":
-        guard arguments.count == 4 else { fatalError("invalid process-prepare arguments") }
-        let root = URL(fileURLWithPath: arguments[2], isDirectory: true)
-        let output = URL(fileURLWithPath: arguments[3])
-        let preparation = try UserDBManager.prepare(root: root)
-        let database = root.appendingPathComponent("Rime/pinyin_simp.userdb", isDirectory: true)
-        let backups = root.appendingPathComponent("UserDBBackups", isDirectory: true)
-        let quarantine = root.appendingPathComponent("IncompatibleUserDB", isDirectory: true)
-        try writeJSON([
-            "preparation": preparationReport(preparation),
-            "databaseStructurallyValid": UserDBManager.isStructurallyValid(database),
-            "restoredMarkers": markerValues(in: database),
-            "quarantineMarkers": markerValues(in: quarantine),
-            "backupCount": (try? FileManager.default.contentsOfDirectory(atPath: backups.path).count) ?? 0,
         ], to: output)
 
     default:

@@ -8,15 +8,20 @@
 //! decoder alone), and ZHIZI_OWNER_RECORDS for the owner's settled choices. Nothing is
 //! committed by default, so the user dictionary learns nothing.
 //! ZHIZI_EVAL_SEQUENTIAL=1 scores each case before selecting its target and committing;
-//! ZHIZI_LEARNING=zhixu|rime chooses the learning provider. This mode requires an empty
-//! user directory and no ZHIZI_OWNER_RECORDS. Cases stay in file order; optional
+//! learning is always Zhixu. This mode requires an empty user directory and no
+//! ZHIZI_OWNER_RECORDS. Cases stay in file order; optional
 //! `segments: [{"text": ...}]` restore segment picks when the whole target is absent.
 //! `selectable` reports `selected`, a 1-based `page` (null for unavailable/segment picks),
-//! and `segmentPages` for successful segment picks. After every successful commit both
-//! providers wait 5 seconds for Zhixu's retained-text learning window before continuing.
-//! ZHIZI_ZHIXU_WHOLE=1 uses the product trial switch: Zhixu handles input and
-//! learning inside the Mixer. Without it the default inner decoder remains Rime.
+//! and `segmentPages` for successful segment picks. After every successful commit the
+//! provider waits 5 seconds for Zhixu's retained-text learning window before continuing.
 //! ZHIZI_EVAL_MEMORY=1 reports macOS RSS/peak bytes and samples again after two worker checks.
+//! ZHIZI_EVAL_PAGE_CHECK=1 compares the displayed page (the `page` field, at most five
+//! candidates) with the core page digit keys would commit (`Host::core_page_texts`,
+//! truncated to that length). Each jsonl row then has `"pageMatch"`; without the
+//! variable the jsonl and the summary stay byte-for-byte the same. A mismatch is also
+//! written to stderr as `PAGE_DIVERGENCE` plus `{"id","keys","hostPage","corePage","model"}`.
+//! After the summary table, stdout adds `page_divergence <bad>/<n> <percent>` and, per
+//! model outcome, `page_divergence_by_model <outcome> <bad>/<n>`.
 use std::collections::BTreeMap;
 use std::io::Write;
 use zhizi_host::{Ablation, Host, HostConfig, Key, View};
@@ -30,6 +35,12 @@ struct Tally {
     first: usize,
     page: usize,
     unselectable: usize,
+}
+
+#[derive(Default)]
+struct PageCheck {
+    cases: usize,
+    divergent: usize,
 }
 
 fn empty_user_directory(path: &std::path::Path) -> std::io::Result<()> {
@@ -199,7 +210,6 @@ fn run(arguments: &[String]) {
     if sequential {
         assert!(std::env::var_os("ZHIZI_OWNER_RECORDS").is_none(), "sequential replay must start without OwnerStyle records");
         empty_user_directory(std::path::Path::new(user)).expect("fresh sequential user directory");
-        assert!(matches!(std::env::var("ZHIZI_LEARNING").as_deref(), Ok("zhixu" | "rime") | Err(_)), "ZHIZI_LEARNING must be zhixu or rime");
     }
     // Name the inner decoder this run uses, and refuse a run that asked for another one (Q16: a
     // comparison "against Zhixu" once ran Rime against Rime because Zhixu was never switched on).
@@ -210,11 +220,6 @@ fn run(arguments: &[String]) {
     eprintln!("eval decoder={decoder}");
     let mut host = Host::open(&HostConfig { shared_dir: shared.into(), user_dir: user.into(), app_id: "zhizi.eval".into() })
         .expect("open");
-    // Host::open applies ZHIZI_ZHIXU_WHOLE through the same core entry point as the product.
-    // ZHIZI_LEARNING=zhixu also enables its learning store with the default Rime inner decoder.
-    if std::env::var("ZHIZI_LEARNING").as_deref() == Ok("zhixu") {
-        assert!(host.set_learning(zhizi_host::LearningMode::Zhixu), "switch to zhixu learning");
-    }
     memory_sample("host_open");
     // ZHIZI_FUZZY_MASK=<0..255> enables fuzzy-pinyin groups as the menu does.
     if let Some(mask) = std::env::var("ZHIZI_FUZZY_MASK").ok().and_then(|value| value.parse::<u32>().ok()) {
@@ -270,9 +275,11 @@ fn run(arguments: &[String]) {
         host.set_owner_style(&std::fs::read_to_string(records).unwrap());
     }
     let trace = std::env::var("ZHIZI_EVAL_TRACE").is_ok();
+    let page_check = std::env::var("ZHIZI_EVAL_PAGE_CHECK").as_deref() == Ok("1");
     let wait_ticks: usize = std::env::var("ZHIZI_EVAL_WAIT_TICKS").ok().and_then(|value| value.parse().ok()).unwrap_or(40);
     let mut output = std::fs::File::create(out).unwrap();
     let mut tallies: BTreeMap<String, Tally> = BTreeMap::new();
+    let mut page_checks: BTreeMap<String, PageCheck> = BTreeMap::new();
     let mut key_ms = std::env::var("ZHIZI_EVAL_KEY_MS").ok()
         .map(|path| std::fs::File::create(path).expect("ZHIZI_EVAL_KEY_MS file"));
     for line in std::fs::read_to_string(cases).unwrap().lines() {
@@ -298,9 +305,29 @@ fn run(arguments: &[String]) {
         // Accuracy, not latency: a busy machine must not turn a slow model into a different answer.
         let view = wait_for_ranking(&mut host, view, wait_ticks);
         let page: Vec<String> = view.candidates.iter().take(5).map(|c| c.text.clone()).collect();
+        let page_comments: Vec<String> = view.candidates.iter().take(5).map(|c| c.comment.clone()).collect();
         let first = page.first().is_some_and(|text| text == target);
         let on_page = page.iter().any(|text| text == target);
         let outcome = host.model_observation().outcome;
+        // Read the core page before trace/select move it. Compared length is the displayed page.
+        let page_match = page_check.then(|| {
+            let core_page: Vec<String> = host.core_page_texts().into_iter().take(page.len()).collect();
+            let matched = core_page == page;
+            let check = page_checks.entry(outcome.to_string()).or_default();
+            check.cases += 1;
+            check.divergent += usize::from(!matched);
+            if !matched {
+                let row = serde_json::json!({
+                    "id": case["id"],
+                    "keys": keys,
+                    "hostPage": &page,
+                    "corePage": core_page,
+                    "model": outcome,
+                });
+                eprintln!("PAGE_DIVERGENCE {row}");
+            }
+            matched
+        });
         // ZHIZI_EVAL_TRACE (local diagnosis): the whole-reading compositions the core
         // generated for this input and whether the target is on the next three pages.
         let trace = trace.then(|| {
@@ -326,7 +353,7 @@ fn run(arguments: &[String]) {
         let selectable = sequential.then(|| select_target(&mut host, view, &case, wait_ticks));
         if selectable.as_ref().is_some_and(|s| s["selected"] == true) {
             // Learning is retained only after the production deletion window, at an idle key.
-            // Apply the same pause to both providers; do not bypass their normal commit path.
+            // Apply the same pause to the provider's normal commit path.
             // ZHIZI_EVAL_VIRTUAL_CLOCK=1 moves the clock instead of sleeping (same window, same commit path)
             if !agent_ime_core::personal_picks::advance_eval_clock(5_001) {
                 std::thread::sleep(std::time::Duration::from_millis(5_001));
@@ -340,8 +367,11 @@ fn run(arguments: &[String]) {
         tally.unselectable += usize::from(selectable.as_ref().is_some_and(|s| s["selected"] == false));
         let mut record = serde_json::json!({
             "id": case["id"], "bucket": bucket, "keys": keys, "target": target, "context": case["context"],
-            "first": first, "onPage": on_page, "page": page, "model": outcome,
+            "first": first, "onPage": on_page, "page": page, "pageComments": page_comments, "model": outcome,
         });
+        if let Some(matched) = page_match {
+            record["pageMatch"] = serde_json::json!(matched);
+        }
         if let Some(selectable) = selectable {
             record["selectable"] = selectable;
         }
@@ -373,6 +403,15 @@ fn run(arguments: &[String]) {
     if sequential {
         println!("unselectable {}", all.unselectable);
     }
+    if page_check {
+        let divergent: usize = page_checks.values().map(|check| check.divergent).sum();
+        let cases: usize = page_checks.values().map(|check| check.cases).sum();
+        let percent = 100.0 * divergent as f64 / cases.max(1) as f64;
+        println!("page_divergence\t{divergent}/{cases}\t{percent:.1}%");
+        for (outcome, check) in &page_checks {
+            println!("page_divergence_by_model\t{outcome}\t{}/{}", check.divergent, check.cases);
+        }
+    }
 }
 
 fn percentages(tally: &Tally) -> String {
@@ -380,34 +419,9 @@ fn percentages(tally: &Tally) -> String {
     format!("{:.1}%\t{:.1}%", share(tally.first), share(tally.page))
 }
 
-#[cfg(all(test, feature = "librime"))]
+#[cfg(test)]
 mod sequential_tests {
     use super::*;
-    use std::path::Path;
-
-    #[test]
-    fn synthetic_replay_child() {
-        let Some(root) = std::env::var_os("ZHIZI_EVAL_TEST_DIR") else { return };
-        let root = Path::new(&root);
-        run(&[
-            root.join("shared").to_str().unwrap().into(),
-            root.join("user").to_str().unwrap().into(),
-            root.join("cases.jsonl").to_str().unwrap().into(),
-            root.join("out.jsonl").to_str().unwrap().into(),
-        ]);
-        let mut host = Host::open(&HostConfig {
-            shared_dir: root.join("shared"), user_dir: root.join("user"), app_id: "zhizi.eval".into(),
-        }).unwrap();
-        let mut view = View::default();
-        for c in "zai".chars() {
-            view = host.process(Key::Text(c.to_string()), 0, false);
-        }
-        // Mixer may preserve a native last-page flag while another page remains reachable.
-        view.is_last_page = true;
-        assert!(find_candidate(&mut host, &mut view, "仔", 40).is_some());
-        assert_eq!(view.page, 1);
-        host.process(Key::Escape, 0, false);
-    }
 
     #[test]
     fn sequential_user_directory_must_be_new_or_empty() {
@@ -426,203 +440,5 @@ mod sequential_tests {
             assert!(empty_user_directory(&link).is_err());
         }
         std::fs::remove_dir_all(root).unwrap();
-    }
-
-    #[test]
-    fn sequential_replay_learns_segments_and_counts_unselectable_cases() {
-        for mode in ["zhixu", "rime"] {
-            let root = std::env::temp_dir().canonicalize().unwrap().join(format!(
-                "zhixu-l4-{mode}-{}-{}", std::process::id(),
-                std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos(),
-            ));
-            let shared = root.join("shared");
-            std::fs::create_dir_all(&shared).unwrap();
-            std::fs::write(shared.join("default.yaml"),
-                "config_version: '1.0'\nschema_list:\n  - schema: agent_pinyin\nmenu:\n  page_size: 5\n").unwrap();
-            std::fs::write(shared.join("agent_pinyin.schema.yaml"), r#"schema:
-  schema_id: agent_pinyin
-  name: Synthetic replay
-  version: '1.0'
-engine:
-  processors: [speller, selector, navigator, express_editor]
-  segmentors: [abc_segmentor, fallback_segmentor]
-  translators: [script_translator]
-speller:
-  alphabet: abcdefghijklmnopqrstuvwxyz
-  delimiter: " '"
-translator:
-  dictionary: agent_pinyin
-  enable_sentence: false
-  enable_completion: false
-  enable_user_dict: true
-  enable_encoder: true
-menu:
-  page_size: 5
-"#).unwrap();
-            std::fs::write(shared.join("agent_pinyin.dict.yaml"),
-                "---\nname: agent_pinyin\nversion: '1.0'\nsort: by_weight\n...\n再\tzai\t900\n在\tzai\t800\n载\tzai\t700\n灾\tzai\t600\n栽\tzai\t500\n宰\tzai\t400\n仔\tzai\t300\n高\tgao\t900\n搞\tgao\t800\n").unwrap();
-            std::fs::write(shared.join("agent_exact_readings.tsv"),
-                "仔\tzai\n再\tzai\n在\tzai\n宰\tzai\n搞\tgao\n栽\tzai\n灾\tzai\n载\tzai\n高\tgao\n").unwrap();
-            let cases = [
-                serde_json::json!({"id":"learn", "keys":"zaigao", "target":"再搞", "context":"停了，", "segments":[{"text":"再","index":1,"page":0},{"text":"搞","index":2,"page":0}]}),
-                serde_json::json!({"id":"repeat", "keys":"zaigao", "target":"再搞", "context":"停了，"}),
-                serde_json::json!({"id":"missing", "keys":"zai", "target":"座"}),
-                serde_json::json!({"id":"bad-segment", "keys":"zai", "target":"座", "segments":[{"text":"座"}]}),
-                serde_json::json!({"id":"page-two", "keys":"zai", "target":"宰"}),
-                serde_json::json!({"id":"page-one", "keys":"gao", "target":"搞"}),
-                serde_json::json!({"id":"mismatched-segments", "keys":"zai", "target":"座", "segments":[{"text":"再"}]}),
-                serde_json::json!({"id":"incomplete-segments", "keys":"zaigao", "target":"再座", "segments":[{"text":"再"},{"text":"座"}]}),
-            ];
-            std::fs::write(root.join("cases.jsonl"), cases.iter().map(|c| format!("{c}\n")).collect::<String>()).unwrap();
-            let mut command = std::process::Command::new(std::env::current_exe().unwrap());
-            command.args(["--exact", "sequential_tests::synthetic_replay_child", "--nocapture"])
-                .env("ZHIZI_EVAL_TEST_DIR", &root)
-                .env("ZHIZI_EVAL_SEQUENTIAL", "1")
-                .env("ZHIZI_LEARNING", mode)
-                .env_remove("ZHIZI_OWNER_RECORDS")
-                .env_remove("ZHIZI_MODEL")
-                .env_remove("ZHIZI_EVAL_BASELINE")
-                .env_remove("ZHIZI_EVAL_DUMMY_SCORER");
-            let output = command.output().unwrap();
-            assert!(output.status.success(), "{}\n{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
-            let rows: Vec<serde_json::Value> = std::fs::read_to_string(root.join("out.jsonl")).unwrap()
-                .lines().map(|line| serde_json::from_str(line).unwrap()).collect();
-            assert_eq!(rows.len(), 8);
-            // This valid Rime fixture composes 再高 first; 再 remains selectable as a segment.
-            assert_eq!(rows[0]["page"][0], "再高");
-            assert_eq!(rows[0]["first"], false);
-            assert_eq!(rows[0]["onPage"], false);
-            assert_eq!(rows[0]["selectable"], serde_json::json!({"selected":true,"page":null,"segmentPages":[1,1]}));
-            if mode == "zhixu" {
-                assert_eq!(rows[1]["page"][0], "再搞");
-                assert_eq!(rows[1]["first"], true);
-                assert_eq!(rows[1]["selectable"]["page"], 1);
-            } else {
-                println!("synthetic Rime repeat: {}", rows[1]);
-            }
-            for row in &rows[2..4] {
-                assert_eq!(row["selectable"]["selected"], false);
-            }
-            assert_eq!(rows[4]["onPage"], false);
-            assert_eq!(rows[4]["selectable"], serde_json::json!({"selected":true,"page":2}));
-            assert_eq!(rows[5]["selectable"]["selected"], true);
-            assert!(rows[6..].iter().all(|row| row["selectable"]["selected"] == false));
-            let unavailable = rows.iter().filter(|r| r["selectable"]["selected"] == false).count();
-            assert!(String::from_utf8_lossy(&output.stdout).contains(&format!("unselectable {unavailable}")));
-            let before = std::fs::read(root.join("out.jsonl")).unwrap();
-            let refused = command.output().unwrap();
-            assert!(!refused.status.success());
-            assert!(String::from_utf8_lossy(&refused.stderr).contains("fresh sequential user directory"));
-            assert_eq!(std::fs::read(root.join("out.jsonl")).unwrap(), before);
-            command.env("ZHIZI_OWNER_RECORDS", root.join("absent-records.jsonl"));
-            let refused = command.output().unwrap();
-            assert!(!refused.status.success());
-            assert!(String::from_utf8_lossy(&refused.stderr).contains("without OwnerStyle records"));
-            command.env_remove("ZHIZI_OWNER_RECORDS").env("ZHIZI_EVAL_SEQUENTIAL", "0");
-            // A separate process still uses this synthetic schema, with its own empty user directory.
-            let independent = root.join("independent");
-            std::fs::create_dir(&independent).unwrap();
-            std::fs::rename(root.join("user"), independent.join("sequential-user")).unwrap();
-            std::fs::create_dir(root.join("user")).unwrap();
-            let output = command.output().unwrap();
-            assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
-            let independent_rows: Vec<serde_json::Value> = std::fs::read_to_string(root.join("out.jsonl")).unwrap()
-                .lines().map(|line| serde_json::from_str(line).unwrap()).collect();
-            assert!(independent_rows.iter().all(|row| row.get("selectable").is_none()));
-            assert_eq!(independent_rows[0]["page"], independent_rows[1]["page"]);
-            std::fs::remove_dir_all(root).unwrap();
-        }
-    }
-}
-
-#[cfg(all(test, feature = "librime"))]
-mod decoder_switch_tests {
-    use super::*;
-    use std::path::Path;
-
-    #[test]
-    fn decoder_switch_child() {
-        let Some(root) = std::env::var_os("ZHIXU_Y3_EVAL_TEST_DIR") else { return };
-        let root = Path::new(&root);
-        // The trial now hands off at an idle boundary after background loading.
-        // Keep this assertion about the ready eval route, not cold-start timing.
-        if std::env::var("ZHIZI_ZHIXU_WHOLE").as_deref() == Ok("1") {
-            let mut host = Host::open(&HostConfig { shared_dir: root.join("shared"),
-                user_dir: root.join("user"), app_id: "zhizi.eval".into() }).unwrap();
-            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-            loop {
-                host.process(Key::Text("n".into()), 0, false);
-                let view = host.process(Key::Text("i".into()), 0, false);
-                host.process(Key::Escape, 0, false);
-                if view.candidates.first().is_some_and(|c| c.text == "你") { break; }
-                assert!(std::time::Instant::now() < deadline, "background decoder never became ready");
-                std::thread::sleep(std::time::Duration::from_millis(10));
-            }
-        }
-        run(&[
-            root.join("shared").to_str().unwrap().into(),
-            root.join("user").to_str().unwrap().into(),
-            root.join("cases.jsonl").to_str().unwrap().into(),
-            root.join("out.jsonl").to_str().unwrap().into(),
-        ]);
-    }
-
-    #[test]
-    fn whole_switch_replaces_rime_input_in_eval() {
-        for whole in [None, Some("0"), Some("true"), Some("1")] {
-            let root = std::env::temp_dir().canonicalize().unwrap().join(format!(
-                "zhixu-y3-eval-{}-{}", std::process::id(),
-                std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos(),
-            ));
-            let shared = root.join("shared");
-            std::fs::create_dir_all(&shared).unwrap();
-            std::fs::create_dir(root.join("user")).unwrap();
-            std::fs::write(shared.join("default.yaml"),
-                "config_version: '1.0'\nschema_list:\n  - schema: agent_pinyin\nmenu:\n  page_size: 5\n").unwrap();
-            // Rime initializes normally but has no spelling processor. A whole
-            // candidate overlay cannot type ni; only replacing the inner decoder can.
-            std::fs::write(shared.join("agent_pinyin.schema.yaml"), r#"schema:
-  schema_id: agent_pinyin
-  name: Decoder switch fixture
-  version: '1.0'
-engine:
-  processors: [ascii_composer]
-  segmentors: [abc_segmentor, fallback_segmentor]
-  translators: [script_translator]
-speller:
-  alphabet: abcdefghijklmnopqrstuvwxyz
-translator:
-  dictionary: agent_pinyin
-  enable_user_dict: false
-menu:
-  page_size: 5
-"#).unwrap();
-            std::fs::write(shared.join("agent_pinyin.dict.yaml"),
-                "---\nname: agent_pinyin\nversion: '1.0'\nsort: by_weight\n...\n你\tni\t900\n").unwrap();
-            std::fs::write(shared.join("agent_exact_readings.tsv"), "你\tni\n").unwrap();
-            std::fs::write(root.join("cases.jsonl"),
-                "{\"id\":\"decoder-switch\",\"keys\":\"ni\",\"target\":\"你\"}\n").unwrap();
-            let mut command = std::process::Command::new(std::env::current_exe().unwrap());
-            command.args(["--exact", "decoder_switch_tests::decoder_switch_child", "--nocapture"])
-                .env("ZHIXU_Y3_EVAL_TEST_DIR", &root)
-                .env_remove("ZHIZI_ZHIXU_WHOLE")
-                .env_remove("ZHIZI_LEARNING")
-                .env_remove("ZHIZI_EVAL_SEQUENTIAL")
-                .env_remove("ZHIZI_OWNER_RECORDS")
-                .env_remove("ZHIZI_MODEL")
-                .env_remove("ZHIZI_EVAL_BASELINE")
-                .env_remove("ZHIZI_EVAL_DUMMY_SCORER");
-            if let Some(whole) = whole { command.env("ZHIZI_ZHIXU_WHOLE", whole); }
-            let output = command.output().unwrap();
-            assert!(output.status.success(), "{}\n{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
-            let row: serde_json::Value = serde_json::from_str(
-                std::fs::read_to_string(root.join("out.jsonl")).unwrap().trim()).unwrap();
-            if whole == Some("1") {
-                assert_eq!(row["page"][0], "你", "the trial flag must replace Rime's input path");
-            } else {
-                assert_eq!(row["page"], serde_json::json!([]), "the default Rime path stays unchanged");
-            }
-            std::fs::remove_dir_all(root).unwrap();
-        }
     }
 }

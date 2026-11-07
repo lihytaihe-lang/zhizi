@@ -222,7 +222,7 @@ if measurementMode == .official && stressSeconds < 1_800 {
     usage("official mode requires at least 1800 requested stress seconds")
 }
 // Exercise the complete 500-case corpus twice before taking the resource
-// baseline in both modes. A shorter smoke warm-up leaves librime dictionary
+// baseline in both modes. A shorter smoke warm-up leaves the dictionary
 // pages to fault in during the measured window and misclassifies that bounded
 // first-use cost as resident-memory growth.
 let warmupSequenceCount = 1_000
@@ -807,7 +807,7 @@ let report = PerformanceReport(
     resourceWindowSamplingRule: "three raw warm-baseline samples follow the 1,000-sequence warm-up and a reported 10-second AppKit stabilization; each five-minute window retains its raw one-minute RSS/file-descriptor/thread samples and uses their component-wise median (a trailing partial window keeps the same statistic); three strictly increasing windows count as growth only when the rise across the triple clears the registered noise floor of max(2% of warm baseline, 4 MiB); no window or raw sample is removed, and the official cadence remains five minutes",
     resourceWindowRawSampleIntervalSeconds: 60,
     resourceWindowRawSamplesPerWindow: resourceRawSamplesPerWindow,
-    measurementRule: "monotonic IMKInputController.handle receipt before event conversion through CoreSession/librime and production AppKit candidate control/ViewModel application on the main thread; commit events also record insertText call-to-return latency separately; Auto Layout, window sizing, presentation and compositor work are outside the registered candidate-model endpoint and verified separately by candidate-window and installed APP gates; every warm-up and measured sequence returns to the main run loop just as the IMK host does between physical input sequences, with that run-loop turn inside the same per-sequence autorelease boundary AppKit normally provides; both sessions and the measured Enter/Escape distribution exercised during \(warmupSequenceCount)-sequence warm-up; every completed handle latency counted in a fixed 10us histogram with overflow and maximum retained; no completed samples excluded",
+    measurementRule: "monotonic IMKInputController.handle receipt before event conversion through CoreSession/core and production AppKit candidate control/ViewModel application on the main thread; commit events also record insertText call-to-return latency separately; Auto Layout, window sizing, presentation and compositor work are outside the registered candidate-model endpoint and verified separately by candidate-window and installed APP gates; every warm-up and measured sequence returns to the main run loop just as the IMK host does between physical input sequences, with that run-loop turn inside the same per-sequence autorelease boundary AppKit normally provides; both sessions and the measured Enter/Escape distribution exercised during \(warmupSequenceCount)-sequence warm-up; every completed handle latency counted in a fixed 10us histogram with overflow and maximum retained; no completed samples excluded",
     stressSecondsRequested: stressSeconds,
     measuredStressElapsedSeconds: stressElapsed,
     officialDurationGatePassed: officialDurationGatePassed,
@@ -836,7 +836,7 @@ let report = PerformanceReport(
     insertTextP50Milliseconds: insertTextLatencies.percentile(0.50),
     insertTextP95Milliseconds: insertTextLatencies.percentile(0.95),
     insertTextP99Milliseconds: insertTextLatencies.percentile(0.99),
-    localCandidateQueryRule: "Rust Session state+decoder elapsed reported by ABI v5; this conservatively upper-bounds the local librime candidate query and excludes FFI result copying",
+    localCandidateQueryRule: "Rust Session state+decoder elapsed reported by ABI v5; this conservatively upper-bounds the local decoder candidate query and excludes FFI result copying",
     localCandidateQueryLatencySamples: localCandidateQueryLatencies.count,
     localCandidateQueryP50Milliseconds: localCandidateQueryLatencies.percentile(0.50),
     localCandidateQueryP95Milliseconds: localCandidateQueryLatencies.percentile(0.95),

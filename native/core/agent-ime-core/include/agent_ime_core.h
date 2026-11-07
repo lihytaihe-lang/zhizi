@@ -105,23 +105,31 @@ int32_t aim_session_process(AimSession *session,
  * successful call, release its owned buffers with aim_result_free before the
  * storage is reused or discarded.
  */
+/* Reads the complete current page without changing state; output-only result is released with aim_result_free. */
+int32_t aim_session_current_page(AimSession *session, AimResult *result);
 /* Returns 1 for a matching withdrawal, 0 for no match, negative on invalid arguments. */
 int32_t aim_session_withdraw_selection(AimSession *session, const uint8_t *raw, size_t raw_len,
                                      const uint8_t *text, size_t text_len);
-/* 0 = Rime (default), 1 = Zhixu; idle session only. Native Zhixu always learns
- * in Zhixu; only the Rime decoder writes Rime learning data. */
+/* 1 = Zhixu, the only learning rule (sessions always learn in Zhixu); idle
+ * session only. The retired 0 = Rime rule is rejected as an invalid value:
+ * null=-1, invalid=-2 (including 0), composing=-10. */
 int32_t aim_session_set_learning(AimSession *session, uint32_t mode);
-/* 0 = Rime (default), 1 = Zhixu decoder when fuzzy input is off; idle session only.
- * ZHIZI_ZHIXU_WHOLE=1 forces on. Null=-1, invalid=-2, composing=-10. */
+/* Retained decoder knob: 0/1 are accepted for shell compatibility, but the inner
+ * decoder is native Zhixu for the session's whole life; this call no longer changes it.
+ * Null=-1, invalid=-2, composing=-10. */
 int32_t aim_session_set_zhixu_whole(AimSession *session, uint32_t on);
-/* Read-only: 1 = validated existing library, 0 = missing, negative = invalid or unreadable. */
+/* Retired: the Rime-userdb migration is complete. Always -50 (capability
+ * removed); never reads or writes the filesystem. */
 int32_t aim_learning_available(const uint8_t *user, size_t user_len);
-/* Dedicated fresh worker process only, before any Rime initialization. Copies before export.
- * 0 = ready (existing valid data is retained); negative = failure, no mode change. */
+/* Retired: the Rime-userdb migration is complete. Always -50 (capability
+ * removed); never reads or writes the filesystem. Symbol kept until the
+ * shells drop their calls. */
 int32_t aim_learning_migrate(const uint8_t *shared, size_t shared_len,
                              const uint8_t *user, size_t user_len);
 int32_t aim_session_set_fuzzy(AimSession *session, uint32_t fuzzy_mask);
-/* Deploys again so dictionaries added to the user directory take effect; drops any composition. Returns 0 on success. */
+/* Reloads the native dictionaries so tables added to the user directory since the
+ * session started (downloaded professional packs) take effect. Drops any composition;
+ * call it only at a safe point. Returns 0 on success. */
 int32_t aim_session_reload_dictionaries(AimSession *session);
 int32_t aim_session_set_context_profile(AimSession *session,
                                         uint32_t app_class_override,
@@ -130,12 +138,17 @@ uint32_t aim_session_context_group_mask(AimSession *session);
 uint32_t aim_session_context_complete_mask(AimSession *session);
 intptr_t aim_session_peek_following_pages(AimSession *session, size_t count, uint8_t *buffer, size_t capacity);
 intptr_t aim_session_composition_alternatives(AimSession *session, uint8_t *buffer, size_t capacity);
+/* Texts of the current page exactly as digit keys resolve against it, tab-separated. A shell that draws a page it
+ * built itself must match this. Returns bytes written, or the negated size when the buffer is too small. */
+intptr_t aim_session_page_texts(AimSession *session, uint8_t *buffer, size_t capacity);
 /* Process-wide correction switches; refreshes this session without clearing keys.
  * Call between model jobs and refresh each other live session before presenting it. */
 int32_t aim_session_set_corrections(AimSession *session, int32_t enabled,
                                   int32_t typed_costs, int32_t multiple_readings,
                                   int32_t trailing_letter);
 intptr_t aim_session_composition_edits(AimSession *session, uint8_t *buffer, size_t capacity);
+/* 0 = leads; -1 invalid; -10 not a current alternative; -11 the owner's learned whole stays first; -12 something else is first.
+ * Success means the page the digit keys resolve against really starts with the text. */
 int32_t aim_session_lead_with_composition(AimSession *session, const uint8_t *text, size_t length);
 int32_t aim_session_offer_composition(AimSession *session, const uint8_t *text, size_t length);
 int32_t aim_session_composition_guessed(AimSession *session);
@@ -175,6 +188,11 @@ int32_t aim_session_set_mode(AimSession *session, uint32_t mode);
 void aim_result_free(AimResult *result);
 uint32_t aim_core_abi_version(void);
 size_t aim_live_session_count(void);
+/* Waits for the background write of the persisted Zhixu index cache: 0 when
+ * settled (also when the write was dropped), 1 when timeout_ms (capped at
+ * 10000) elapsed. Short-lived processes call it after their last key so a
+ * cache built during the session reaches the disk before exit. */
+int32_t aim_index_cache_flush(uint32_t timeout_ms);
 
 #ifdef __cplusplus
 }

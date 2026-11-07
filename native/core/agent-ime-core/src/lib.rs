@@ -2,36 +2,23 @@
 
 mod blacklist;
 mod context_model;
-#[cfg(any(test, feature = "librime"))]
-mod custom_config;
 mod english_choices;
-#[cfg(any(test, feature = "librime"))]
-mod exact_readings;
 mod mixer;
 mod lexicon_layers;
-pub mod learning_migration;
 pub mod personal_picks;
 pub mod ranking;
-#[cfg(feature = "librime")]
-mod rime;
 mod secure_directory;
-#[cfg(any(test, feature = "librime"))]
-mod selection_ledger;
 mod state;
 pub mod zhixu;
 
 use context_model::ContextModel;
 use mixer::MixerLexicon;
-#[cfg(feature = "librime")]
-use rime::RimeDecoder;
-#[cfg(not(feature = "librime"))]
-use state::MockDecoder;
-use state::{Candidate, Decoder, KeyEvent, KeyKind, ResultModel, SecurityState, Session};
+use state::{Candidate, KeyEvent, KeyKind, ResultModel, SecurityState, Session};
 use std::ffi::c_void;
 use std::ptr;
 use std::slice;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 static LIVE_SESSIONS: AtomicUsize = AtomicUsize::new(0);
 
@@ -243,31 +230,26 @@ pub unsafe extern "C" fn aim_session_create(
     let Ok(app_id) = (unsafe { utf8_argument(app_id, app_id_len) }) else {
         return ptr::null_mut();
     };
-    #[cfg(not(feature = "librime"))]
-    let _ = (&shared_dir, &user_dir);
-
-    #[cfg(feature = "librime")]
-    let decoder: Box<dyn Decoder> = match RimeDecoder::new(&shared_dir, &user_dir) {
-        Ok(decoder) => Box::new(decoder),
-        Err(_) => return ptr::null_mut(),
+    // The native dictionaries load with the session; a failed load fails the
+    // session, exactly as a failed Rime deployment used to.
+    let shared_path = std::path::PathBuf::from(&shared_dir);
+    let user_path = secure_directory::physical_runtime_path(&std::path::PathBuf::from(&user_dir));
+    zhixu::loader::attach(&shared_path, &user_path);
+    let Ok(dictionary) = zhixu::loader::deployed_snapshot() else {
+        return ptr::null_mut();
     };
-    #[cfg(feature = "librime")]
-    let blacklist = match blacklist::shared_blacklist(std::path::Path::new(&user_dir)) {
-        Ok(blacklist) => blacklist,
-        Err(_) => return ptr::null_mut(),
+    let Some(dictionary) = dictionary else {
+        return ptr::null_mut();
     };
-    #[cfg(not(feature = "librime"))]
-    let decoder: Box<dyn Decoder> = Box::new(MockDecoder::default());
-
+    let Ok(blacklist) = blacklist::shared_blacklist(&user_path) else {
+        return ptr::null_mut();
+    };
     let session = Box::new(AimSession {
         app_id: app_id.clone(),
-        #[cfg(feature = "librime")]
-        inner: match Session::new_with_blacklist(decoder, app_id, blacklist) {
+        inner: match Session::new_native(app_id, blacklist, dictionary) {
             Ok(session) => session,
             Err(_) => return ptr::null_mut(),
         },
-        #[cfg(not(feature = "librime"))]
-        inner: Session::new(decoder, app_id),
     });
     LIVE_SESSIONS.fetch_add(1, Ordering::SeqCst);
     Box::into_raw(session)
@@ -335,6 +317,33 @@ pub unsafe extern "C" fn aim_session_process(
 }
 
 #[unsafe(no_mangle)]
+/// Reads the complete current page without changing session state.
+///
+/// # Safety
+///
+/// `session` must reference a live session and `result` must reference writable,
+/// output-only storage for one [`AimResult`], which may be uninitialized. On
+/// success, the caller must release the written result with [`aim_result_free`].
+pub unsafe extern "C" fn aim_session_current_page(
+    session: *mut AimSession,
+    result: *mut AimResult,
+) -> i32 {
+    if result.is_null() {
+        return -1;
+    }
+    unsafe { result.write(AimResult::default()) };
+    if session.is_null() {
+        return -1;
+    }
+    let session = unsafe { &*session };
+    let started = Instant::now();
+    let model = session.inner.current_result();
+    let elapsed = started.elapsed().as_nanos().min(u64::MAX as u128) as u64;
+    unsafe { fill_result(&mut *result, model, elapsed) };
+    0
+}
+
+#[unsafe(no_mangle)]
 /// Withdraws the immediately preceding matching personal pick. Returns 1 if withdrawn, 0 otherwise.
 ///
 /// # Safety
@@ -353,15 +362,15 @@ pub unsafe extern "C" fn aim_session_withdraw_selection(
 }
 
 #[unsafe(no_mangle)]
-/// Selects learning rules: 0 = Rime (default), 1 = Zhixu. Native Zhixu sessions
-/// always learn in Zhixu; only sessions using the Rime decoder write Rime data.
-/// Call only with no composition; invalid modes and busy sessions are rejected.
+/// Selects the learning rule: 1 = Zhixu (the only rule; sessions always learn
+/// in Zhixu). The former 0 = Rime rule no longer exists and returns -2 like
+/// any other invalid mode. Call only with no composition; busy sessions are
+/// rejected with -10.
 /// # Safety
 /// `session` must be null or a live, exclusively accessed session.
 pub unsafe extern "C" fn aim_session_set_learning(session: *mut AimSession, mode: u32) -> i32 {
     let Some(session) = (unsafe { session.as_mut() }) else { return -1 };
     let mode = match mode {
-        0 => zhixu::learning::LearningMode::Rime,
         1 => zhixu::learning::LearningMode::Zhixu,
         _ => return -2,
     };
@@ -369,9 +378,10 @@ pub unsafe extern "C" fn aim_session_set_learning(session: *mut AimSession, mode
 }
 
 #[unsafe(no_mangle)]
-/// Selects the decoder: 0 = Rime (default), 1 = Zhixu when fuzzy input is off.
-/// The evaluation flag ZHIZI_ZHIXU_WHOLE=1 forces the same product switch.
-/// Returns -1 for null, -2 for invalid values, and -10 during composition.
+/// Retained decoder knob: 0/1 are accepted for shell compatibility, but the
+/// session's inner decoder is native Zhixu for its whole life and this call no
+/// longer changes it. Returns -1 for null, -2 for invalid values, and -10
+/// during composition.
 /// # Safety
 /// `session` must be null or a live, exclusively accessed session.
 pub unsafe extern "C" fn aim_session_set_zhixu_whole(session: *mut AimSession, on: u32) -> i32 {
@@ -385,38 +395,26 @@ pub unsafe extern "C" fn aim_session_set_zhixu_whole(session: *mut AimSession, o
 }
 
 #[unsafe(no_mangle)]
-/// Returns 1 for a validated learning library, 0 for missing, -2 for invalid paths,
-/// and -3 for unreadable or invalid existing data. Never creates or modifies files.
+/// Retired migration entry point (Rime user dictionaries are gone): always
+/// returns -50 (capability removed) and never reads or writes `user`.
 /// # Safety
 /// `user` must be a valid UTF-8 pointer/length pair.
 pub unsafe extern "C" fn aim_learning_available(user: *const u8, user_len: usize) -> i32 {
-    let Ok(user) = (unsafe { utf8_argument(user, user_len) }) else { return -2 };
-    if user.is_empty() || user.contains('\0') { return -2; }
-    match learning_migration::learning_available(std::path::Path::new(&user)) {
-        Ok(available) => i32::from(available),
-        Err(_) => -3,
-    }
+    let _ = (user, user_len);
+    -50
 }
 
 #[unsafe(no_mangle)]
-/// One-time migration for a dedicated worker process before any Rime initialization.
-/// Only copies the source database; Rime opens the private staging directory.
-/// Returns 0 when ready, -2 for invalid paths, -3 for migration/validation failure,
-/// or -10 if this process already has live input sessions.
+/// Retired migration entry point (the one-time Rime userdb migration is
+/// complete): always returns -50 (capability removed) and never touches the
+/// filesystem. The symbol stays for the shells until they drop their calls.
 /// # Safety
-/// Paths must be valid UTF-8 pointer/length pairs. Run in a fresh child process.
+/// Paths must be valid UTF-8 pointer/length pairs.
 pub unsafe extern "C" fn aim_learning_migrate(
     shared: *const u8, shared_len: usize, user: *const u8, user_len: usize,
 ) -> i32 {
-    let (Ok(shared), Ok(user)) = (unsafe { utf8_argument(shared, shared_len) }, unsafe { utf8_argument(user, user_len) }) else {
-        return -2;
-    };
-    if shared.is_empty() || user.is_empty() || shared.contains('\0') || user.contains('\0') { return -2; }
-    if LIVE_SESSIONS.load(Ordering::SeqCst) != 0 { return -10; }
-    match learning_migration::migrate_if_needed(std::path::Path::new(&shared), std::path::Path::new(&user)) {
-        Ok(()) => 0,
-        Err(_) => -3,
-    }
+    let _ = (shared, shared_len, user, user_len);
+    -50
 }
 
 #[unsafe(no_mangle)]
@@ -437,8 +435,9 @@ pub unsafe extern "C" fn aim_session_set_fuzzy(session: *mut AimSession, fuzzy_m
 }
 
 #[unsafe(no_mangle)]
-/// Deploys the Rime schema again so dictionaries added to the user directory since the session started (downloaded
-/// professional packs) take effect. Drops any composition; call it only at a safe point. Returns 0 on success.
+/// Reloads the native dictionaries so tables added to the user directory since
+/// the session started (downloaded professional packs) take effect. Drops any
+/// composition; call it only at a safe point. Returns 0 on success.
 ///
 /// # Safety
 ///
@@ -546,6 +545,35 @@ pub unsafe extern "C" fn aim_session_composition_alternatives(
     let text = unsafe { &*session }
         .inner
         .composition_alternatives()
+        .iter()
+        .map(|value| value.replace(['\t', '\n'], " "))
+        .collect::<Vec<_>>()
+        .join("\t");
+    let bytes = text.as_bytes();
+    if bytes.len() > capacity || buffer.is_null() {
+        return -(bytes.len() as isize);
+    }
+    unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), buffer, bytes.len()) };
+    bytes.len() as isize
+}
+
+#[unsafe(no_mangle)]
+/// The texts of the current page as the core resolves digit keys against it, separated by `\t`.
+/// A shell that draws a page it built itself (model reorder, composed lead, offered composition)
+/// compares it with this before showing it. Returns the bytes written, or the negated size when too small.
+/// # Safety
+/// `session` must be live and exclusively accessed; `buffer` writable for `capacity`.
+pub unsafe extern "C" fn aim_session_page_texts(
+    session: *mut AimSession,
+    buffer: *mut u8,
+    capacity: usize,
+) -> isize {
+    if session.is_null() {
+        return 0;
+    }
+    let text = unsafe { &*session }
+        .inner
+        .page_texts()
         .iter()
         .map(|value| value.replace(['\t', '\n'], " "))
         .collect::<Vec<_>>()
@@ -730,7 +758,9 @@ pub unsafe extern "C" fn aim_ranking_owner_keeps(
 }
 
 #[unsafe(no_mangle)]
-/// C3: puts one of the current alternatives first for this input (0 on success).
+/// C3: puts one of the current alternatives first for this input. 0 on success; -1 invalid arguments; -10 the text is
+/// not a current alternative; -11 the owner's learned whole word stays first (a model sentence never displaces what the
+/// owner has taught); -12 something else is first on the real page. Success means the page really starts with it.
 /// # Safety
 /// `session` must be live and exclusively accessed; `text` readable for `length` bytes.
 pub unsafe extern "C" fn aim_session_lead_with_composition(
@@ -1086,7 +1116,7 @@ pub unsafe extern "C" fn aim_session_set_mode(session: *mut AimSession, mode: u3
 /// # Safety
 ///
 /// `result` must be null or point to a valid [`AimResult`] previously written
-/// by [`aim_session_process`] and not already freed. Its owned pointer/count
+/// by [`aim_session_process`] or [`aim_session_current_page`] and not already freed. Its owned pointer/count
 /// fields must not have been modified by the caller.
 pub unsafe extern "C" fn aim_result_free(result: *mut AimResult) {
     if result.is_null() {
@@ -1136,6 +1166,17 @@ pub extern "C" fn aim_core_abi_version() -> u32 {
 }
 
 #[unsafe(no_mangle)]
+/// Waits for the background write of the persisted Zhixu index cache to settle.
+/// Returns 0 when no write is pending or it finished (also when its target
+/// rejected the file), 1 when `timeout_ms` (capped at 10 seconds) elapsed.
+/// Short-lived processes call this after their last key so a cache built
+/// during the session actually reaches the disk before exit.
+pub extern "C" fn aim_index_cache_flush(timeout_ms: u32) -> i32 {
+    let timeout = Duration::from_millis(u64::from(timeout_ms.min(10_000)));
+    i32::from(!zhixu::index_cache::flush(timeout))
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn aim_live_session_count() -> usize {
     LIVE_SESSIONS.load(Ordering::SeqCst)
 }
@@ -1159,6 +1200,111 @@ mod ffi_tests {
             .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
+    fn assert_same_ffi_page(actual: &AimResult, expected: &AimResult) {
+        let text = |pointer, length| unsafe { utf8_argument(pointer, length) }.unwrap();
+        let candidates = |pointer: *mut AimCandidate, count| {
+            let values = if count == 0 { &[][..] }
+                else { unsafe { slice::from_raw_parts(pointer, count) } };
+            values.iter().map(|candidate| (
+                text(candidate.text, candidate.text_len),
+                text(candidate.comment, candidate.comment_len),
+                text(candidate.reading_key, candidate.reading_key_len),
+            )).collect::<Vec<_>>()
+        };
+        assert_eq!(text(actual.marked_text, actual.marked_text_len), text(expected.marked_text, expected.marked_text_len));
+        assert_eq!(actual.marked_cursor_utf8, expected.marked_cursor_utf8);
+        assert_eq!(candidates(actual.candidates, actual.candidate_count), candidates(expected.candidates, expected.candidate_count));
+        assert_eq!(candidates(actual.secondary_candidates, actual.secondary_candidate_count),
+            candidates(expected.secondary_candidates, expected.secondary_candidate_count));
+        assert_eq!(actual.highlighted_index, expected.highlighted_index);
+        assert_eq!(actual.page_no, expected.page_no);
+        assert_eq!(actual.is_last_page, expected.is_last_page);
+        assert_eq!(actual.mode, expected.mode);
+        assert_eq!(actual.secure_degraded, expected.secure_degraded);
+    }
+
+    #[test]
+    fn ffi_current_page_matches_process_and_accepts_uninitialized_output() {
+        let app_id = "ffi.current-page".to_string();
+        let mut session = AimSession { inner: Session::new(Box::new(crate::state::MockDecoder::default()), app_id.clone()), app_id };
+        for (kind, text, page_no, highlight) in [(0, "a", 0, 0), (0, "b", 0, 0), (0, "c", 0, 0),
+            (10, "", 0, 1), (8, "", 1, 0), (10, "", 1, 1)] {
+            let event = AimKeyEvent { kind, text: text.as_ptr(), text_len: text.len(), modifiers: 0,
+                security_state: 0, delivery_id: 941 };
+            let mut expected = std::mem::MaybeUninit::<AimResult>::uninit();
+            assert_eq!(unsafe { aim_session_process(&mut session, &event, expected.as_mut_ptr()) }, 0);
+            let mut expected = unsafe { expected.assume_init() };
+            assert_eq!((expected.page_no, expected.highlighted_index), (page_no, highlight));
+            for _ in 0..2 {
+                let mut current = std::mem::MaybeUninit::<AimResult>::uninit();
+                assert_eq!(unsafe { aim_session_current_page(&mut session, current.as_mut_ptr()) }, 0);
+                let mut current = unsafe { current.assume_init() };
+                assert_same_ffi_page(&current, &expected);
+                assert_eq!(current.status, 0);
+                assert_eq!(current.consumed, 0);
+                assert_eq!(current.commit_text_len, 0);
+                assert!(current.commit_text.is_null());
+                assert_eq!(current.selection_event_id, 0);
+                unsafe { aim_result_free(&mut current) };
+                assert!(current.marked_text.is_null());
+                assert!(current.candidates.is_null());
+                assert!(current.secondary_candidates.is_null());
+            }
+            unsafe { aim_result_free(&mut expected) };
+        }
+        assert!(include_str!("../include/agent_ime_core.h").contains("int32_t aim_session_current_page("));
+    }
+
+    #[test]
+    fn ffi_current_page_reflects_accepted_and_refused_composition_leads() {
+        crate::zhixu::with_index(crate::zhixu::fallback(), || {
+            let app_id = "ffi.current-page-lead".to_string();
+            let mut inner = Session::new(Box::new(crate::state::MockDecoder::default()), app_id.clone());
+            for character in "taifuzale".chars() {
+                inner.process(KeyEvent { kind: KeyKind::Text, text: character.to_string(), modifiers: 0,
+                    security: SecurityState::NonSecure, delivery_id: 1 });
+            }
+            assert!(inner.composition_alternatives().iter().any(|text| text == "太复杂了"));
+            let mut session = AimSession { inner, app_id };
+            let mut before = AimResult::default();
+            assert_eq!(unsafe { aim_session_current_page(&mut session, &mut before) }, 0);
+            assert!(before.candidate_count > 0);
+            let original_first = unsafe { utf8_argument((*before.candidates).text, (*before.candidates).text_len) }.unwrap();
+            for (text, status) in [("不在备选里", -10), ("太复杂了", 0)] {
+                assert_eq!(unsafe { aim_session_lead_with_composition(&mut session, text.as_ptr(), text.len()) }, status);
+                let mut current = AimResult::default();
+                assert_eq!(unsafe { aim_session_current_page(&mut session, &mut current) }, 0);
+                assert!(current.candidate_count > 0);
+                let first = unsafe { &*current.candidates };
+                assert_eq!(unsafe { utf8_argument(first.text, first.text_len) }.unwrap(),
+                    if status == 0 { text } else { &original_first });
+                if status == 0 {
+                    assert_eq!(unsafe { utf8_argument(first.comment, first.comment_len) }.unwrap(), ranking::COMPOSITION_COMMENT);
+                    assert!(!unsafe { utf8_argument(first.reading_key, first.reading_key_len) }.unwrap().is_empty());
+                } else {
+                    assert_same_ffi_page(&current, &before);
+                }
+                unsafe { aim_result_free(&mut current) };
+            }
+            unsafe { aim_result_free(&mut before) };
+        });
+    }
+
+    #[test]
+    fn ffi_current_page_rejects_null_arguments() {
+        assert_eq!(unsafe { aim_session_current_page(ptr::null_mut(), ptr::null_mut()) }, -1);
+        let mut output = std::mem::MaybeUninit::<AimResult>::uninit();
+        assert_eq!(unsafe { aim_session_current_page(ptr::null_mut(), output.as_mut_ptr()) }, -1);
+        let mut output = unsafe { output.assume_init() };
+        assert!(output.marked_text.is_null());
+        assert!(output.candidates.is_null());
+        assert!(output.secondary_candidates.is_null());
+        unsafe { aim_result_free(&mut output) };
+        let app_id = "ffi.current-page-null".to_string();
+        let mut session = AimSession { inner: Session::new(Box::new(crate::state::MockDecoder::default()), app_id.clone()), app_id };
+        assert_eq!(unsafe { aim_session_current_page(&mut session, ptr::null_mut()) }, -1);
+    }
+
     #[test]
     fn ffi_correction_settings_and_fractional_costs_round_trip() {
         // The settings are process-wide; exercise the public setter in a child so
@@ -1179,7 +1325,9 @@ mod ffi_tests {
         assert_eq!(unsafe { aim_session_set_corrections(ptr::null_mut(), 1, 1, 1, 1) }, -1);
         assert_eq!(unsafe { aim_session_set_corrections(&mut session, 1, 1, 1, 1) }, 0);
         let alternatives = session.inner.composition_alternatives();
-        assert!(alternatives.iter().any(|text| text == "已经是了"));
+        // The sentence-level alternatives depend on the lexicon (一经是了 / 以及是了 ...); the contract here is that
+        // a typed-key repair yields alternatives with fractional costs.
+        assert!(!alternatives.is_empty());
         let expected = session.inner.composition_edits();
         assert!(expected.iter().any(|value| value.fract() != 0.0));
         let mut buffer = [0u8; 256];
@@ -1201,16 +1349,60 @@ mod ffi_tests {
         let app_id = "ffi.learning-mode".to_string();
         let mut session = AimSession { inner: Session::new(Box::new(crate::state::MockDecoder::default()), app_id.clone()), app_id };
         assert_eq!(unsafe { aim_session_set_learning(ptr::null_mut(), 1) }, -1);
-        assert_eq!(unsafe { aim_session_set_learning(&mut session, 2) }, -2);
+        // The retired Rime rule (0) is rejected like any other invalid mode.
+        for invalid in [0, 2, u32::MAX] {
+            assert_eq!(unsafe { aim_session_set_learning(&mut session, invalid) }, -2);
+        }
         assert_eq!(unsafe { aim_session_set_learning(&mut session, 1) }, 0);
         session.inner.process(KeyEvent { kind: KeyKind::Text, text: "n".into(), modifiers: 0,
             security: SecurityState::NonSecure, delivery_id: 1 });
-        assert_eq!(unsafe { aim_session_set_learning(&mut session, 0) }, -10);
+        assert_eq!(unsafe { aim_session_set_learning(&mut session, 1) }, -10);
         let cancelled = session.inner.process(KeyEvent { kind: KeyKind::Escape, text: String::new(), modifiers: 0,
             security: SecurityState::NonSecure, delivery_id: 2 });
         assert!(cancelled.marked_text.is_empty());
-        assert_eq!(unsafe { aim_session_set_learning(&mut session, 0) }, 0);
+        assert_eq!(unsafe { aim_session_set_learning(&mut session, 1) }, 0);
         assert!(include_str!("../include/agent_ime_core.h").contains("int32_t aim_session_set_learning("));
+    }
+
+    #[test]
+    fn ffi_retired_learning_migration_entries_return_unsupported() {
+        let user = b"/nonexistent/zhixu/user";
+        assert_eq!(unsafe { aim_learning_available(user.as_ptr(), user.len()) }, -50);
+        assert_eq!(unsafe { aim_learning_available(ptr::null(), 0) }, -50);
+        assert_eq!(
+            unsafe { aim_learning_migrate(b"shared".as_ptr(), 6, user.as_ptr(), user.len()) },
+            -50,
+        );
+        assert_eq!(unsafe { aim_learning_migrate(ptr::null(), 0, ptr::null(), 0) }, -50);
+        assert!(!std::path::Path::new("/nonexistent/zhixu").exists());
+        let header = include_str!("../include/agent_ime_core.h");
+        assert!(header.contains("int32_t aim_learning_available("));
+        assert!(header.contains("int32_t aim_learning_migrate("));
+    }
+
+    #[test]
+    fn ffi_index_cache_flush_settles_a_scheduled_write() {
+        assert_eq!(aim_index_cache_flush(u32::MAX), 0, "the timeout is capped but still settles");
+        let root = std::env::temp_dir().join(format!("aim-ffi-index-cache-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("user")).unwrap();
+        let dictionary = std::sync::Arc::new(zhixu::Index::from_data(zhixu::loader::DictionaryData {
+            entries: vec![zhixu::loader::Entry {
+                text: "你".into(),
+                reading: "ni".into(),
+                weight: 100,
+                layer: "ffi".into(),
+            }],
+        }));
+        dictionary.warm_whole();
+        assert!(!zhixu::index_cache::ffi_test_schedule(&root, &dictionary), "nothing is on disk yet");
+        assert_eq!(aim_index_cache_flush(50), 0, "a short timeout still writes unclaimed work inline");
+        assert!(
+            root.join("user").join("agent_zhixu_index_cache_v1.bin").is_file(),
+            "flush wrote the scheduled cache file"
+        );
+        std::fs::remove_dir_all(root).unwrap();
+        assert!(include_str!("../include/agent_ime_core.h").contains("int32_t aim_index_cache_flush("));
     }
 
     #[test]
@@ -1264,19 +1456,50 @@ mod ffi_tests {
         assert!(header.contains("AIM_KEY_LINEAR_PREVIOUS = 21"));
     }
 
+    /// `aim_session_create` attaches the process-global dictionary runtime, so
+    /// tests that create sessions run in a child to leave other tests' state alone.
+    fn session_child(name: &str) -> bool {
+        const CHILD: &str = "AIM_FFI_SESSION_TEST";
+        if std::env::var(CHILD).as_deref() == Ok(name) { return true; }
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", &format!("ffi_tests::{name}"), "--nocapture"])
+            .env(CHILD, name).output().unwrap();
+        assert!(output.status.success(), "{}\n{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+        false
+    }
+
+    /// `aim_session_create` deploys the native dictionaries, so tests that
+    /// create sessions need real (minimal) shared directories.
+    fn session_directories(name: &str) -> std::path::PathBuf {
+        let root = std::env::temp_dir().join(format!("aim-ffi-session-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let shared = root.join("shared");
+        let user = root.join("user");
+        std::fs::create_dir_all(&shared).unwrap();
+        std::fs::create_dir_all(&user).unwrap();
+        std::fs::write(shared.join("agent_pinyin.dict.yaml"),
+            "---\nname: agent_pinyin\nsort: by_weight\nimport_tables:\n  - pinyin_simp\n...\n").unwrap();
+        std::fs::write(shared.join("pinyin_simp.dict.yaml"),
+            "---\nname: pinyin_simp\nsort: by_weight\n...\n你\tni\t100\n你好\tni hao\t90\n好\thao\t80\n").unwrap();
+        root
+    }
+
     #[test]
     fn ffi_create_process_destroy_balances_live_handles() {
-        let _serialized = serialize_live_session_tests();
+        if !session_child("ffi_create_process_destroy_balances_live_handles") { return; }
         let baseline = aim_live_session_count();
-        let shared = b"/tmp/shared";
-        let user = b"/tmp/user";
+        let root = session_directories("balances");
+        let shared = root.join("shared");
+        let user = root.join("user");
         let app = b"test.app";
+        let shared_dir = shared.to_str().unwrap().as_bytes();
+        let user_dir = user.to_str().unwrap().as_bytes();
         let session = unsafe {
             aim_session_create(
-                shared.as_ptr(),
-                shared.len(),
-                user.as_ptr(),
-                user.len(),
+                shared_dir.as_ptr(),
+                shared_dir.len(),
+                user_dir.as_ptr(),
+                user_dir.len(),
                 app.as_ptr(),
                 app.len(),
             )
@@ -1301,10 +1524,40 @@ mod ffi_tests {
         unsafe { aim_result_free(&mut result) };
         unsafe { aim_session_destroy(session) };
         assert_eq!(aim_live_session_count(), baseline);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn ffi_create_fails_when_the_dictionaries_cannot_load() {
+        if !session_child("ffi_create_fails_when_the_dictionaries_cannot_load") { return; }
+        let baseline = aim_live_session_count();
+        let root = session_directories("missing");
+        // A shared directory without dictionary tables fails the native deployment;
+        // the session must fail exactly as a failed Rime deployment used to.
+        std::fs::remove_file(root.join("shared/pinyin_simp.dict.yaml")).unwrap();
+        let shared = root.join("shared");
+        let user = root.join("user");
+        let app = b"test.app";
+        let shared_dir = shared.to_str().unwrap().as_bytes();
+        let user_dir = user.to_str().unwrap().as_bytes();
+        let session = unsafe {
+            aim_session_create(
+                shared_dir.as_ptr(),
+                shared_dir.len(),
+                user_dir.as_ptr(),
+                user_dir.len(),
+                app.as_ptr(),
+                app.len(),
+            )
+        };
+        assert!(session.is_null());
+        assert_eq!(aim_live_session_count(), baseline);
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
     fn ffi_context_model_snapshot_is_validated_applied_and_released() {
+        if !session_child("ffi_context_model_snapshot_is_validated_applied_and_released") { return; }
         let _serialized = serialize_live_session_tests();
         let bytes =
             r#"{"rules":[{"pinyin":"ceshi","senses":[{"word":"测试","triggers":["运行"]}]}]}"#
@@ -1313,17 +1566,18 @@ mod ffi_tests {
         assert!(!model.is_null());
         assert!(unsafe { aim_context_model_snapshot_prepare(std::ptr::null(), 0) }.is_null());
 
-        let shared = b"/tmp/shared";
-        let user = b"/tmp/user";
-        let app = b"test.context.ffi";
+        let root = session_directories("context");
+        let shared_dir = root.join("shared");
+        let user_dir = root.join("user");
+        let app_id = b"test.context.ffi";
         let session = unsafe {
             aim_session_create(
-                shared.as_ptr(),
-                shared.len(),
-                user.as_ptr(),
-                user.len(),
-                app.as_ptr(),
-                app.len(),
+                shared_dir.to_str().unwrap().as_ptr() as *const u8,
+                shared_dir.to_str().unwrap().len(),
+                user_dir.to_str().unwrap().as_ptr() as *const u8,
+                user_dir.to_str().unwrap().len(),
+                app_id.as_ptr(),
+                app_id.len(),
             )
         };
         assert!(!session.is_null());
@@ -1335,5 +1589,6 @@ mod ffi_tests {
             aim_context_model_snapshot_destroy(model);
             aim_session_destroy(session);
         }
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

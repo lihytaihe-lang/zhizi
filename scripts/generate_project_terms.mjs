@@ -85,6 +85,27 @@ function exclusionCategory(term) {
 function hasProjectTermShape(term) {
   return /[a-z][A-Z]|[A-Z]{2}|[\d_+-]/u.test(term);
 }
+function snakeCaseShaped(term) {
+  return term.includes("_");
+}
+function camelPascalShaped(term) {
+  return !term.includes("_") && /[a-z][A-Z]/u.test(term);
+}
+// Identifiers mined from implementation files only become owner-facing terms
+// when authoritative documentation independently mentions them; mentions in
+// historical task/evidence records do not count (a bug report quoting an
+// identifier must not keep it alive). Otherwise every internal refactor or
+// high-frequency helper would keep rewriting the frozen IME candidate surface.
+function undocumentedIdentifier(entry, authoritativeDocFiles) {
+  if (entry.ownerFacing) return null;
+  if ([...entry.sources].some((source) => authoritativeDocFiles.has(source))) return null;
+  const forms = [...entry.forms.keys()]
+    .filter((form) => snakeCaseShaped(form) || camelPascalShaped(form));
+  if (!forms.length) return null;
+  return forms.some((form) => snakeCaseShaped(form))
+    ? "undocumented-snake-case-identifier"
+    : "undocumented-camel-case-identifier";
+}
 function rustInternalTypeDeclarations(contents) {
   return [...contents.matchAll(
     /\b(?:pub(?:\([^)]*\))?\s+)?(?:struct|enum|type|trait)\s+([A-Za-z][A-Za-z0-9_]{2,63})/gu,
@@ -117,6 +138,40 @@ if (rustInternalTypeDeclarations(rustTypeFixture).join(",")
     !== "LocalState,FutureInternalType,LocalApi") {
   throw new Error("Rust internal type declaration policy no longer covers struct/enum/trait generically");
 }
+if (!snakeCaseShaped("all_readings_for_text") || snakeCaseShaped("applyLexicon")) {
+  throw new Error("snake_case shape check no longer detects underscore identifiers");
+}
+if (!camelPascalShaped("AgentInputController") || !camelPascalShaped("attributesForCharacterIndex")
+    || camelPascalShaped("all_readings_for_text") || camelPascalShaped("ordinary")) {
+  throw new Error("camel/Pascal shape check no longer separates identifier humps from plain words");
+}
+const authoritativeDocFixture = new Set(["docs/current/TECHNICAL_SPEC.md"]);
+const snakeSourceOnlyFixture = {
+  ownerFacing: false,
+  forms: new Map([["all_readings_for_text", 472]]),
+  sources: new Set(["native/core/agent-ime-core/src/zhixu/decoder.rs"]),
+};
+const camelSourceOnlyFixture = {
+  ownerFacing: false,
+  forms: new Map([["configureCandidateContextForProbe", 1]]),
+  sources: new Set(["src-tauri/src/lib.rs"]),
+};
+const documentedSnakeFixture = {
+  ownerFacing: false,
+  forms: new Map([["agent_pinyin", 3]]),
+  sources: new Set(["native/core/agent-ime-core/src/lib.rs", "docs/current/TECHNICAL_SPEC.md"]),
+};
+const ownerFacingPascalFixture = {
+  ownerFacing: true,
+  forms: new Map([["ProductInputs", 5]]),
+  sources: new Set(["docs/current/PRODUCT_SPEC.md"]),
+};
+if (undocumentedIdentifier(snakeSourceOnlyFixture, authoritativeDocFixture) !== "undocumented-snake-case-identifier"
+    || undocumentedIdentifier(camelSourceOnlyFixture, authoritativeDocFixture) !== "undocumented-camel-case-identifier"
+    || undocumentedIdentifier(documentedSnakeFixture, authoritativeDocFixture) !== null
+    || undocumentedIdentifier(ownerFacingPascalFixture, authoritativeDocFixture) !== null) {
+  throw new Error("identifier nomination policy no longer skips source-only identifiers");
+}
 
 async function collectFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -143,6 +198,12 @@ const files = [
 if (files.some((file) => internalSourcePaths.has(path.relative(root, file)))) {
   throw new Error("credential implementation entered owner-facing project vocabulary");
 }
+// Authoritative documentation is the Markdown set that can nominate terms
+// (explicit specs plus ADRs). Historical task/evidence records only confirm
+// frequency; they must not rescue implementation identifiers either.
+const authoritativeDocFiles = new Set(files
+  .filter((file) => file.endsWith(".md"))
+  .map((file) => path.relative(root, file)));
 const referenceFiles = [...new Set([
   ...files,
   ...(await collectFiles(currentDocsRoot)).filter((file) => file.endsWith(".md")),
@@ -243,6 +304,13 @@ function preferredForm(entry) {
       || left.localeCompare(right, "en"))[0][0];
 }
 
+for (const [reading, entry] of terms) {
+  const category = undocumentedIdentifier(entry, authoritativeDocFiles);
+  if (!category) continue;
+  recordExclusion(category, preferredForm(entry));
+  terms.delete(reading);
+}
+
 const rankedCandidates = [...terms.entries()]
   .filter(([, entry]) => entry.referenceCount >= 2 || entry.bonus >= 5000)
   .map(([reading, entry]) => ({ reading, entry, text: preferredForm(entry) }))
@@ -288,7 +356,7 @@ const dictionary = `# Generated deterministically from repository-owned ProductI
 const provenanceRows = selected.map(({ text, reading, entry }) => {
   const weight = Math.min(520, 300 + Math.round(Math.log2(entry.referenceCount + 1) * 35));
   return `${text}\t${reading}\t${weight}\t${entry.referenceCount}\t${[...entry.sources].sort().join(",")}`
-    + "\tproject-authored\tdeterministic-repository-frequency-v2";
+    + "\tproject-authored\tdeterministic-repository-frequency-v3";
 });
 const provenance = "text\treading\tweight\toccurrences\tsources\tlicense\textraction_rule\n"
   + `${provenanceRows.join("\n")}\n`;

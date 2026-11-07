@@ -1,5 +1,3 @@
-#![cfg_attr(not(any(test, feature = "librime")), allow(dead_code))]
-
 //! Which optional dictionary layers the user switched off (`lexicon_layers_v1.json` in the Rime user directory).
 //!
 //! The dictionaries are merged into one Rime table, so a word cannot be asked which layer it came from. The build writes
@@ -261,6 +259,7 @@ pub(crate) fn dictionary_pack_ids(user_dir: &Path) -> HashSet<String> {
 }
 
 /// Records the choice of one layer (`enabled` false = switched off) and keeps what else was chosen.
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn set_layer(user_dir: &Path, id: &str, enabled: bool) -> io::Result<()> {
     if !valid_id(id) {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "invalid layer id"));
@@ -374,6 +373,7 @@ fn refresh(state: &mut State, now: Instant) -> Option<(PathBuf, PacksFingerprint
     }
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn hidden_in(membership: &Membership, disabled: &HashSet<String>, text: &str) -> bool {
     !disabled.is_empty()
         && membership.get(text).is_some_and(|layers| layers.iter().all(|layer| disabled.contains(*layer)))
@@ -397,6 +397,7 @@ fn hidden_in_combined(membership: &Membership, extra: &ExtraMembership, disabled
 
 /// True when `text` is a run of two or more known words of at least two characters each, none of them hidden. Rime assembles such a
 /// phrase from words that are on (在线模型 from 在线 + 模型) and it stays even if a switched-off layer also lists the same phrase.
+#[cfg_attr(not(test), allow(dead_code))]
 fn assembled_from_visible_words(
     membership: &Membership,
     disabled: &HashSet<String>,

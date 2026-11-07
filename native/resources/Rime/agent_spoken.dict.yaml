@@ -2546,7 +2546,6 @@ sort: by_weight
 佛系玩	fo xi wan	250
 副本开了	fu ben kai le	250
 副本刷完	fu ben shua wan	250
-发布了	fu bu le	250
 付不了	fu bu liao	250
 复查下	fu cha xia	250
 复查一下	fu cha yi xia	250
@@ -3508,7 +3507,6 @@ sort: by_weight
 还点钱	hai dian qian	250
 还分期	hai fen qi	250
 还个车	hai ge che	250
-改个后缀	hai ge hou zhui	250
 还好还好	hai hao hai hao	250
 还花呗	hai hua bei	250
 还款日	hai kuan ri	250
@@ -3845,7 +3843,6 @@ sort: by_weight
 划范围	hua fan wei	250
 划个水	hua ge shui	250
 画个图	hua ge tu	250
-换个药	hua ge yao	250
 划个重点	hua ge zhong dian	250
 花光了	hua guang le	250
 划过去	hua guo qu	250
@@ -4638,21 +4635,8 @@ sort: by_weight
 卡点交	ka dian jiao	250
 卡段位了	ka duan wei le	250
 卡顿了	ka dun le	250
-开个单	ka ge dan	250
 卡个点	ka ge dian	250
 卡个顿	ka ge dun	250
-开个房	ka ge fang	250
-开个分支	ka ge fen zhi	250
-开个黑	ka ge hei	250
-开个会员	ka ge hui yuan	250
-开个麦	ka ge mai	250
-开个票	ka ge piao	250
-开个权限	ka ge quan xian	250
-开个团	ka ge tuan	250
-开个玩笑	ka ge wan xiao	250
-开个网页	ka ge wang ye	250
-开个新文件夹	ka ge xin wen jian jia	250
-开个语音	ka ge yu yin	250
 卡关了	ka guan le	250
 卡加载	ka jia zai	250
 卡了卡了	ka le ka le	250
@@ -5062,8 +5046,6 @@ sort: by_weight
 口径一致	kou jing yi zhi	250
 扣款了	kou kuan le	250
 扣款失败	kou kuan shi bai	250
-够了吧	kou le ba	250
-够了够了	kou le kou le	250
 扣利息	kou li xi	250
 扣手续费	kou shou xu fei	250
 扣完了	kou wan le	250
@@ -5487,12 +5469,7 @@ sort: by_weight
 乱码了	luan ma le	250
 落袋为安	luo dai wei an	250
 落地了	luo di le	250
-漏掉了	luo diao le	250
-漏发了	luo fa le	250
-漏发了吧	luo fa le ba	250
-漏光了	luo guang le	250
 裸考过	luo kao guo	250
-漏内存	luo nei cun	250
 绿灯了	lv deng le	250
 绿灯亮了	lv deng liang le	250
 绿了没	lv le mei	250
@@ -6537,21 +6514,14 @@ sort: by_weight
 骑个车	qi ge che	250
 起个名	qi ge ming	250
 起个早	qi ge zao	250
-切回来	qi hu li	250
-切后排	qi hu pi	250
-切换下	qi hun xi	250
 弃剧了	qi ju le	250
 弃坑了	qi keng le	250
 起来动动	qi lai dong dong	250
 起来了	qi lai le	250
 起来走走	qi lai zou zou	250
-切流量	qi li ling	250
-求链接	qi lin ji	250
 起球了	qi qiu le	250
 其实吧	qi shi ba	250
-切水果	qi shu gu	250
 气死我了	qi si wo le	250
-切碎了	qi su le	250
 起晚了	qi wan le	250
 气笑了	qi xiao le	250
 气炸了	qi zha le	250
@@ -6936,7 +6906,6 @@ sort: by_weight
 扔洗衣机	reng xi yi ji	250
 扔下垃圾	reng xia la ji	250
 扔一下	reng yi xia	250
-能指定吗	reng zhi ding ma	250
 扔纸箱	reng zhi xiang	250
 日常还没做	ri chang hai mei zuo	250
 日常没做	ri chang mei zuo	250
@@ -9382,14 +9351,9 @@ sort: by_weight
 写注释	xie zhu shi	250
 新标签	xin biao qian	250
 新番来了	xin fan lai le	250
-先挂着	xin gu zhe	250
-先苟着	xin gu zhe	250
-先关了吧	xin gun le ba	250
 信号差	xin hao cha	250
 心好累	xin hao lei	250
 信号没了	xin hao mei le	250
-先划下	xin hu xi	250
-先缓缓吧	xin hun hun ba	250
 新建个	xin jian ge	250
 新建个夹	xin jian ge jia	250
 新建文件夹	xin jian wen jian jia	250
@@ -9400,17 +9364,8 @@ sort: by_weight
 新开一页	xin kai yi ye	250
 辛苦你	xin ku ni	250
 心累了	xin lei le	250
-限流了	xin li le	250
 心里没底	xin li mei di	250
-先留着	xin li zhe	250
-先留着吧	xin li zhe ba	250
 心凉了	xin liang le	250
-先晾着	xin ling zhe	250
-先排着	xin pi zhe	250
-先跑跑	xin po po	250
-先跑下	xin po xi	250
-先泡着	xin po zhe	250
-先泡着吧	xin po zhe ba	250
 心态崩	xin tai beng	250
 心态崩了	xin tai beng le	250
 心态炸了	xin tai zha le	250
@@ -9617,7 +9572,6 @@ sort: by_weight
 异地还车	yi di huan che	250
 一点五倍	yi dian wu bei	250
 一定的	yi ding de	250
-移到回收站	yi dong hui shou zhan	250
 一动就炸	yi dong jiu zha	250
 一堆报错	yi dui bao cuo	250
 一发入魂	yi fa ru hun	250

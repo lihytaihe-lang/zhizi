@@ -3,17 +3,6 @@
   "policy": "Input-method bundle license inputs are fixed raw upstream texts. Missing, moving, symlinked, size-drifted or checksum-drifted inputs fail release validation.",
   "assets": [
     {
-      "component": "librime",
-      "versionOrCommit": "1.16.1/de4700e9f6b75b109910613df907965e3cbe0567",
-      "license": "BSD-3-Clause",
-      "sourceUrl": "https://raw.githubusercontent.com/rime/librime/de4700e9f6b75b109910613df907965e3cbe0567/LICENSE",
-      "repositoryPath": ".build-deps/librime/1.16.1/licenses/LICENSE.librime",
-      "bundleFilename": "librime-BSD-3-Clause.txt",
-      "status": "locked",
-      "bytes": 1513,
-      "sha256": "f67d27a6d2d586fcfed4b4c886a83747095396a39b6641e18e855086be2ec400"
-    },
-    {
       "component": "rime-pinyin-simp",
       "versionOrCommit": "0c6861ef7420ee780270ca6d993d18d4101049d0",
       "license": "Apache-2.0",
@@ -84,96 +73,6 @@
       "status": "locked",
       "bytes": 425661,
       "sha256": "af70aaabed1b73e872f14f9130db37e09f3f4d73a5f7c598b9173697a5d2729f"
-    },
-    {
-      "component": "Boost",
-      "versionOrCommit": "1.89.0/ef7fea34711a189472893b88205b1dd3c275677b",
-      "license": "BSL-1.0",
-      "sourceUrl": "https://raw.githubusercontent.com/boostorg/boost/ef7fea34711a189472893b88205b1dd3c275677b/LICENSE_1_0.txt",
-      "repositoryPath": "third_party/licenses/boost-BSL-1.0.txt",
-      "bundleFilename": "boost-BSL-1.0.txt",
-      "status": "locked",
-      "bytes": 1338,
-      "sha256": "c9bff75738922193e67fa726fa225535870d2aa1059f91452c411736284ad566"
-    },
-    {
-      "component": "glog",
-      "versionOrCommit": "7b134a5c82c0c0b5698bb6bf7a835b230c5638e4",
-      "license": "BSD-3-Clause",
-      "sourceUrl": "https://raw.githubusercontent.com/google/glog/7b134a5c82c0c0b5698bb6bf7a835b230c5638e4/COPYING",
-      "repositoryPath": "third_party/licenses/glog-BSD-3-Clause.txt",
-      "bundleFilename": "glog-BSD-3-Clause.txt",
-      "status": "locked",
-      "bytes": 1479,
-      "sha256": "136d48dea7a681413691f3db3098f6cf5ffaa3119d96d97bb83b8cff3ce38c4a"
-    },
-    {
-      "component": "LevelDB",
-      "versionOrCommit": "99b3c03b3284f5886f9ef9a4ef703d57373e61be",
-      "license": "BSD-3-Clause",
-      "sourceUrl": "https://raw.githubusercontent.com/google/leveldb/99b3c03b3284f5886f9ef9a4ef703d57373e61be/LICENSE",
-      "repositoryPath": "third_party/licenses/leveldb-BSD-3-Clause.txt",
-      "bundleFilename": "leveldb-BSD-3-Clause.txt",
-      "status": "locked",
-      "bytes": 1484,
-      "sha256": "ccc19f1da0798ed666609b65a5b44dd8b3abe6fc08b9c0592eb76e82e174db19"
-    },
-    {
-      "component": "marisa-trie",
-      "versionOrCommit": "3e87d53b78e15f2f43783d5e376561a8c9722051",
-      "license": "BSD-2-Clause selected from dual license",
-      "sourceUrl": "https://raw.githubusercontent.com/s-yata/marisa-trie/3e87d53b78e15f2f43783d5e376561a8c9722051/COPYING.md",
-      "repositoryPath": "third_party/licenses/marisa-trie-COPYING.txt",
-      "bundleFilename": "marisa-trie-COPYING.txt",
-      "status": "locked",
-      "bytes": 2275,
-      "sha256": "edf58dab34c3dc239ba4ba2d5d3d844d8c5b442aa4dd1149fac81b2d8c6cb8d1"
-    },
-    {
-      "component": "OpenCC",
-      "versionOrCommit": "556ed22496d650bd0b13b6c163be9814637970ae",
-      "license": "Apache-2.0",
-      "sourceUrl": "https://raw.githubusercontent.com/BYVoid/OpenCC/556ed22496d650bd0b13b6c163be9814637970ae/LICENSE",
-      "repositoryPath": "third_party/licenses/OpenCC-Apache-2.0.txt",
-      "bundleFilename": "OpenCC-Apache-2.0.txt",
-      "status": "locked",
-      "bytes": 9165,
-      "sha256": "b534e465949558eec2597b04f5092b5e161236a68dfbfd04d547592ac3964308"
-    },
-    {
-      "component": "Darts-clone",
-      "versionOrCommit": "0.32h/87b71afd6cf784953e3c08f24c64203397f3b724; vendored as deps/darts-clone-0.32 by OpenCC 556ed22496d650bd0b13b6c163be9814637970ae",
-      "license": "BSD-2-Clause",
-      "sourceUrl": "https://raw.githubusercontent.com/s-yata/darts-clone/87b71afd6cf784953e3c08f24c64203397f3b724/COPYING.md",
-      "consumerRelation": "derived-or-vendored-version; the OpenCC vendored darts.h blob differs from upstream v0.32h and is not represented as byte-identical",
-      "repositoryPath": "third_party/licenses/darts-clone-COPYING.txt",
-      "bundleFilename": "darts-clone-COPYING.txt",
-      "status": "locked",
-      "bytes": 1320,
-      "sha256": "c6ab19db56ed127201dfb05346ea702ab53c4e387f43eafc343a7f4c2f2ae91e"
-    },
-    {
-      "component": "RapidJSON",
-      "versionOrCommit": "1.1.0/f54b0e47a08782a6131cc3d60f94d038fa6e0a51; vendored as deps/rapidjson-1.1.0/rapidjson by OpenCC 556ed22496d650bd0b13b6c163be9814637970ae",
-      "license": "MIT for the incorporated header implementation; upstream license.txt also inventories non-shipped BSD/JSON-license subcomponents",
-      "sourceUrl": "https://raw.githubusercontent.com/Tencent/rapidjson/f54b0e47a08782a6131cc3d60f94d038fa6e0a51/license.txt",
-      "consumerRelation": "derived-or-vendored-version; the OpenCC vendored rapidjson tree differs from the upstream v1.1.0 include tree and is not represented as byte-identical",
-      "repositoryPath": "third_party/licenses/RapidJSON-LICENSE.txt",
-      "bundleFilename": "RapidJSON-LICENSE.txt",
-      "status": "locked",
-      "bytes": 5152,
-      "sha256": "a140e5d46fe734a1c78f1a3c3ef207871dd75648be71fdda8e309b23ab8b1f32"
-    },
-    {
-      "component": "yaml-cpp",
-      "versionOrCommit": "2f86d13775d119edbb69af52e5f566fd65c6953b",
-      "license": "MIT",
-      "sourceUrl": "https://raw.githubusercontent.com/jbeder/yaml-cpp/2f86d13775d119edbb69af52e5f566fd65c6953b/LICENSE",
-      "repositoryPath": "third_party/licenses/yaml-cpp-MIT.txt",
-      "bundleFilename": "yaml-cpp-MIT.txt",
-      "status": "locked",
-      "bytes": 1061,
-      "sha256": "aa6fcc27be034e41e21dd832f9175bfe694a48491d9e14ff0fa278e19ad14f1b"
     },
     {
       "component": "jieba dictionary",

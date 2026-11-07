@@ -32,7 +32,7 @@ trap 'chmod -R u+rwX "$TEMP_ROOT" 2>/dev/null || true; rm -rf "$TEMP_ROOT"' EXIT
 REPORT="$TEMP_ROOT/report.json"
 ABBREVIATION_REPORT="$TEMP_ROOT/abbreviation-report.json"
 ARTIFACT_SHA="$($ROOT_DIR/script/artifact_checksum.sh "$BUNDLE")"
-DYLD_LIBRARY_PATH="$BUNDLE/Contents/Frameworks:$ROOT_DIR/native/core/target/release" "$HARNESS" \
+"$HARNESS" \
   "$BUNDLE/Contents/Resources/Rime" "$TEMP_ROOT/user" "$CORPUS" "$REPORT" 5 "$ARTIFACT_SHA" \
   >/dev/null
 
@@ -49,7 +49,7 @@ jq -e --arg checksum "$ARTIFACT_SHA" '
   $first.zhongguo == "中国"
 ' "$REPORT" >/dev/null
 
-DYLD_LIBRARY_PATH="$BUNDLE/Contents/Frameworks:$ROOT_DIR/native/core/target/release" "$HARNESS" \
+"$HARNESS" \
   "$BUNDLE/Contents/Resources/Rime" "$TEMP_ROOT/abbreviation-user" \
   "$ABBREVIATION_CORPUS" "$ABBREVIATION_REPORT" 5 "$ARTIFACT_SHA" >/dev/null
 

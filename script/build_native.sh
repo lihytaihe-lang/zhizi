@@ -51,7 +51,7 @@ node "$ROOT_DIR/scripts/validate_native_license_assets.mjs"
 CARGO_NET_OFFLINE=true node "$ROOT_DIR/scripts/generate_locked_dependency_registry.mjs" --check
 
 CARGO_TARGET_DIR="$CORE_TARGET_DIR" cargo build --locked --offline \
-  --manifest-path "$ROOT_DIR/native/core/Cargo.toml" --release --features librime
+  --manifest-path "$ROOT_DIR/native/core/Cargo.toml" --release
 touch "$ROOT_DIR/native/macos/Sources/AgentIMECoreBridge/bridge.c"
 AIM_CORE_LIBRARY_DIR="$CORE_LIBRARY_DIR" swift build --package-path "$ROOT_DIR/native/macos" \
   -c "$CONFIGURATION" --disable-automatic-resolution ${SWIFT_BUILD_ARGS[@]+"${SWIFT_BUILD_ARGS[@]}"}
@@ -64,7 +64,6 @@ mkdir -p "$ROOT_DIR/build/swift-module-cache"
 /usr/bin/xcrun swiftc -O -framework Carbon -framework Foundation \
   -module-cache-path "$ROOT_DIR/build/swift-module-cache" \
   "$ROOT_DIR/script/input_source_ctl.swift" -o "$SWIFT_BIN_DIR/AgentIMEInputSourceCtl"
-RIME_DIR="$ROOT_DIR/.build-deps/librime/1.16.1"
 PINYIN_DIR="$ROOT_DIR/.build-deps/rime-pinyin-simp/0c6861ef7420ee780270ca6d993d18d4101049d0"
 NATIVE_LICENSE_DIR="$ROOT_DIR/third_party/licenses"
 RUST_LICENSE_DIR="$ROOT_DIR/.build-deps/rust/1.94.1/licenses"
@@ -73,12 +72,10 @@ BUNDLE="$OUTPUT_DIR/Agent Input Method.inputmethod"
 CONTENTS="$BUNDLE/Contents"
 
 rm -rf "$BUNDLE"
-mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Frameworks" "$CONTENTS/Resources/Rime" "$CONTENTS/Resources/Licenses" "$CONTENTS/Resources/Skins"
+mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources/Rime" "$CONTENTS/Resources/Licenses" "$CONTENTS/Resources/Skins"
 cp "$SWIFT_BIN_DIR/AgentInputMethod" "$CONTENTS/MacOS/AgentInputMethod"
 cp "$SWIFT_BIN_DIR/AgentIMEInputSourceCtl" "$CONTENTS/MacOS/AgentIMEInputSourceCtl"
 cp "$SWIFT_BIN_DIR/AgentIMEPersonalReplayHarness" "$CONTENTS/MacOS/AgentIMEPersonalReplayHarness"
-cp "$SWIFT_BIN_DIR/AgentIMEUserDBCtl" "$CONTENTS/MacOS/AgentIMEUserDBCtl"
-cp "$RIME_DIR/lib/librime.1.dylib" "$CONTENTS/Frameworks/librime.1.dylib"
 cp "$ROOT_DIR/native/macos/Resources/InputMethod-Info.plist" "$CONTENTS/Info.plist"
 printf 'APPL????' > "$CONTENTS/PkgInfo"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$CONTENTS/Info.plist"
@@ -133,7 +130,6 @@ cp "$ROOT_DIR/native/resources/Rime/agent_owner_words.dict.yaml" "$CONTENTS/Reso
 cp "$ROOT_DIR/native/resources/Rime/agent_exact_readings.tsv" "$CONTENTS/Resources/Rime/agent_exact_readings.tsv"
 cp "$PINYIN_DIR/pinyin_simp.dict.yaml" "$CONTENTS/Resources/Rime/pinyin_simp.dict.yaml"
 cp "$ROOT_DIR/THIRD_PARTY_NOTICES.md" "$CONTENTS/Resources/THIRD_PARTY_NOTICES.md"
-cp "$RIME_DIR/licenses/LICENSE.librime" "$CONTENTS/Resources/Licenses/librime-BSD-3-Clause.txt"
 cp "$PINYIN_DIR/LICENSE" "$CONTENTS/Resources/Licenses/rime-pinyin-simp-Apache-2.0.txt"
 cp "$PINYIN_DIR/AUTHORS" "$CONTENTS/Resources/Licenses/rime-pinyin-simp-AUTHORS.txt"
 cp "$NATIVE_LICENSE_DIR/THUOCL-MIT.txt" "$CONTENTS/Resources/Licenses/THUOCL-MIT.txt"
@@ -142,35 +138,22 @@ cp "$NATIVE_LICENSE_DIR/pypinyin-MIT.txt" "$CONTENTS/Resources/Licenses/pypinyin
 cp "$RUST_LICENSE_DIR/LICENSE-APACHE" "$CONTENTS/Resources/Licenses/Rust-standard-library-Apache-2.0.txt"
 cp "$RUST_LICENSE_DIR/LICENSE-MIT" "$CONTENTS/Resources/Licenses/Rust-standard-library-MIT.txt"
 cp "$RUST_LICENSE_DIR/COPYRIGHT-library.html" "$CONTENTS/Resources/Licenses/Rust-standard-library-COPYRIGHT.txt"
-cp "$NATIVE_LICENSE_DIR/boost-BSL-1.0.txt" "$CONTENTS/Resources/Licenses/boost-BSL-1.0.txt"
-cp "$NATIVE_LICENSE_DIR/glog-BSD-3-Clause.txt" "$CONTENTS/Resources/Licenses/glog-BSD-3-Clause.txt"
-cp "$NATIVE_LICENSE_DIR/leveldb-BSD-3-Clause.txt" "$CONTENTS/Resources/Licenses/leveldb-BSD-3-Clause.txt"
-cp "$NATIVE_LICENSE_DIR/marisa-trie-COPYING.txt" "$CONTENTS/Resources/Licenses/marisa-trie-COPYING.txt"
-cp "$NATIVE_LICENSE_DIR/OpenCC-Apache-2.0.txt" "$CONTENTS/Resources/Licenses/OpenCC-Apache-2.0.txt"
-cp "$NATIVE_LICENSE_DIR/darts-clone-COPYING.txt" "$CONTENTS/Resources/Licenses/darts-clone-COPYING.txt"
-cp "$NATIVE_LICENSE_DIR/RapidJSON-LICENSE.txt" "$CONTENTS/Resources/Licenses/RapidJSON-LICENSE.txt"
-cp "$NATIVE_LICENSE_DIR/yaml-cpp-MIT.txt" "$CONTENTS/Resources/Licenses/yaml-cpp-MIT.txt"
 node "$ROOT_DIR/scripts/validate_native_license_assets.mjs" --bundle "$BUNDLE"
 
-chmod 755 "$CONTENTS/MacOS/AgentInputMethod" "$CONTENTS/MacOS/AgentIMEInputSourceCtl" "$CONTENTS/MacOS/AgentIMEPersonalReplayHarness" "$CONTENTS/MacOS/AgentIMEUserDBCtl" "$CONTENTS/Frameworks/librime.1.dylib"
-codesign --force --sign "$SIGN_IDENTITY" --timestamp=none "$CONTENTS/Frameworks/librime.1.dylib"
+chmod 755 "$CONTENTS/MacOS/AgentInputMethod" "$CONTENTS/MacOS/AgentIMEInputSourceCtl" "$CONTENTS/MacOS/AgentIMEPersonalReplayHarness"
 codesign --force --sign "$SIGN_IDENTITY" --timestamp=none "$CONTENTS/MacOS/AgentIMEInputSourceCtl"
 codesign --force --sign "$SIGN_IDENTITY" --timestamp=none "$CONTENTS/MacOS/AgentIMEPersonalReplayHarness"
-codesign --force --sign "$SIGN_IDENTITY" --timestamp=none "$CONTENTS/MacOS/AgentIMEUserDBCtl"
 codesign --force --deep --sign "$SIGN_IDENTITY" --timestamp=none "$BUNDLE"
 
 plutil -lint "$CONTENTS/Info.plist"
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :AgentIMEProductCommit' "$CONTENTS/Info.plist")" == "$PRODUCT_COMMIT" ]]
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :AgentIMEProductInputsSHA256' "$CONTENTS/Info.plist")" == "$PRODUCT_INPUTS_SHA256" ]]
 codesign --verify --deep --strict --verbose=2 "$BUNDLE"
-file "$CONTENTS/MacOS/AgentInputMethod" "$CONTENTS/MacOS/AgentIMEInputSourceCtl" "$CONTENTS/MacOS/AgentIMEPersonalReplayHarness" "$CONTENTS/MacOS/AgentIMEUserDBCtl" "$CONTENTS/Frameworks/librime.1.dylib"
-otool -L "$CONTENTS/MacOS/AgentInputMethod"
-otool -L "$CONTENTS/Frameworks/librime.1.dylib"
+file "$CONTENTS/MacOS/AgentInputMethod" "$CONTENTS/MacOS/AgentIMEInputSourceCtl" "$CONTENTS/MacOS/AgentIMEPersonalReplayHarness"
+otool -L "$CONTENTS/MacOS/AgentInputMethod" "$CONTENTS/MacOS/AgentIMEInputSourceCtl" "$CONTENTS/MacOS/AgentIMEPersonalReplayHarness"
 shasum -a 256 \
   "$CONTENTS/MacOS/AgentInputMethod" \
   "$CONTENTS/MacOS/AgentIMEPersonalReplayHarness" \
-  "$CONTENTS/MacOS/AgentIMEUserDBCtl" \
-  "$CONTENTS/Frameworks/librime.1.dylib" \
   "$CONTENTS/Resources/Rime/agent_pinyin.schema.yaml" \
   "$CONTENTS/Resources/Rime/agent_pinyin.dict.yaml" \
   "$CONTENTS/Resources/Rime/agent_common_fix.dict.yaml" \
@@ -213,14 +196,6 @@ shasum -a 256 \
   "$CONTENTS/Resources/Skins/Builtin/songxue/skin.json" \
   "$CONTENTS/Resources/Skins/Builtin/nihong/skin.json" \
   "$CONTENTS/Resources/ContextDisambig.json" \
-  "$CONTENTS/Resources/Licenses/librime-BSD-3-Clause.txt" \
-  "$CONTENTS/Resources/Licenses/boost-BSL-1.0.txt" \
-  "$CONTENTS/Resources/Licenses/glog-BSD-3-Clause.txt" \
-  "$CONTENTS/Resources/Licenses/leveldb-BSD-3-Clause.txt" \
-  "$CONTENTS/Resources/Licenses/marisa-trie-COPYING.txt" \
-  "$CONTENTS/Resources/Licenses/OpenCC-Apache-2.0.txt" \
-  "$CONTENTS/Resources/Licenses/darts-clone-COPYING.txt" \
-  "$CONTENTS/Resources/Licenses/RapidJSON-LICENSE.txt" \
   "$CONTENTS/Resources/Licenses/rime-pinyin-simp-Apache-2.0.txt" \
   "$CONTENTS/Resources/Licenses/rime-pinyin-simp-AUTHORS.txt" \
   "$CONTENTS/Resources/Licenses/THUOCL-MIT.txt" \
@@ -229,7 +204,6 @@ shasum -a 256 \
   "$CONTENTS/Resources/Licenses/Rust-standard-library-Apache-2.0.txt" \
   "$CONTENTS/Resources/Licenses/Rust-standard-library-MIT.txt" \
   "$CONTENTS/Resources/Licenses/Rust-standard-library-COPYRIGHT.txt" \
-  "$CONTENTS/Resources/Licenses/yaml-cpp-MIT.txt" \
   "$CONTENTS/Resources/THIRD_PARTY_NOTICES.md"
 [[ "$("$INPUT_GUARD" verify-inputs "$ROOT_DIR" "$PRODUCT_COMMIT")" == "$PRODUCT_COMMIT" ]]
 "$ROOT_DIR/script/unregister_dev_bundles.sh" >/dev/null 2>&1 || true

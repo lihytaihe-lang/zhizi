@@ -87,6 +87,86 @@ pub(crate) fn token_variants(token: &str, mask: u32) -> Vec<String> {
     variants
 }
 
+// One natural-log weight unit (the lattice uses ln(weight) * 1000). This is a
+// conservative spelling prior, not an owner-data fit: equal lexical paths prefer
+// the unchanged spelling, without charging a whole extra word (32236).
+pub(crate) const JQX_REPAIR_COST: i64 = 1000;
+
+pub(crate) fn has_jqx_spelling_error(raw: &str) -> bool {
+    raw.as_bytes().windows(2).any(|pair|
+        matches!(pair[0], b'j' | b'q' | b'x') && matches!(pair[1], b'a' | b'o' | b'e'))
+}
+
+/// Local, one-edit alternatives only: jqx never take a/o/e directly. The same
+/// syllable validator as fuzzy pinyin excludes jua/xuang and permits jue/quan.
+pub(crate) fn jqx_token_repairs(token: &str) -> Vec<String> {
+    let bytes = token.as_bytes();
+    if !has_jqx_spelling_error(token) || !bytes.iter().all(u8::is_ascii_lowercase) {
+        return Vec::new();
+    }
+    let mut candidates = Vec::new();
+    if matches!(bytes[0], b'j' | b'q' | b'x') && matches!(bytes[1], b'a' | b'o' | b'e') {
+        for letter in ['i', 'u'] {
+            let mut spelling = token.to_string();
+            spelling.insert(1, letter);
+            candidates.push(spelling);
+        }
+        if bytes.len() > 2 && matches!(bytes[2], b'i' | b'u') {
+            let mut spelling = bytes.to_vec();
+            spelling.swap(1, 2);
+            candidates.push(String::from_utf8(spelling).unwrap());
+        }
+    }
+    if bytes.len() > 2 && matches!(bytes[0], b'i' | b'u')
+        && matches!(bytes[1], b'j' | b'q' | b'x') && matches!(bytes[2], b'a' | b'o' | b'e')
+    {
+        let mut spelling = bytes.to_vec();
+        spelling.swap(0, 1);
+        candidates.push(String::from_utf8(spelling).unwrap());
+    }
+    candidates.retain(|spelling| full_syllable(spelling));
+    candidates.dedup();
+    candidates
+}
+
+pub(crate) struct SpellingRepair {
+    pub spelling: String,
+    changed_end: usize,
+    inserted: usize,
+}
+
+impl SpellingRepair {
+    /// A dictionary prefix must consume the entire repaired syllable. Its end
+    /// then maps back to the original keys, including a missing i/u.
+    pub fn raw_end(&self, end: usize) -> Option<usize> {
+        (end >= self.changed_end).then(|| end - self.inserted)
+    }
+}
+
+/// Alternative suffixes for the existing whole-word trie. Only the malformed
+/// syllable changes; later malformed syllables can use another lattice edge.
+pub(crate) fn jqx_spelling_repairs(raw: &str) -> Vec<SpellingRepair> {
+    let mut repairs: Vec<SpellingRepair> = Vec::new();
+    if !raw.is_ascii() || !has_jqx_spelling_error(raw) { return repairs; }
+    for start in 0..raw.len() {
+        let tail = &raw[start..];
+        if !tail.starts_with(['j', 'q', 'x'])
+            && !(tail.starts_with(['i', 'u']) && tail[1..].starts_with(['j', 'q', 'x'])) { continue; }
+        for end in start + 2..=raw.len().min(start + 6) {
+            let token = &raw[start..end];
+            if token.contains('\'') { break; }
+            for replacement in jqx_token_repairs(token) {
+                let mut spelling = raw.to_string();
+                spelling.replace_range(start..end, &replacement);
+                if repairs.iter().any(|repair| repair.spelling == spelling) { continue; }
+                repairs.push(SpellingRepair { spelling, changed_end: start + replacement.len(),
+                    inserted: replacement.len() - token.len() });
+            }
+        }
+    }
+    repairs
+}
+
 /// Whether `raw` (apostrophes mark required boundaries) spells the spaced
 /// `reading` one syllable per token under `mask`, each token being the
 /// syllable itself or one of its fuzzy spellings.
@@ -129,6 +209,43 @@ mod tests {
     #[test]
     fn mask_zero_changes_nothing() {
         assert_eq!(token_variants("zhang", 0), vec!["zhang"]);
+    }
+
+    #[test]
+    fn q9_jqx_repairs_insert_or_swap_only_into_legal_syllables() {
+        assert_eq!(jqx_token_repairs("qan"), ["qian", "quan"]);
+        assert_eq!(jqx_token_repairs("xan"), ["xian", "xuan"]);
+        assert_eq!(jqx_token_repairs("xang"), ["xiang"]);
+        assert_eq!(jqx_token_repairs("je"), ["jie", "jue"]);
+        assert_eq!(jqx_token_repairs("jong"), ["jiong"]);
+        for (raw, repaired) in [("jei", "jie"), ("jai", "jia"), ("xai", "xia"),
+            ("ixang", "xiang"), ("jain", "jian")] {
+            assert_eq!(jqx_token_repairs(raw), [repaired]);
+        }
+        for legal in ["qian", "xia", "jiao", "jue", "xi'an", "j'ao"] {
+            assert!(jqx_spelling_repairs(legal).is_empty(), "{legal}");
+        }
+        for raw in ["q'an", "x'ang", "j'ai", "中xang"] {
+            assert!(jqx_spelling_repairs(raw).is_empty(), "{raw}");
+        }
+        assert!(jqx_spelling_repairs("i'xang").iter().all(|repair| repair.spelling.starts_with("i'")));
+    }
+
+    #[test]
+    fn q9_repaired_prefix_ends_map_to_original_keys() {
+        let repairs = jqx_spelling_repairs("qanmian");
+        assert_eq!(repairs.iter().map(|repair| repair.spelling.as_str()).collect::<Vec<_>>(),
+            ["qianmian", "quanmian"]);
+        for repair in repairs {
+            assert_eq!(repair.raw_end(2), None, "the repaired syllable is incomplete");
+            assert_eq!(repair.raw_end(3), repair.spelling.starts_with("qia").then_some(2));
+            assert_eq!(repair.raw_end(4), Some(3));
+            assert_eq!(repair.raw_end(8), Some(7));
+        }
+        let repairs = jqx_spelling_repairs("ixang");
+        let repair = repairs.iter().find(|repair| repair.spelling == "xiang").unwrap();
+        assert_eq!(repair.raw_end(2), None);
+        assert_eq!(repair.raw_end(5), Some(5));
     }
 
     #[test]

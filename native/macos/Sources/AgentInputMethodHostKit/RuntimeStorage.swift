@@ -13,8 +13,8 @@ public enum RuntimeStorageError: Error {
 }
 
 /// Owns the validated storage tree used by one input-method process. A failed
-/// primary UserDB preparation never leaks the rejected path to librime; the
-/// process instead uses a private, non-persistent fallback.
+/// primary preparation never leaks the rejected path to the core; the process
+/// instead uses a private, non-persistent fallback.
 public final class RuntimeStorageLease: @unchecked Sendable {
     private static let markerName = ".agent-ime-ephemeral-owner"
     private static let maximumMarkerBytes = 4_096
@@ -47,10 +47,7 @@ public final class RuntimeStorageLease: @unchecked Sendable {
                 primaryRoot,
                 mode: mode_t(0o700)
             )
-            // Validate and recover before librime opens the database, but move
-            // the potentially large backup copy to the clean shutdown path so
-            // it cannot delay the first accepted key event.
-            _ = try UserDBManager.prepare(rootDirectory: root, backupExistingDatabase: false)
+            // Validate the tree before the core opens its user directory.
             let prepared = try capturePreparedAnchors(root)
             try prepared.root.verifyBoundPath()
             try prepared.rime.verifyBoundPath()
@@ -71,10 +68,6 @@ public final class RuntimeStorageLease: @unchecked Sendable {
                 throw RuntimeStorageError.fallbackUnavailable
             }
             do {
-                _ = try UserDBManager.prepare(
-                    rootDirectory: ownership.root,
-                    backupExistingDatabase: false
-                )
                 let prepared = try capturePreparedAnchors(ownership.root)
                 try ownership.parent.verifyBoundPath()
                 try prepared.root.verifyBoundPath()
@@ -142,9 +135,8 @@ public final class RuntimeStorageLease: @unchecked Sendable {
     private static func capturePreparedAnchors(
         _ root: LocalSecureDirectory
     ) throws -> StorageAnchors {
-        let rime = try root.openChild("Rime")
-        let backups = try root.openChild("UserDBBackups")
-        return StorageAnchors(root: root, rime: rime, backups: backups)
+        let rime = try root.openOrCreateChild("Rime", mode: mode_t(0o700))
+        return StorageAnchors(root: root, rime: rime)
     }
 
     private static func cleanup(_ ownership: EphemeralOwnership) {
@@ -218,12 +210,10 @@ public final class RuntimeStorageLease: @unchecked Sendable {
     private struct StorageAnchors: Sendable {
         let root: LocalSecureDirectory
         let rime: LocalSecureDirectory
-        let backups: LocalSecureDirectory
 
         var identities: [String: LocalSecureIdentity] {
             [
                 "Rime": rime.identity,
-                "UserDBBackups": backups.identity,
             ]
         }
     }

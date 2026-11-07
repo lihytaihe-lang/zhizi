@@ -189,6 +189,42 @@ final class QualityRecorder: @unchecked Sendable {
         queue.async { [weak self] in self?.loadConfiguration() }
     }
 
+    /// A deferred model result replaced the page the last `observe` saw: the record keeps what is on
+    /// screen now. No new event: counters, held commits and segment state are untouched.
+    func reviseShownPage(_ result: IMEViewModel) {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        guard var current = pending, !result.markedText.isEmpty,
+              let marked = splitMarkedText(result.markedText), marked.prefix == current.pickedPrefix,
+              current.pageNumber == result.pageNumber else { return }
+        let firstLayerIndices = result.candidates.prefix(12).indices.filter {
+            sanitizedCandidate(result.candidates[$0].text) != nil
+        }
+        let firstLayer = firstLayerIndices.compactMap { index -> (String, String)? in
+            let candidate = result.candidates[index]
+            guard let text = sanitizedCandidate(candidate.text) else { return nil }
+            return (text, sanitizedCandidateComment(candidate.comment) ?? "")
+        }
+        let remaining = max(0, 12 - firstLayer.count)
+        let secondary = result.secondaryCandidates.prefix(remaining).compactMap {
+            candidate -> (String, String)? in
+            guard let text = sanitizedCandidate(candidate.text) else { return nil }
+            return (text, sanitizedCandidateComment(candidate.comment) ?? "")
+        }
+        let combined = firstLayer + secondary
+        current.candidates = combined.map(\.0)
+        current.candidateComments = combined.map(\.1)
+        current.highlightedIndex = min(result.highlightedIndex, firstLayer.count.saturatingSubtractingOne)
+        current.firstLayerCount = firstLayer.count
+        current.contextModel = result.contextModel.recorded(
+            displayedIndices: firstLayerIndices, candidateCount: combined.count,
+            anomaly: { self.recordAnomaly($0, observation: result.contextModel, indices: firstLayerIndices,
+                                          count: combined.count, page: result.pageNumber) }
+        )
+        if marked.prefix.isEmpty, result.pageNumber == 0 { current.firstCandidate = combined.map(\.0).first }
+        pending = current
+    }
+
     func observe(
         kind: IMEKeyKind,
         keyText: String,

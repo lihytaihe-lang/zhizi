@@ -40,7 +40,7 @@ guard let session = CoreSession(
     userDirectory: userDirectory,
     appIdentifier: appIdentifier
 ) else {
-    fputs("failed to create real librime session\n", stderr)
+    fputs("failed to create real session\n", stderr)
     exit(3)
 }
 if let fuzzyIndex = arguments.firstIndex(of: "--fuzzy"), arguments.indices.contains(fuzzyIndex + 1) {

@@ -32,6 +32,12 @@ impl Decoder for LearningSegmentDecoder {
         DecoderSnapshot { raw_input: self.raw.clone(), cursor_utf8: preedit.len(), preedit,
             candidates: self.page(), is_last_page: true, ..DecoderSnapshot::default() }
     }
+    fn composition_boundary(&self, _purpose: crate::state::BoundaryPurpose) -> Option<crate::state::CompositionBoundary> {
+        // A picked segment stays in front of the letters still to convert.
+        (!self.prefix.is_empty()).then(|| crate::state::CompositionBoundary {
+            confirmed: self.prefix.clone(), unconfirmed_raw: "gao".into(),
+        })
+    }
     fn input(&mut self, text: &str) -> Result<String, i32> { self.raw.push_str(text); Ok(String::new()) }
     fn backspace(&mut self) -> Result<String, i32> { self.raw.pop(); Ok(String::new()) }
     fn move_left(&mut self) -> Result<String, i32> { Ok(String::new()) }

@@ -73,13 +73,10 @@ gate_add cargo_check_src_tauri deps '' 'cargo check --locked --offline --manifes
 gate_add cargo_test_core deps '' 'cargo test --locked --offline --manifest-path "$REG_ROOT/native/core/Cargo.toml"'
 gate_add cargo_test_core_latency deps '' 'cargo test --release --locked --offline --manifest-path "$REG_ROOT/native/core/Cargo.toml" large_lexicon_keystroke_pipeline_meets_frozen_latency_budget -- --nocapture'
 gate_add cargo_test_ipc deps '' 'cargo test --locked --offline --manifest-path "$REG_ROOT/native/ipc/Cargo.toml"'
-gate_add cargo_build_core_release deps core_lib 'cargo build --locked --offline --manifest-path "$REG_ROOT/native/core/Cargo.toml" --release --features librime'
-# The librime dylib is copied onto the workspace volume after Swift links the
-# test bundle.  Re-sign that exact copy so macOS does not reject the first test
-# load under external-volume library validation; no product binary is changed.
+gate_add cargo_build_core_release deps core_lib 'cargo build --locked --offline --manifest-path "$REG_ROOT/native/core/Cargo.toml" --release'
 # The Swift test bundle links the current Rust core, so a failed core build
 # must block it instead of letting it link a stale library.
-gate_add swift_tests deps,core_lib '' 'touch "$REG_ROOT/native/macos/Sources/AgentIMECoreBridge/bridge.c" && swift build --package-path "$REG_ROOT/native/macos" -c debug --disable-automatic-resolution && swift_bin_dir="$(swift build --package-path "$REG_ROOT/native/macos" -c debug --disable-automatic-resolution --show-bin-path)" && cp "$REG_ROOT/.build-deps/librime/1.16.1/lib/librime.1.dylib" "$swift_bin_dir/librime.1.dylib" && codesign --force --sign - "$swift_bin_dir/librime.1.dylib" && swift test --package-path "$REG_ROOT/native/macos" -c debug --disable-automatic-resolution'
+gate_add swift_tests deps,core_lib '' 'touch "$REG_ROOT/native/macos/Sources/AgentIMECoreBridge/bridge.c" && swift build --package-path "$REG_ROOT/native/macos" -c debug --disable-automatic-resolution && swift_bin_dir="$(swift build --package-path "$REG_ROOT/native/macos" -c debug --disable-automatic-resolution --show-bin-path)" && swift test --package-path "$REG_ROOT/native/macos" -c debug --disable-automatic-resolution'
 
 # --- release bundle and everything that consumes it --------------------------
 gate_add build_release deps bundle '"$REG_SCRIPT_DIR/build_native.sh" release'
@@ -101,7 +98,6 @@ gate_add artifact_checksum_equivalence bundle '' '"$REG_SCRIPT_DIR/test_artifact
 gate_add context_model_integration deps,core_lib '' 'AIM_CONTEXT_MODEL_REQUIRED=1 "$REG_SCRIPT_DIR/test_context_model_integration.sh"'
 gate_add short_input_factory_top1 deps,core_lib,bundle '' '"$REG_SCRIPT_DIR/test_short_input_factory_top1.sh"'
 gate_add learning_degradation deps,core_lib,bundle '' '"$REG_SCRIPT_DIR/test_learning_degradation.sh"'
-gate_add dakle_owner_hit deps,core_lib,bundle '' '"$REG_SCRIPT_DIR/test_dakle_owner_hit.sh"'
 gate_add context_ranking_replay deps,core_lib,bundle '' '"$REG_SCRIPT_DIR/test_context_ranking_replay.sh"'
 gate_add mixed_language_replay deps,core_lib,bundle '' '"$REG_SCRIPT_DIR/test_mixed_language_replay.sh"'
 gate_add cn_en_mixed_narrow_replay deps,core_lib,bundle '' '"$REG_SCRIPT_DIR/test_cn_en_mixed_narrow_replay.sh"'
@@ -109,13 +105,10 @@ gate_add fuzzy_exact_priority_replay deps,core_lib,bundle '' '"$REG_SCRIPT_DIR/t
 gate_add offcorpus_probe deps,core_lib,bundle '' '"$REG_SCRIPT_DIR/test_offcorpus_probe.sh"'
 gate_add q3b1_garble_replay deps,core_lib,bundle '' '"$REG_SCRIPT_DIR/test_q3b1_garble_replay.sh"'
 gate_add q3b2_heavy_garble_replay deps,core_lib,bundle '' '"$REG_SCRIPT_DIR/test_q3b2_heavy_garble_replay.sh"'
-# partial_coverage_top1_replay copies the owner's LIVE Rime user dir
-# (AGENT_IME_OWNER_RIME_DIR, default ~/Library/Application Support/AgentInputMethod/Rime)
-# into the replay, so its result is only meaningful on the owner's machine with
-# the owner's current lexicon; it is kept as-is (no threshold change). The
-# closed variant below builds the declared synthetic state in a throwaway user
-# dir and asserts the same corpus's top1 without reading any real user data.
-gate_add partial_coverage_top1_replay deps,core_lib,bundle '' '"$REG_SCRIPT_DIR/test_partial_coverage_top1_replay.sh"'
+# The closed variant below builds the declared synthetic state in a throwaway
+# user dir and asserts the same corpus's top1 without reading any real user
+# data. The owner-live top1 replay was retired with the Rime userdb (block 5
+# card 4b); see docs/current/evidence/zhixu-f4b-build-and-gates/REPORT.md.
 gate_add partial_coverage_closed_replay deps,core_lib,bundle '' '"$REG_SCRIPT_DIR/test_partial_coverage_closed.sh"'
 gate_add q1_pointwise_invariance deps,core_lib,bundle '' '"$REG_SCRIPT_DIR/test_q1_pointwise_invariance.sh"'
 gate_add mixed_abbrev_replay deps,core_lib,bundle '' '"$REG_SCRIPT_DIR/test_mixed_abbrev_replay.sh"'
@@ -123,11 +116,6 @@ gate_add idiom_replay deps,core_lib,bundle '' '"$REG_SCRIPT_DIR/test_idiom_repla
 gate_add lexicon_l1_replay deps,core_lib,bundle '' '"$REG_SCRIPT_DIR/test_lexicon_l1_replay.sh"'
 gate_add project_terms_replay deps,core_lib,bundle '' '"$REG_SCRIPT_DIR/test_project_terms_replay.sh"'
 gate_add runtime_storage_fallback deps,core_lib,bundle '' '"$REG_SCRIPT_DIR/test_runtime_storage_fallback.sh"'
-gate_add userdb_process_recovery deps,bundle '' '"$REG_SCRIPT_DIR/test_userdb_process_recovery.sh" --development-fixture "$REG_ROOT/build/native/release/Agent Input Method.inputmethod"'
-# Re-runs bootstrap and builds the release core library itself, so it needs no
-# prerequisite resource: with a broken dependency environment it fails on its
-# own evidence instead of being blocked.
-gate_add userdb_word_cleanup '' '' '"$REG_SCRIPT_DIR/test_userdb_word_cleanup.sh"'
 gate_add performance_controller_path deps,core_lib,bundle '' '"$REG_SCRIPT_DIR/test_performance_controller_path.sh"'
 gate_add install_input_method bundle '' '"$REG_SCRIPT_DIR/test_install_input_method.sh"'
 gate_add build_manager deps '' 'CARGO_NET_OFFLINE=true "$REG_SCRIPT_DIR/build_manager.sh"'

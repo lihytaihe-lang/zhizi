@@ -126,10 +126,20 @@ public final class PreparedContextModelSnapshot: @unchecked Sendable {
     }
 }
 
+/// A model result waiting to be applied to the core and shown, for the key `generation`.
+public struct DeferredRankingStep: @unchecked Sendable {
+    public let markedText: String
+    public let pageNumber: Int
+    public let generation: UInt64
+    /// Changes the core's order and returns the page to show; nil when a later key made it stale.
+    public let finish: () -> IMEViewModel?
+}
+
 public final class CoreSession: @unchecked Sendable {
-    // librime setup/redeploy is process-global. Serialize every C-ABI call so
-    // per-controller sessions stay single-lane and a fuzzy redeploy cannot
-    // race another controller's key event.
+    // The core dictionary runtime is process-global (attach, reloads and
+    // learning all share it). Serialize every C-ABI call so per-controller
+    // sessions stay single-lane and a dictionary reload cannot race another
+    // controller's key event.
     private static let runtimeLock = NSLock()
     private static let contextModelCacheLock = NSLock()
     nonisolated(unsafe) private static var contextModelCache: [String: PreparedContextModelSnapshot] = [:]
@@ -138,12 +148,32 @@ public final class CoreSession: @unchecked Sendable {
     private var contextRanking = ContextRankingSession()
     private var displayedContextModel: ContextModelObservation = .disabled
     private var displayedRankingCandidates: [IMECandidate] = []
+    /// Pages that disagreed with the core (diagnostic only; should stay 0; see `assertDrawnPageIsCorePage`).
+    public private(set) var displayedPageMismatches = 0
     /// This key's composition offered in the last first-page slot when none leads.
     private var pendingOffer: String?
     /// Context model time inside the latest `process` call; 0 when it did not run.
     public private(set) var lastModelNanoseconds: UInt64 = 0
     private var rankingContext = ""
     private var isComposing = false
+    /// When true, `process` returns the core's page at once and the model scores on a
+    /// background queue; a result that is still current when it is ready is applied to the
+    /// core and handed to `onDeferredRanking` (called off the key path, on the ranking
+    /// queue). Off by default so every synchronous caller keeps its single-call contract.
+    public var defersRanking = false
+    public var onDeferredRanking: ((IMEViewModel, UInt64) -> Void)?
+    /// When set, a finished score is handed over unapplied; the owner of the key path calls `finish`
+    /// on the thread that handles keys (see scheduleDeferredRanking).
+    public var deferredApplier: ((DeferredRankingStep) -> Void)?
+    /// Bumped by every `process`; a deferred result belongs to the key it was started for.
+    private var rankingGeneration: UInt64 = 0
+    private let rankingQueue = DispatchQueue(label: "com.agentinputlayer.context-model.rank", qos: .userInitiated)
+    /// The generation of the latest key, read under the runtime lock.
+    public var currentRankingGeneration: UInt64 {
+        Self.runtimeLock.lock()
+        defer { Self.runtimeLock.unlock() }
+        return rankingGeneration
+    }
     var contextRankingScoreForTesting: ((String, [String]) throws -> [Double])?
     var contextRankingColdForTesting: Bool?
     var contextRankingClockForTesting: () -> UInt64 {
@@ -221,6 +251,8 @@ public final class CoreSession: @unchecked Sendable {
         Self.runtimeLock.lock()
         defer { Self.runtimeLock.unlock() }
         lastModelNanoseconds = 0
+        // Any key supersedes a deferred ranking that is still scoring (see scheduleDeferredRanking).
+        rankingGeneration &+= 1
         guard let handle else { return nil }
         if security != .nonSecure || [.focusLost, .deactivate, .sleep, .resume].contains(kind) { rankingContext = "" }
         let utf8 = Array(text.utf8)
@@ -238,29 +270,10 @@ public final class CoreSession: @unchecked Sendable {
             return aim_session_process(handle, &event, &result)
         }
         guard status == 0 else { return nil }
-        let markedText = Self.decode(result.marked_text, count: result.marked_text_len)
+        let decoded = Self.viewModel(from: result)
+        let markedText = decoded.markedText
+        let candidates = decoded.candidates
         isComposing = !markedText.isEmpty
-        let commitText = Self.decode(result.commit_text, count: result.commit_text_len)
-        let candidateBuffer = result.candidates.map {
-            UnsafeBufferPointer(start: $0, count: result.candidate_count)
-        }
-        let candidates = candidateBuffer?.map {
-            IMECandidate(
-                text: Self.decode($0.text, count: $0.text_len),
-                comment: Self.decode($0.comment, count: $0.comment_len),
-                readingKey: Self.decode($0.reading_key, count: $0.reading_key_len)
-            )
-        } ?? []
-        let secondaryBuffer = result.secondary_candidates.map {
-            UnsafeBufferPointer(start: $0, count: result.secondary_candidate_count)
-        }
-        let secondaryCandidates = secondaryBuffer?.map {
-            IMECandidate(
-                text: Self.decode($0.text, count: $0.text_len),
-                comment: Self.decode($0.comment, count: $0.comment_len),
-                readingKey: Self.decode($0.reading_key, count: $0.reading_key_len)
-            )
-        } ?? []
         // Preserve provenance on navigation, just as the core preserves its
         // permutation. A fresh page always replaces the previous observation.
         // Picking a segment (digit or Space) that leaves letters to convert shows a fresh page too.
@@ -291,23 +304,7 @@ public final class CoreSession: @unchecked Sendable {
             displayedContextModel = ContextModelObservation(outcome: outcome, groupSize: groupSize)
         }
         displayedRankingCandidates = security == .nonSecure ? candidates : []
-        let original = IMEViewModel(
-            status: result.status,
-            consumed: result.consumed != 0,
-            directEnglish: result.mode == 1,
-            secureDegraded: result.secure_degraded != 0,
-            markedText: markedText,
-            markedCursorUTF8: result.marked_cursor_utf8,
-            commitText: commitText,
-            candidates: candidates,
-            secondaryCandidates: secondaryCandidates,
-            highlightedIndex: result.highlighted_index,
-            pageNumber: result.page_no,
-            isLastPage: result.is_last_page != 0,
-            selectionEventID: result.selection_event_id,
-            coreElapsedNanoseconds: result.core_elapsed_ns,
-            contextModel: displayedContextModel
-        )
+        let original = decoded.withContextModel(displayedContextModel)
         // Selection/navigation-only callbacks retain the stored core order.
         // Input, backspace and paging invalidate it in the Mixer before here.
         guard contextRanking.enabled, !contextRanking.suspended, security == .nonSecure, changesPage,
@@ -328,21 +325,59 @@ public final class CoreSession: @unchecked Sendable {
         }
         let compositionStarted = contextRanking.now()
         pendingOffer = nil
-        let composedResult = cold ? nil : leadWithComposition(original, scorer: scorer)
+        let rankingContextText = Self.contextWithPickedText(rankingContext, markedText: original.markedText)
+        if defersRanking {
+            // Core page now. Reading the compositions and group masks out of the core is real work
+            // (about 5 ms, measured 11-01), so it moves to the ranking queue with the scoring.
+            displayedContextModel = ContextModelObservation(outcome: .unavailable, groupSize: 0)
+            scheduleDeferredRanking(original: original, context: rankingContextText, cold: cold,
+                scorer: scorer, generation: rankingGeneration, startedAt: compositionStarted)
+            return original.withContextModel(displayedContextModel)
+        }
+        let composition = cold ? nil : compositionInputs(original, context: rankingContextText)
+        let composedResult = composition.flatMap { leadWithComposition(original, $0, scorer: scorer) }
         lastModelNanoseconds = contextRanking.now() &- compositionStarted
         if let composed = composedResult {
             displayedContextModel = ContextModelObservation(
                 outcome: .composed, groupSize: displayedContextModel.groupSize,
                 latencyMs: Double(contextRanking.now() &- compositionStarted) / 1_000_000, cold: false)
-            let composed = composed.withContextModel(displayedContextModel)
+            let composed = assertDrawnPageIsCorePage(composed.withContextModel(displayedContextModel))
             displayedRankingCandidates = composed.candidates
             return composed
         }
         // Model first (C2): score every candidate that covers the whole input; the
         // homophone group (C1) is a subset and keeps its own swap rule.
+        let group = groupInputs(original, context: rankingContextText)
+        return rankGroup(original, group, cold: cold, startedAt: nil, scorer: scorer)
+    }
+
+    /// The candidates the model orders (C2) with what the order needs, read from the core.
+    private struct GroupInputs {
+        let slots: [Int]
+        let texts: [String]
+        let homophone: [Bool]
+        let context: String
+    }
+
+    private func groupInputs(_ original: IMEViewModel, context: String) -> GroupInputs {
+        guard let handle else { return GroupInputs(slots: [], texts: [], homophone: [], context: context) }
         let homophoneMask = aim_session_context_group_mask(handle)
         let mask = aim_session_context_complete_mask(handle) | homophoneMask
-        let slots = candidates.indices.filter { mask & (1 << $0) != 0 }
+        let slots = original.candidates.indices.filter { mask & (1 << $0) != 0 }
+        return GroupInputs(
+            slots: slots, texts: slots.map { original.candidates[$0].text },
+            homophone: slots.map { homophoneMask & (1 << $0) != 0 }, context: context)
+    }
+
+    /// Orders the group with `scorer` and applies the order to the core, then builds the page.
+    /// `startedAt` backdates the budget clock when the score was computed earlier.
+    private func rankGroup(
+        _ original: IMEViewModel, _ group: GroupInputs, cold: Bool, startedAt: UInt64?,
+        scorer: (String, [String]) throws -> [Double]
+    ) -> IMEViewModel {
+        guard let handle else { return original }
+        let candidates = original.candidates
+        let slots = group.slots
         guard slots.count >= 2 else {
             displayedContextModel = ContextModelObservation(outcome: .noGroup, groupSize: slots.count)
             return withOffer(original.withContextModel(displayedContextModel))
@@ -350,10 +385,10 @@ public final class CoreSession: @unchecked Sendable {
         // The budget times the model alone. The masks above are core work that runs
         // whether or not the model scores, so pausing the model cannot save it; counting
         // it here paused the model for the core's cost.
-        let rerankStarted = contextRanking.now()
+        let rerankStarted = startedAt ?? contextRanking.now()
         var order = Array(candidates.indices)
         var stored = false
-        let groupOrder = contextRanking.order(context: Self.contextWithPickedText(rankingContext, markedText: original.markedText), candidates: slots.map { candidates[$0].text }, startedNanoseconds: rerankStarted, cold: cold, homophone: slots.map { homophoneMask & (1 << $0) != 0 }, apply: { groupOrder in
+        let groupOrder = contextRanking.order(context: group.context, candidates: group.texts, startedNanoseconds: rerankStarted, cold: cold, homophone: group.homophone, apply: { groupOrder in
             guard groupOrder.count == slots.count, Set(groupOrder).count == slots.count,
                   groupOrder.allSatisfy({ slots.indices.contains($0) }) else { return false }
             for (rank, slot) in slots.enumerated() { order[slot] = slots[groupOrder[rank]] }
@@ -377,44 +412,112 @@ public final class CoreSession: @unchecked Sendable {
             }
             return withOffer(original.withContextModel(displayedContextModel))
         }
-        displayedRankingCandidates = order.map { candidates[$0] }
-        return withOffer(IMEViewModel(
-            status: original.status, consumed: original.consumed, directEnglish: original.directEnglish,
-            secureDegraded: original.secureDegraded, markedText: original.markedText,
-            markedCursorUTF8: original.markedCursorUTF8, commitText: original.commitText,
-            candidates: displayedRankingCandidates, secondaryCandidates: original.secondaryCandidates,
-            highlightedIndex: original.highlightedIndex, pageNumber: original.pageNumber,
-            isLastPage: original.isLastPage, selectionEventID: original.selectionEventID,
-            coreElapsedNanoseconds: original.coreElapsedNanoseconds,
-            contextModel: displayedContextModel
-        ))
+        return withOffer(currentPage(preserving: original.withContextModel(displayedContextModel)))
+    }
+
+    /// Deferred ranking: score outside the runtime lock so the next key never waits for the
+    /// model, then change the core's order only if no key has arrived since. A superseded job is
+    /// dropped whole (no core change, no budget accounting); the keys that superseded it show the
+    /// core's own page, exactly as when the model is paused.
+    ///
+    /// The core change and the redraw must be one step with respect to key handling, or a digit key
+    /// can pick from an order the screen does not show yet (owner 11-01: typed 2, got the first
+    /// candidate). So the job only decides; `finish` changes the core, and the controller runs it on
+    /// the thread that handles keys, right where it redraws (`deferredApplier`). Without an
+    /// applier (tests, harnesses) `finish` runs on the ranking queue and `onDeferredRanking` gets the view.
+    private func scheduleDeferredRanking(
+        original: IMEViewModel, context: String, cold: Bool,
+        scorer: @escaping (String, [String]) throws -> [Double], generation: UInt64, startedAt: UInt64
+    ) {
+        rankingQueue.async { [self] in
+            func current() -> Bool { rankingGeneration == generation && handle != nil }
+            // The reads below are core state of this key: take them only while it is still the latest.
+            Self.runtimeLock.lock()
+            guard current() else { Self.runtimeLock.unlock(); return }
+            let composition = cold ? nil : compositionInputs(original, context: context)
+            let group = groupInputs(original, context: context)
+            Self.runtimeLock.unlock()
+            let compositionScores = composition.flatMap { try? scorer($0.context, $0.texts) }
+            let compositionDone = contextRanking.now()
+            let groupStarted = compositionDone
+            // Scored up front: whether the composition leads is only known when it is applied.
+            let groupScored: Result<[Double], Error> = group.slots.count >= 2
+                ? Result { try scorer(group.context, group.texts) } : .success([])
+            let finish: () -> IMEViewModel? = { [self] in
+                Self.runtimeLock.lock()
+                defer { Self.runtimeLock.unlock() }
+                guard current() else { return nil }
+                if let composition, let scores = compositionScores, scores.count == composition.texts.count,
+                   scores.allSatisfy(\.isFinite), compositionDone &- startedAt <= ContextRankingSession.hardCapNanoseconds,
+                   let composed = applyComposition(original, composition, scores: scores) {
+                    lastModelNanoseconds = compositionDone &- startedAt
+                    displayedContextModel = ContextModelObservation(
+                        outcome: .composed, groupSize: displayedContextModel.groupSize,
+                        latencyMs: Double(compositionDone &- startedAt) / 1_000_000, cold: false)
+                    let view = assertDrawnPageIsCorePage(composed.withContextModel(displayedContextModel))
+                    displayedRankingCandidates = view.candidates
+                    return view
+                }
+                return rankGroup(original, group, cold: cold, startedAt: groupStarted) { _, _ in try groupScored.get() }
+            }
+            if let deferredApplier {
+                deferredApplier(DeferredRankingStep(
+                    markedText: original.markedText, pageNumber: original.pageNumber, generation: generation, finish: finish))
+            } else if let view = finish() {
+                onDeferredRanking?(view, generation)
+            }
+        }
     }
 
     /// No composition leads: the best one still takes the last first-page slot when it
     /// is close (`agent_ime_core::ranking::composition_offer`), as the core's page has it.
     private func withOffer(_ view: IMEViewModel) -> IMEViewModel {
+        assertDrawnPageIsCorePage(applyOffer(view))
+    }
+
+    /// Drawing reads the core page. This guard only counts disagreements; it never repairs the view.
+    func assertDrawnPageIsCorePage(_ view: IMEViewModel) -> IMEViewModel {
+        if let core = corePageTexts(), core != view.candidates.map(\.text) {
+            displayedPageMismatches &+= 1
+        }
+        return view
+    }
+
+    /// Reads the page after a model decision, keeping the key event's result and observation.
+    private func currentPage(preserving original: IMEViewModel) -> IMEViewModel {
+        guard let handle else { return original }
+        var result = AimResult()
+        defer { aim_result_free(&result) }
+        guard aim_session_current_page(handle, &result) == 0 else { return original }
+        let view = Self.viewModel(from: result, preserving: original)
+        displayedRankingCandidates = view.candidates
+        return view
+    }
+
+    /// The core's page as the digit keys resolve against it (`aim_session_page_texts`).
+    func corePageTexts() -> [String]? {
+        guard let handle else { return nil }
+        var capacity = 2048
+        for _ in 0..<2 {
+            var buffer = [UInt8](repeating: 0, count: capacity)
+            let written = buffer.withUnsafeMutableBufferPointer { aim_session_page_texts(handle, $0.baseAddress, $0.count) }
+            if written >= 0 {
+                let text = String(decoding: buffer[..<written], as: UTF8.self)
+                return text.isEmpty ? [] : text.components(separatedBy: "\t")
+            }
+            capacity = -written
+        }
+        return nil
+    }
+
+    private func applyOffer(_ view: IMEViewModel) -> IMEViewModel {
         guard let handle, let text = pendingOffer, view.pageNumber == 0,
               !view.candidates.prefix(5).contains(where: { $0.text == text }) else { return view }
         pendingOffer = nil
         let utf8 = Array(text.utf8)
         guard utf8.withUnsafeBufferPointer({ aim_session_offer_composition(handle, $0.baseAddress, $0.count) }) == 0
         else { return view }
-        var candidates = view.candidates
-        candidates.insert(
-            IMECandidate(text: text, comment: "整句 · 备选", readingKey: candidates.first?.readingKey ?? ""),
-            at: min(4, candidates.count))
-        candidates = Array(candidates.prefix(5))
-        displayedRankingCandidates = candidates
-        return IMEViewModel(
-            status: view.status, consumed: view.consumed, directEnglish: view.directEnglish,
-            secureDegraded: view.secureDegraded, markedText: view.markedText,
-            markedCursorUTF8: view.markedCursorUTF8, commitText: view.commitText,
-            candidates: candidates, secondaryCandidates: view.secondaryCandidates,
-            highlightedIndex: view.highlightedIndex, pageNumber: view.pageNumber,
-            isLastPage: view.isLastPage, selectionEventID: view.selectionEventID,
-            coreElapsedNanoseconds: view.coreElapsedNanoseconds,
-            contextModel: view.contextModel
-        )
+        return currentPage(preserving: view)
     }
 
     /// Offer decision (`agent_ime_core::ranking::composition_offer`, shared with the
@@ -469,12 +572,16 @@ public final class CoreSession: @unchecked Sendable {
         return picked.isEmpty || picked.allSatisfy(\.isASCII) ? context : context + picked
     }
 
-    /// C3: whole-reading compositions scored against the decoder's first; the best
-    /// leads the page when it wins clearly and the owner's habits allow it.
-    private func leadWithComposition(
-        _ original: IMEViewModel,
-        scorer: (String, [String]) throws -> [Double]
-    ) -> IMEViewModel? {
+    /// What C3 needs to score the whole-reading compositions against the decoder's first.
+    private struct CompositionInputs {
+        let alternatives: [String]
+        let edits: [Double]
+        let guessed: Bool
+        let context: String
+        let texts: [String]
+    }
+
+    private func compositionInputs(_ original: IMEViewModel, context: String) -> CompositionInputs? {
         guard let handle, let first = original.candidates.first else { return nil }
         var buffer = [UInt8](repeating: 0, count: 4_096)
         let written = buffer.withUnsafeMutableBufferPointer {
@@ -494,16 +601,35 @@ public final class CoreSession: @unchecked Sendable {
             ? String(decoding: editBuffer.prefix(Int(editBytes)), as: UTF8.self).split(separator: "\t").compactMap { Double($0) }
             : []
         if edits.count != alternatives.count + 1 { edits = Array(repeating: 0, count: alternatives.count + 1) }
-        let started = contextRanking.now()
-        guard let scores = try? scorer(Self.contextWithPickedText(rankingContext, markedText: original.markedText), [first.text] + alternatives),
-              scores.count == alternatives.count + 1, scores.allSatisfy(\.isFinite),
-              contextRanking.now() &- started <= ContextRankingSession.hardCapNanoseconds else { return nil }
         // Letters that are not whole pinyin: the first is a guess too (a lower margin).
         let guessed = aim_session_composition_guessed(handle) != 0
-        pendingOffer = Self.compositionOffer(texts: [first.text] + alternatives, scores: scores, edits: edits)
+        return CompositionInputs(alternatives: alternatives, edits: edits, guessed: guessed,
+                                 context: context, texts: [first.text] + alternatives)
+    }
+
+    /// C3: whole-reading compositions scored against the decoder's first; the best
+    /// leads the page when it wins clearly and the owner's habits allow it.
+    private func leadWithComposition(
+        _ original: IMEViewModel,
+        _ inputs: CompositionInputs,
+        scorer: (String, [String]) throws -> [Double]
+    ) -> IMEViewModel? {
+        let started = contextRanking.now()
+        guard let scores = try? scorer(inputs.context, inputs.texts),
+              scores.count == inputs.texts.count, scores.allSatisfy(\.isFinite),
+              contextRanking.now() &- started <= ContextRankingSession.hardCapNanoseconds else { return nil }
+        return applyComposition(original, inputs, scores: scores)
+    }
+
+    private func applyComposition(
+        _ original: IMEViewModel, _ inputs: CompositionInputs, scores: [Double]
+    ) -> IMEViewModel? {
+        guard let handle else { return nil }
+        let alternatives = inputs.alternatives
+        pendingOffer = Self.compositionOffer(texts: inputs.texts, scores: scores, edits: inputs.edits)
             .map { alternatives[$0 - 1] }
         guard let leading = Self.compositionLead(
-            texts: [first.text] + alternatives, scores: scores, edits: edits, guessed: guessed)
+            texts: inputs.texts, scores: scores, edits: inputs.edits, guessed: inputs.guessed)
         else { return nil }
         let text = alternatives[leading - 1]
         let utf8 = Array(text.utf8)
@@ -511,26 +637,8 @@ public final class CoreSession: @unchecked Sendable {
             aim_session_lead_with_composition(handle, $0.baseAddress, $0.count)
         }
         guard status == 0 else { return nil }
-        let lead = IMECandidate(text: text, comment: "整句 · 顺手·知字", readingKey: first.readingKey)
-        // A three-letter English word in the last slot (mac, key, env) keeps it.
-        let english = original.candidates.count > 4
-            && original.candidates[4].comment == "英文 · 原样" && original.candidates[4].text.count == 3
-            ? original.candidates[4] : nil
-        let rest = original.candidates.filter { $0.text != text && $0.text != english?.text }
-        let shown = english == nil
-            ? Array(([lead] + rest).prefix(5))
-            : Array(([lead] + rest).prefix(4)) + [english!]
         displayedContextModel = ContextModelObservation(outcome: .composed, groupSize: alternatives.count + 1)
-        return IMEViewModel(
-            status: original.status, consumed: original.consumed, directEnglish: original.directEnglish,
-            secureDegraded: original.secureDegraded, markedText: original.markedText,
-            markedCursorUTF8: original.markedCursorUTF8, commitText: original.commitText,
-            candidates: shown, secondaryCandidates: original.secondaryCandidates,
-            highlightedIndex: 0, pageNumber: original.pageNumber,
-            isLastPage: original.isLastPage, selectionEventID: original.selectionEventID,
-            coreElapsedNanoseconds: original.coreElapsedNanoseconds,
-            contextModel: displayedContextModel
-        )
+        return currentPage(preserving: original.withContextModel(displayedContextModel))
     }
 
     @discardableResult
@@ -637,20 +745,6 @@ public final class CoreSession: @unchecked Sendable {
         return aim_session_apply_lexicon(handle, snapshot) == 0
     }
 
-    func setLearningMode(_ mode: LearningMode) -> Int32 {
-        Self.runtimeLock.lock()
-        defer { Self.runtimeLock.unlock() }
-        guard let handle else { return -1 }
-        return aim_session_set_learning(handle, mode.rawValue)
-    }
-
-    func setZhixuWholeEnabled(_ enabled: Bool) -> Int32 {
-        Self.runtimeLock.lock()
-        defer { Self.runtimeLock.unlock() }
-        guard let handle else { return -1 }
-        return aim_session_set_zhixu_whole(handle, enabled ? 1 : 0)
-    }
-
     public func setTypoCorrectionEnabled(_ enabled: Bool) -> Bool {
         Self.runtimeLock.lock()
         defer { Self.runtimeLock.unlock() }
@@ -732,7 +826,7 @@ public final class CoreSession: @unchecked Sendable {
         return String(decoding: UnsafeBufferPointer(start: pointer, count: count), as: UTF8.self)
     }
 
-    private static func viewModel(from result: AimResult) -> IMEViewModel {
+    private static func viewModel(from result: AimResult, preserving original: IMEViewModel? = nil) -> IMEViewModel {
         let candidates = result.candidates.map {
             UnsafeBufferPointer(start: $0, count: result.candidate_count).map {
                 IMECandidate(
@@ -752,20 +846,21 @@ public final class CoreSession: @unchecked Sendable {
             }
         } ?? []
         return IMEViewModel(
-            status: result.status,
-            consumed: result.consumed != 0,
+            status: original?.status ?? result.status,
+            consumed: original?.consumed ?? (result.consumed != 0),
             directEnglish: result.mode == 1,
             secureDegraded: result.secure_degraded != 0,
             markedText: decode(result.marked_text, count: result.marked_text_len),
             markedCursorUTF8: result.marked_cursor_utf8,
-            commitText: decode(result.commit_text, count: result.commit_text_len),
+            commitText: original?.commitText ?? decode(result.commit_text, count: result.commit_text_len),
             candidates: candidates,
             secondaryCandidates: secondary,
             highlightedIndex: result.highlighted_index,
             pageNumber: result.page_no,
             isLastPage: result.is_last_page != 0,
-            selectionEventID: result.selection_event_id,
-            coreElapsedNanoseconds: result.core_elapsed_ns
+            selectionEventID: original?.selectionEventID ?? result.selection_event_id,
+            coreElapsedNanoseconds: original?.coreElapsedNanoseconds ?? result.core_elapsed_ns,
+            contextModel: original?.contextModel ?? .disabled
         )
     }
 }

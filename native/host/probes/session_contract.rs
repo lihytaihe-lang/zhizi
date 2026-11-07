@@ -220,24 +220,25 @@ fn session_contract_detects_session_output_changes_and_keeps_ids() {
 #[should_panic(expected = "no scripts cannot pass")]
 fn session_contract_empty_suite_never_passes() { compare(&[], &[]); }
 
-#[test]
-fn session_contract_product_keeps_whole_sentence_alternatives_on_deep_pages() {
-    use crate::zhixu::loader::{DictionaryData, Entry};
-    use crate::zhixu::Index;
-    let dictionary = Index::from_data(DictionaryData { entries: [
-        ("你", "ni", 10000), ("拟", "ni", 8000), ("好", "hao", 10000),
-        ("号", "hao", 8000), ("我们", "wo men", 10000),
-    ].into_iter().map(|(text, reading, weight)| Entry {
-        text: text.into(), reading: reading.into(), weight, layer: "pinyin_simp".into(),
-    }).collect() });
-    let _dictionary = crate::zhixu::pin_snapshot(Some(std::sync::Arc::new(dictionary)));
-    let _learning = crate::zhixu::pin_learning(None);
-    let generated = crate::mixer::decoder_whole_candidates("nihaowomen", &[], 0, false);
-    assert!(generated.iter().any(|candidate| candidate.text == "你号我们"), "existing block-3 generator fixture");
-    let mut session = Session::new_with_blacklist(Box::<crate::state::MockDecoder>::default(),
-        "y3-whole-alternative".into(), std::sync::Arc::new(std::sync::Mutex::new(crate::blacklist::Store::default()))).unwrap();
-    session.configure_learning(crate::zhixu::learning::LearningMode::Zhixu).unwrap();
-    session.configure_zhixu_whole(true).unwrap();
+    #[test]
+    fn session_contract_product_keeps_whole_sentence_alternatives_on_deep_pages() {
+        use crate::zhixu::loader::{DictionaryData, Entry};
+        use crate::zhixu::Index;
+        use std::sync::Arc;
+        let dictionary = Arc::new(Index::from_data(DictionaryData { entries: [
+            ("你", "ni", 10000), ("拟", "ni", 8000), ("好", "hao", 10000),
+            ("号", "hao", 8000), ("我们", "wo men", 10000),
+        ].into_iter().map(|(text, reading, weight)| Entry {
+            text: text.into(), reading: reading.into(), weight, layer: "pinyin_simp".into(),
+        }).collect() }));
+        let _dictionary = crate::zhixu::pin_snapshot(Some(dictionary.clone()));
+        let _learning = crate::zhixu::pin_learning(None);
+        let generated = crate::mixer::decoder_whole_candidates("nihaowomen", &[], 0, false);
+        assert!(generated.iter().any(|candidate| candidate.text == "你号我们"), "existing block-3 generator fixture");
+        let mut session = Session::new_native("y3-whole-alternative".into(),
+            std::sync::Arc::new(std::sync::Mutex::new(crate::blacklist::Store::default())), dictionary).unwrap();
+        session.configure_learning(crate::zhixu::learning::LearningMode::Zhixu).unwrap();
+        session.configure_zhixu_whole(true).unwrap();
     let source = "nihaowomen".chars().map(|letter| format!("type {letter}\n")).collect::<String>();
     let mut steps = trace(&mut session, &source, 1);
     let mut page = steps.pop().unwrap().visible;
@@ -255,26 +256,26 @@ fn session_contract_product_keeps_whole_sentence_alternatives_on_deep_pages() {
     }
 }
 
-#[test]
-fn session_contract_native_single_character_deletion_restores_dictionary_order() {
-    use crate::zhixu::learning::{LearningMode, LearningStore};
-    use crate::zhixu::loader::{DictionaryData, Entry};
-    let now = crate::personal_picks::now_ms();
-    let directory = std::env::temp_dir().join(format!("zhixu-y3b-single-{}-{now}", std::process::id()));
-    let dictionary = crate::zhixu::Index::from_data(DictionaryData { entries: [
-        ("你", 10000), ("拟", 5000), ("泥", 4000), ("倪", 3000),
-    ].into_iter().map(|(text, weight)| Entry {
-        text: text.into(), reading: "ni".into(), weight, layer: "pinyin_simp".into(),
-    }).collect() });
-    let _dictionary = crate::zhixu::pin_snapshot(Some(std::sync::Arc::new(dictionary)));
-    let _learning = crate::zhixu::pin_learning(None);
-    let build = || {
-        let mut session = Session::new_with_blacklist(Box::<crate::state::MockDecoder>::default(),
-            "y3b.single".into(), crate::blacklist::shared_blacklist(&directory).unwrap()).unwrap();
-        session.configure_learning(LearningMode::Zhixu).unwrap();
-        session.configure_zhixu_whole(true).unwrap();
-        session
-    };
+    #[test]
+    fn session_contract_native_single_character_deletion_restores_dictionary_order() {
+        use crate::zhixu::learning::{LearningMode, LearningStore};
+        use crate::zhixu::loader::{DictionaryData, Entry};
+        let now = crate::personal_picks::now_ms();
+        let directory = std::env::temp_dir().join(format!("zhixu-y3b-single-{}-{now}", std::process::id()));
+        let dictionary = crate::zhixu::Index::from_data(DictionaryData { entries: [
+            ("你", 10000), ("拟", 5000), ("泥", 4000), ("倪", 3000),
+        ].into_iter().map(|(text, weight)| Entry {
+            text: text.into(), reading: "ni".into(), weight, layer: "pinyin_simp".into(),
+        }).collect() });
+        let dictionary = std::sync::Arc::new(dictionary);
+        let _dictionary = crate::zhixu::pin_snapshot(Some(dictionary.clone()));
+        let _learning = crate::zhixu::pin_learning(None);
+        let build = || {
+            let mut session = Session::new_native("y3b.single".into(),
+                crate::blacklist::shared_blacklist(&directory).unwrap(), dictionary.clone()).unwrap();
+            session.configure_learning(LearningMode::Zhixu).unwrap();
+            session
+        };
     let baseline = trace(&mut build(), "type n\ntype i\n", 1).pop().unwrap().visible.candidates;
     assert_eq!(baseline, ["你", "拟", "泥", "倪"]);
     let mut store = LearningStore::load(&directory, now);
@@ -293,244 +294,54 @@ fn session_contract_native_single_character_deletion_restores_dictionary_order()
     std::fs::remove_dir_all(directory).unwrap();
 }
 
-#[cfg(feature = "librime")]
-mod real {
-    use super::*;
+// The legacy Rime session (A side) retired with the engine: Y3 now re-runs the
+// zhixu (B) side over the frozen corpus and byte-compares with the archived
+// b.json. Scripts are rebuilt from the archive itself, exactly as the Y0
+// baseline entry does.
+#[test]
+#[ignore]
+fn session_contract_zhixu_frozen_baseline() {
+    use super::{frozen_script, script_paths};
     use std::fs;
-    use std::path::{Path, PathBuf};
-    use std::process::{Command, Stdio};
-
-    fn paths(root: &Path) -> Vec<PathBuf> {
-        if root.is_file() { return vec![root.to_owned()]; }
-        let mut result = Vec::new();
-        for entry in fs::read_dir(root).unwrap() {
-            let path = entry.unwrap().path();
-            if path.is_dir() { result.extend(paths(&path)); }
-            else if path.extension().is_some_and(|value| value == "keys") { result.push(path); }
-        }
-        result.sort(); result
+    use std::path::PathBuf;
+    let shared = PathBuf::from(std::env::var_os("Y0_SHARED").expect("Y0_SHARED isolated public-only fixture"));
+    let baseline = PathBuf::from(std::env::var_os("Y3_BASELINE").expect("Y3_BASELINE decompressed frozen b.json"));
+    let expected = fs::read(&baseline).unwrap();
+    let archived: Vec<Trace> = serde_json::from_slice(&expected).unwrap();
+    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+    let output = std::env::temp_dir().join(format!("zhixu-y3-frozen-{}-{stamp}", std::process::id()));
+    let scripts = output.join("scripts");
+    for trace in &archived {
+        let path = scripts.join(&trace.name);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let steps: Vec<(usize, String)> = trace.steps.iter().map(|step| (step.line, step.action.clone())).collect();
+        fs::write(&path, frozen_script(&steps)).unwrap();
     }
-
-    #[test]
-    #[ignore = "requires the existing librime shim; uses only a synthetic private fixture"]
-    fn session_contract_delete_restores_dictionary_order_after_restart() {
-        let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
-        let root = std::env::temp_dir().join(format!("zhixu-y3b-delete-{}-{stamp}", std::process::id()));
-        for name in ["", "shared", "a", "b"] {
-            let path = root.join(name);
-            fs::create_dir(&path).unwrap();
-            #[cfg(unix)] {
-                use std::os::unix::fs::PermissionsExt;
-                fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
-            }
-        }
-        let shared = root.join("shared");
-        fs::write(shared.join("default.yaml"), include_str!("../../resources/Rime/default.yaml")).unwrap();
-        fs::write(shared.join("agent_pinyin.schema.yaml"), include_str!("../../resources/Rime/agent_pinyin.schema.yaml")).unwrap();
-        fs::write(shared.join("agent_pinyin.dict.yaml"), "---\nname: agent_pinyin\nversion: 'y3b'\nsort: by_weight\nimport_tables:\n  - pinyin_simp\n...\n").unwrap();
-        fs::write(shared.join("pinyin_simp.dict.yaml"), "---\nname: pinyin_simp\nversion: 'y3b'\nsort: by_weight\n...\n你好\tni hao\t10000\n拟好\tni hao\t5000\n泥蒿\tni hao\t4000\n倪皓\tni hao\t3000\n").unwrap();
-        println!("Y3B_DELETE_OUTPUT\t{}", root.display());
-        for action in ["a-baseline", "a-learn", "a-export", "a-delete", "a-restart", "b-baseline", "b-learned", "b-delete", "b-restart", "a-local", "b-local", "a-whole-local"] {
-            let log = fs::File::create(root.join(format!("{action}.log"))).unwrap();
-            let result = Command::new(std::env::current_exe().unwrap())
-                .args(["--exact", "mixer::decoder_contract::session_contract::real::session_contract_delete_worker", "--ignored", "--nocapture", "--test-threads=1"])
-                .env("Y3B_DELETE_ROOT", &root).env("Y3B_DELETE_ACTION", action)
-                .env("ZHIZI_SINGLE_LEARN", "0").env_remove("ZHIZI_ZHIXU_WHOLE")
-                .stdout(Stdio::from(log.try_clone().unwrap())).stderr(Stdio::from(log)).status().unwrap();
-            assert!(result.success(), "{action} failed; see {}", root.display());
-        }
-        let read = |action: &str| -> Visible {
-            serde_json::from_slice(&fs::read(root.join(format!("{action}.json"))).unwrap()).unwrap()
-        };
-        let baseline = read("a-baseline").candidates;
-        assert_eq!(baseline, ["你好", "拟好", "泥蒿", "倪皓"]);
-        for side in ["a", "b"] {
-            assert_eq!(read(&format!("{side}-baseline")).candidates, baseline);
-            let learned = read(if side == "a" { "a-learn" } else { "b-learned" });
-            assert_eq!(learned.candidates[0], "泥蒿");
-            for stage in ["delete", "restart"] {
-                let after = read(&format!("{side}-{stage}"));
-                assert_eq!(after.status, 0);
-                assert_eq!(after.candidates, baseline, "{side} {stage} must restore the dictionary position, not remove the word");
-            }
-        }
-        for action in ["a-local", "b-local", "a-whole-local"] {
-            assert_eq!(read(action).status, -206, "Local candidates keep the existing A return code");
-        }
+    let user = output.join("user");
+    fs::create_dir(&user).unwrap();
+    fs::write(user.join("agent_pinyin.custom.yaml"),
+        "patch:\n  translator/enable_user_dict: false\n  translator/enable_encoder: false\n  translator/encode_commit_history: false\n").unwrap();
+    let dictionary = crate::zhixu::loader::load(&shared, &user).unwrap();
+    let pinned = std::sync::Arc::new(crate::zhixu::Index::from_data(dictionary));
+    let _dictionary = crate::zhixu::pin_snapshot(Some(pinned.clone()));
+    let _learning = crate::zhixu::pin_learning(None);
+    // The product constructor: the native decoder from the pinned dictionary,
+    // with an empty in-memory store per script.
+    let mut traces = Vec::new();
+    for (index, path) in script_paths(&scripts).into_iter().enumerate() {
+        let name = path.strip_prefix(&scripts).unwrap().display().to_string();
+        let source = fs::read_to_string(&path).unwrap();
+        let app_id = format!("y3-public-{index}");
+        let mut session = Session::new_native(app_id,
+            std::sync::Arc::new(std::sync::Mutex::new(crate::blacklist::Store::default())), pinned.clone()).unwrap();
+        session.configure_learning(crate::zhixu::learning::LearningMode::Zhixu).unwrap();
+        let steps = trace(&mut session, &source, index as u64 + 1);
+        println!("Y3_SCRIPT\tzhixu\t{name}\tsteps={}", steps.len());
+        traces.push(Trace { name, steps });
     }
-
-    #[test]
-    #[ignore = "invoked in separate processes by the deletion regression"]
-    fn session_contract_delete_worker() {
-        use crate::state::MOD_CONTROL;
-        use crate::zhixu::learning::{LearningMode, LearningStore};
-        let root = PathBuf::from(std::env::var_os("Y3B_DELETE_ROOT").unwrap());
-        let action = std::env::var("Y3B_DELETE_ACTION").unwrap();
-        let shared = root.join("shared");
-        let native = action.starts_with('b');
-        let user = root.join(if native { "b" } else { "a" });
-        let now = crate::personal_picks::now_ms();
-        if action == "a-export" {
-            use std::ffi::{CString, c_char, c_int};
-            unsafe extern "C" {
-                fn aim_rime_initialize(shared: *const c_char, user: *const c_char) -> c_int;
-                fn aim_rime_backup_user_dict(name: *const c_char, output: *const c_char) -> c_int;
-            }
-            let shared = CString::new(shared.to_str().unwrap()).unwrap();
-            let user = CString::new(user.to_str().unwrap()).unwrap();
-            assert_ne!(unsafe { aim_rime_initialize(shared.as_ptr(), user.as_ptr()) }, 0);
-            let name = CString::new("pinyin_simp").unwrap();
-            let output = CString::new(root.join("learned.txt").to_str().unwrap()).unwrap();
-            assert_eq!(unsafe { aim_rime_backup_user_dict(name.as_ptr(), output.as_ptr()) }, 1);
-            return;
-        }
-        if action == "b-learned" {
-            let mut store = LearningStore::load(&user, now);
-            let exported = fs::read_to_string(root.join("learned.txt")).unwrap();
-            assert_eq!(store.import_rime_export(&exported, now).unwrap(), 1);
-            store.save(&user).unwrap();
-        }
-        let mut decoder = crate::rime::RimeDecoder::new(shared.to_str().unwrap(), user.to_str().unwrap()).unwrap();
-        if !native && !action.contains("local") {
-            use crate::state::Decoder;
-            // This is the real Rime Base-candidate operation used by A. The old
-            // whole layer exposes complete words as Local and rejects those;
-            // its separate return-code check below must remain -206.
-            decoder.input("nihao").unwrap();
-            let mut status = 0;
-            if action == "a-learn" {
-                for id in 1..=3 {
-                    let slot = decoder.snapshot().candidates.iter().position(|item| item.text == "泥蒿").unwrap();
-                    assert_eq!(decoder.select_candidate(slot, id, LearningIntent::DeliberateSelection).unwrap(), "泥蒿");
-                    decoder.input("nihao").unwrap();
-                }
-            } else if action == "a-delete" {
-                assert_eq!(decoder.snapshot().candidates[0].text, "泥蒿");
-                status = decoder.delete_candidate(0).err().unwrap_or(0);
-            }
-            let page = decoder.snapshot();
-            let visible = Visible { preedit: page.preedit, cursor_utf8: page.cursor_utf8,
-                candidates: page.candidates.into_iter().map(|item| item.text).collect(),
-                highlighted_index: page.highlighted_index, page_no: page.page_no,
-                is_last_page: page.is_last_page, status, consumed: true, ..Visible::default() };
-            println!("Y3B_DELETE\t{action}\t{:?}", visible.candidates);
-            fs::write(root.join(format!("{action}.json")), serde_json::to_vec_pretty(&visible).unwrap()).unwrap();
-            assert_eq!(status, 0);
-            return;
-        }
-        let dictionary = crate::zhixu::loader::load(&shared, &user).unwrap();
-        let _dictionary = crate::zhixu::pin_snapshot(Some(std::sync::Arc::new(crate::zhixu::Index::from_data(dictionary))));
-        let _learning = crate::zhixu::pin_learning(None);
-        let mut session = if native {
-            let blacklist = crate::blacklist::shared_blacklist(&user).unwrap();
-            let mut session = Session::new_with_blacklist(Box::new(decoder), "y3b.delete".into(), blacklist).unwrap();
-            session.configure_learning(LearningMode::Zhixu).unwrap();
-            session
-        } else { Session::new(Box::new(decoder), "y3b.delete".into()) };
-        session.configure_zhixu_whole(true).unwrap();
-        let mut delivery = 100;
-        let mut process = |session: &mut Session, kind, text: &str, modifiers| {
-            delivery += 1;
-            session.process(KeyEvent { kind, text: text.into(), modifiers, security: SecurityState::NonSecure, delivery_id: delivery })
-        };
-        let mut result = process(&mut session, KeyKind::Text, "", 0);
-        let local = action.ends_with("local");
-        let raw = if local && action != "a-whole-local" { "hello" } else { "nihao" };
-        for letter in raw.chars() {
-            result = process(&mut session, KeyKind::Text, &letter.to_string(), 0);
-        }
-        if local {
-            assert!(!result.candidates.is_empty());
-            if raw == "hello" { assert!(result.candidates[0].text.eq_ignore_ascii_case("hello")); }
-            let before: Vec<_> = result.candidates.iter().map(|item| item.text.clone()).collect();
-            result = process(&mut session, KeyKind::DeleteCandidate, "", MOD_CONTROL);
-            assert_eq!(result.candidates.iter().map(|item| item.text.clone()).collect::<Vec<_>>(), before);
-        } else if action.ends_with("delete") {
-            assert_eq!(result.candidates[0].text, "泥蒿", "learned candidate must be first before deleting");
-            result = process(&mut session, KeyKind::DeleteCandidate, "", MOD_CONTROL);
-        }
-        println!("Y3B_DELETE\t{action}\t{:?}", result.candidates.iter().map(|item| &item.text).collect::<Vec<_>>());
-        let status = result.status;
-        fs::write(root.join(format!("{action}.json")), serde_json::to_vec_pretty(&Visible::from(result)).unwrap()).unwrap();
-        assert_eq!(status, if local { -206 } else { 0 }, "deletion status must preserve Base/Local semantics");
-    }
-
-    #[test]
-    #[ignore]
-    fn session_contract_worker() {
-        let kind = std::env::var("Y3_WORKER_KIND").expect("run session_contract_compare");
-        let shared = std::env::var("Y0_SHARED").expect("public shared");
-        let scripts = PathBuf::from(std::env::var_os("Y0_SCRIPTS").unwrap());
-        let output = PathBuf::from(std::env::var_os("Y3_WORKER_OUTPUT").unwrap());
-        let user = output.with_extension("user");
-        fs::create_dir(&user).unwrap();
-        fs::write(user.join("agent_pinyin.custom.yaml"), "patch:\n  translator/enable_user_dict: false\n  translator/enable_encoder: false\n  translator/encode_commit_history: false\n").unwrap();
-        let dictionary = crate::zhixu::loader::load(Path::new(&shared), &user).unwrap();
-        let _dictionary = crate::zhixu::pin_snapshot(Some(std::sync::Arc::new(crate::zhixu::Index::from_data(dictionary))));
-        let _learning = crate::zhixu::pin_learning(None);
-        // Rime is initialized even on B, as it is in the product fallback path.
-        let idle_rime = crate::rime::RimeDecoder::new(&shared, user.to_str().unwrap()).unwrap();
-        let deployed = fs::read_to_string(user.join("build/agent_pinyin.schema.yaml")).unwrap();
-        assert!(deployed.contains("enable_user_dict: false"));
-        let mut traces = Vec::new();
-        for (index, path) in paths(&scripts).into_iter().enumerate() {
-            let relative = if scripts.is_file() { Path::new(path.file_name().unwrap()) } else { path.strip_prefix(&scripts).unwrap() };
-            let source = fs::read_to_string(&path).unwrap();
-            assert!(!source.lines().any(|line| matches!(line.trim(), "# resolve_prefix" | "# resolve_last_page")), "unresolved Y0 keys");
-            let decoder = Box::new(crate::rime::RimeDecoder::new(&shared, user.to_str().unwrap()).unwrap());
-            let app_id = format!("y3-public-{index}");
-            let mut session = match kind.as_str() {
-                "legacy" => Session::new(decoder, app_id),
-                // The actual product constructor enables the idle-only switch;
-                // an empty in-memory store keeps every script independent.
-                "zhixu" => Session::new_with_blacklist(decoder, app_id,
-                    std::sync::Arc::new(std::sync::Mutex::new(crate::blacklist::Store::default()))).unwrap(),
-                _ => panic!("unknown session side"),
-            };
-            session.configure_learning(crate::zhixu::learning::LearningMode::Zhixu).unwrap();
-            session.configure_zhixu_whole(true).unwrap();
-            let steps = trace(&mut session, &source, index as u64 + 1);
-            println!("Y3_SCRIPT\t{kind}\t{}\tsteps={}", relative.display(), steps.len());
-            traces.push(Trace { name: relative.display().to_string(), steps });
-        }
-        drop(idle_rime);
-        fs::write(output, serde_json::to_vec(&traces).unwrap()).unwrap();
-    }
-
-    #[test]
-    #[ignore]
-    fn session_contract_compare() {
-        let suite = std::env::var_os("Y0_SCRIPTS").expect("Y0 scripts");
-        let shared = std::env::var_os("Y0_SHARED").expect("isolated public shared");
-        let tested = std::env::var("Y3_TESTED").unwrap_or_else(|_| "zhixu".into());
-        assert!(matches!(tested.as_str(), "legacy" | "zhixu"));
-        let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
-        let output = std::env::temp_dir().join(format!("zhixu-y3-session-{}-{stamp}", std::process::id()));
-        fs::create_dir(&output).unwrap();
-        println!("Y3_OUTPUT\t{}", output.display());
-        let resolved = output.join("scripts");
-        let mut sides = Vec::new();
-        for (label, kind) in [("resolve", "resolve"), ("a", "legacy"), ("b", tested.as_str())] {
-            let log = fs::File::create(output.join(format!("{label}.log"))).unwrap();
-            let trace = if kind == "resolve" { resolved.clone() } else { output.join(format!("{label}.json")) };
-            let test = if kind == "resolve" { "mixer::decoder_contract::real::decoder_contract_worker" }
-                else { "mixer::decoder_contract::session_contract::real::session_contract_worker" };
-            let result = Command::new(std::env::current_exe().unwrap())
-                .args(["--exact", test, "--ignored", "--nocapture", "--test-threads=1"])
-                .env("Y0_WORKER_KIND", kind).env("Y0_WORKER_OUTPUT", &trace)
-                .env("Y3_WORKER_KIND", kind).env("Y3_WORKER_OUTPUT", &trace)
-                .env("Y0_SCRIPTS", if kind == "resolve" { &suite } else { resolved.as_os_str() })
-                .env("Y0_SHARED", &shared).env("ZHIZI_SINGLE_LEARN", "0")
-                .env_remove("ZHIZI_ZHIXU_WHOLE")
-                .stdout(Stdio::from(log.try_clone().unwrap())).stderr(Stdio::from(log)).status().unwrap();
-            assert!(result.success(), "{label} worker failed, see {}", output.display());
-            if kind != "resolve" { sides.push(serde_json::from_slice::<Vec<Trace>>(&fs::read(trace).unwrap()).unwrap()); }
-        }
-        let summary = compare(&sides[0], &sides[1]);
-        fs::write(output.join("summary.json"), serde_json::to_vec_pretty(&summary).unwrap()).unwrap();
-        println!("Y3_SUMMARY\tscripts={}\tsteps={}\tmismatched_steps={}\tby_kind={:?}",
-            summary.scripts, summary.steps, summary.mismatched_steps, summary.by_kind);
-        assert!(preedit_and_cursor_match(&summary), "Y3b requires identical preedit and cursor before reviewing candidate/navigation differences; inspect summary.json");
-        assert_eq!(summary.mismatched_steps, 0, "strict Session comparison differences; inspect summary.json");
-    }
+    let fresh = serde_json::to_vec(&traces).unwrap();
+    fs::write(output.join("b.json"), &fresh).unwrap();
+    assert!(fresh == expected,
+        "zhixu Y3 session trace differs from the frozen baseline; fresh copy: {}", output.join("b.json").display());
+    println!("Y3_BASELINE_MATCH\t{}", output.display());
 }

@@ -1,5 +1,3 @@
-#![cfg_attr(not(any(test, feature = "librime")), allow(dead_code))]
-
 use crate::secure_directory::{
     open_or_create_owned_leaf_directory, physical_runtime_path, private_create, private_regular_file,
     sync_directory, validate_owned_directory,
@@ -179,7 +177,6 @@ fn valid_entry(entry: &BlacklistEntry) -> bool {
         && entry.reading.bytes().all(|byte| byte.is_ascii_lowercase())
 }
 
-#[cfg_attr(not(feature = "librime"), allow(dead_code))]
 pub(crate) fn shared_blacklist(user_dir: &Path) -> io::Result<Arc<Mutex<Store>>> {
     static STORES: OnceLock<Mutex<std::collections::HashMap<PathBuf, Weak<Mutex<Store>>>>> =
         OnceLock::new();

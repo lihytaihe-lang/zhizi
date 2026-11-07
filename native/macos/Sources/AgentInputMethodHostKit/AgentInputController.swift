@@ -4,10 +4,6 @@ import AgentIMECoreBridge
 
 @objc(AgentInputController)
 public final class AgentInputController: IMKInputController, @unchecked Sendable {
-    @MainActor private static var processLearningController: LearningModeController?
-    private static let learningModeDidChange = Notification.Name("agentLearningModeDidChange")
-    private let learningSessionID = UUID()
-    private var learningController: LearningModeController?
     private var personalModelDirectory: URL?
     private static let fuzzyLock = NSLock()
     private static let fuzzyLabels = [
@@ -53,7 +49,47 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
     private var appliedPackFingerprint: String?
     private var failedPackFingerprint: String?
     private var resourcesClosed = false
+    /// Where the candidate panel last anchored; a deferred model reorder redraws the page there.
+    private var lastPanelAnchor = NSRect.zero
     private var didCallSuperClose = false
+
+    /// The core page shows at once and the model reorders it afterwards (docs Q12: the model ran
+    /// on the key path, 30 ms a key against 8.5 ms without it). `defaults write <domain>
+    /// deferredRankingDisabled -bool true` restores the synchronous path.
+    private func attachDeferredRanking(forTesting: Bool = false) {
+        guard forTesting || !performanceMode, let core else { return }
+        core.defersRanking = !UserDefaults.standard.bool(forKey: "deferredRankingDisabled")
+        core.deferredApplier = { [weak self] step in
+            DispatchQueue.main.async { self?.applyDeferredRanking(step) }
+        }
+    }
+
+    /// A model result for the page on screen. The core's order changes here, on the key thread and
+    /// inside the controller lock, together with the redraw: a key can never see one without the
+    /// other. Only while no key has come since, and only for the same preedit and page.
+    func applyDeferredRanking(_ step: DeferredRankingStep) {
+        callbackExecutor.sync {
+            guard !resourcesClosed, let core, core.currentRankingGeneration == step.generation,
+                  hasActiveComposition, candidateGrid == nil, let shown = latestView,
+                  shown.markedText == step.markedText, shown.pageNumber == step.pageNumber,
+                  let view = step.finish(), !view.candidates.isEmpty else { return }
+            latestView = view
+            qualityRecorder?.reviseShownPage(view)
+            MainActor.assumeIsolated {
+                candidatePanel?.update(
+                    candidates: view.candidates,
+                    highlighted: view.highlightedIndex,
+                    pageNumber: view.pageNumber,
+                    isLastPage: view.isLastPage,
+                    secondaryCandidates: view.secondaryCandidates,
+                    preedit: view.markedText,
+                    anchor: lastPanelAnchor,
+                    secure: view.secureDegraded,
+                    grid: nil
+                )
+            }
+        }
+    }
 
     @_spi(PerformanceHarness) public func enableContextRankingForPerformance() {
         callbackExecutor.sync {
@@ -76,6 +112,9 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
             core?.setContextRankingEnabled(true)
         }
     }
+
+    func enableDeferredRankingForTesting() { callbackExecutor.sync { attachDeferredRanking(forTesting: true) } }
+    var latestCandidateTextsForTesting: [String]? { callbackExecutor.sync { latestView?.candidates.map(\.text) } }
 
     var contextAppIdentifierForTesting: String { appIdentifier }
     var candidateGridForTesting: CandidateGrid? { callbackExecutor.sync { candidateGrid } }
@@ -101,6 +140,7 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
                 userDirectory: storage.userDirectory,
                 appIdentifier: appIdentifier
             )
+            attachDeferredRanking()
             latestDirectEnglish = UserDefaults.standard.bool(forKey: modeDefaultsKey)
             _ = core?.setDirectEnglish(latestDirectEnglish)
             _ = core?.setTypoCorrectionEnabled(UserDefaults.standard.bool(forKey: "typoCorrectionEnabled"))
@@ -180,29 +220,6 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
                 self?.closeForProcessTermination()
             },
         ]
-        if let sharedDirectory, let storage {
-            MainActor.assumeIsolated {
-                if Self.processLearningController == nil {
-                    let learning = LearningModeController(
-                        defaults: .standard,
-                        libraryExists: { LearningMigrationProcess.libraryExists(userDirectory: storage.userDirectory) },
-                        migrate: { completion in
-                            LearningMigrationProcess.start(
-                                executable: Bundle.main.executableURL,
-                                sharedDirectory: sharedDirectory, userDirectory: storage.userDirectory,
-                                completion: completion
-                            )
-                        },
-                        diagnose: { DiagnosticsRecorder.shared.recordSystem(eventKind: $0) }
-                    )
-                    learning.onChange = {
-                        NotificationCenter.default.post(name: Self.learningModeDidChange, object: nil)
-                    }
-                    Self.processLearningController = learning
-                }
-                if let learning = Self.processLearningController { bindLearningController(learning) }
-            }
-        }
     }
 
     @_spi(PerformanceHarness)
@@ -383,7 +400,7 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
 
     /// The cold-start executable invokes the public IMK handle path, then uses
     /// this read-only observation to prove that the production candidate panel
-    /// applied at least one real librime candidate before the process exits.
+    /// applied at least one real candidate before the process exits.
     func coldStartAppliedCandidateCount() -> Int {
         callbackExecutor.sync {
             guard !resourcesClosed else { return 0 }
@@ -476,6 +493,7 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
             userDirectory: userDirectory,
             appIdentifier: activatedIdentifier
         )
+        attachDeferredRanking()
         latestDirectEnglish = UserDefaults.standard.bool(forKey: modeDefaultsKey)
         _ = core?.setDirectEnglish(latestDirectEnglish)
         _ = core?.setTypoCorrectionEnabled(UserDefaults.standard.bool(forKey: "typoCorrectionEnabled"))
@@ -492,35 +510,6 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
             _ = core?.applyLexiconSnapshot(currentPreparedLexicon)
         }
         applySavedFuzzyConfigurationIfNeeded()
-        registerLearningSession()
-    }
-
-    @MainActor
-    func bindLearningController(_ learning: LearningModeController) {
-        learningController?.unregister(id: learningSessionID)
-        learningController = learning
-        runtimeObservers.append(NotificationCenter.default.addObserver(
-            forName: Self.learningModeDidChange, object: nil, queue: .main
-        ) { [weak self] _ in
-            self?.callbackExecutor.sync { self?.refreshStatusItemMenu() }
-        })
-        registerLearningSession()
-    }
-
-    private func registerLearningSession() {
-        MainActor.assumeIsolated {
-            guard let learningController else { return }
-            let registered = learningController.register(
-                id: learningSessionID,
-                isComposing: { [weak self] in self?.hasActiveComposition ?? false },
-                apply: { [weak self] mode in self?.core?.setLearningMode(mode) ?? -1 },
-                applyZhixuWhole: { [weak self] enabled in self?.core?.setZhixuWholeEnabled(enabled) ?? -1 }
-            )
-            if !registered {
-                core?.close()
-                core = nil
-            }
-        }
     }
 
     private var modeDefaultsKey: String { "directEnglishMode.\(appIdentifier)" }
@@ -695,8 +684,6 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
         for observer in runtimeObservers { NotificationCenter.default.removeObserver(observer) }
         runtimeObservers.removeAll()
         MainActor.assumeIsolated {
-            learningController?.unregister(id: learningSessionID)
-            learningController = nil
             candidatePanel?.hide()
             candidatePanel = nil
             if !performanceMode {
@@ -767,32 +754,6 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
         let lexicon = NSMenuItem(title: "词库…", action: #selector(openLexiconWindow(_:)), keyEquivalent: "")
         lexicon.target = self
         menu.addItem(lexicon)
-        let (selected, learningStatus, wholeEnabled) = MainActor.assumeIsolated {
-            (learningController?.mode ?? .rime, learningController?.statusText, learningController?.wholeEnabled ?? false)
-        }
-        let learning = NSMenuItem(title: "学习方式：\(selected.title)", action: nil, keyEquivalent: "")
-        let choices = NSMenu(title: "学习方式")
-        for mode in [LearningMode.zhixu, .rime] {
-            let item = NSMenuItem(title: mode.title, action: #selector(selectLearningMode(_:)), keyEquivalent: "")
-            item.target = self
-            item.tag = Int(mode.rawValue)
-            item.state = selected == mode ? .on : .off
-            choices.addItem(item)
-        }
-        if let status = learningStatus {
-            let item = NSMenuItem(title: status, action: nil, keyEquivalent: "")
-            item.isEnabled = false
-            choices.addItem(.separator())
-            choices.addItem(item)
-        }
-        learning.submenu = choices
-        menu.addItem(learning)
-        let whole = NSMenuItem(title: "全拼由知序拼", action: #selector(toggleZhixuWhole(_:)), keyEquivalent: "")
-        whole.target = self
-        whole.state = wholeEnabled ? .on : .off
-        whole.isEnabled = learningController != nil
-        whole.toolTip = learningStatus
-        menu.addItem(whole)
         let personalModel = Self.makePersonalModelMenuItem(directory: personalModelDirectory, defaults: .standard)
         if personalModel.isEnabled {
             personalModel.action = #selector(togglePersonalModel(_:))
@@ -846,25 +807,6 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
             guard !resourcesClosed,
                   Self.makePersonalModelMenuItem(directory: personalModelDirectory, defaults: .standard).isEnabled else { return }
             Self.togglePersonalModelPreference(defaults: .standard)
-            refreshStatusItemMenu()
-        }
-    }
-
-    @objc private func selectLearningMode(_ sender: NSMenuItem) {
-        callbackExecutor.sync {
-            guard !resourcesClosed, let mode = LearningMode(rawValue: UInt32(clamping: sender.tag)) else { return }
-            MainActor.assumeIsolated { learningController?.request(mode) }
-            refreshStatusItemMenu()
-        }
-    }
-
-    @objc private func toggleZhixuWhole(_ sender: NSMenuItem) {
-        callbackExecutor.sync {
-            guard !resourcesClosed else { return }
-            MainActor.assumeIsolated {
-                guard let learningController else { return }
-                learningController.requestZhixuWhole(!learningController.wholeEnabled)
-            }
             refreshStatusItemMenu()
         }
     }
@@ -1477,6 +1419,7 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
             // (owner 2026-10-09). The composition start stays put while typing.
             let anchorIndex = 0
             _ = client.attributes(forCharacterIndex: anchorIndex, lineHeightRectangle: &lineRect)
+            lastPanelAnchor = lineRect
             applyStages.caret = lap()
             MainActor.assumeIsolated {
                 candidatePanel?.update(

@@ -16,6 +16,9 @@ const ASCII_LAYERS: &[&str] = &[
     "agent_ai_terms",
     "agent_pack_terms",
 ];
+/// Table of hand-written corrections; its rows outrank same-reading rows of every other table.
+const COMMON_FIX_LAYER: &str = "agent_common_fix";
+const COMMON_FIX_BOOST: u32 = 1000;
 const RECHECK: Duration = Duration::from_millis(750);
 const MAX_DICTIONARY_BYTES: u64 = 64 * 1024 * 1024;
 
@@ -122,7 +125,9 @@ fn parse(text: &str, layer: &str) -> io::Result<(Vec<String>, Vec<Entry>)> {
         entries.push(Entry {
             text: word.to_string(),
             reading,
-            weight,
+            // The correction table is hand-curated: where it names a word for a reading it wins
+            // over the general lexicon's raw frequency (Q17: `wancl` -> 完成了, not 完成率).
+            weight: if layer == COMMON_FIX_LAYER { weight.saturating_add(COMMON_FIX_BOOST) } else { weight },
             layer: layer.to_string(),
         });
     }
@@ -241,6 +246,7 @@ fn load_with_layers(
     Ok(reader.data)
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn load(shared: &Path, user: &Path) -> io::Result<DictionaryData> {
     load_with_layers(shared, user, &lexicon_layers::dictionary_layers(user), false, false)
 }
@@ -287,6 +293,19 @@ fn reap_indexes(generations: &mut Vec<Arc<Index>>) {
     let mut seen = HashSet::new();
     generations.retain(|index| seen.insert(Arc::as_ptr(index)));
     generations.retain(|index| Arc::strong_count(index) > 1);
+}
+
+/// The index-cache key of the dictionaries as they are right now; the cache
+/// write rechecks it so a change between build and write is dropped.
+pub(super) fn current_cache_key(shared: &Path, user: &Path) -> Option<Vec<u8>> {
+    let layers = lexicon_layers::dictionary_layers(user);
+    let shared_fingerprint_value = shared_fingerprint(shared);
+    let user_fingerprint_value = shared_fingerprint(user);
+    Some(super::index_cache::cache_key(
+        &layers,
+        &shared_fingerprint_value,
+        &user_fingerprint_value,
+    ))
 }
 
 /// Correction indexes load on the worker; explicit idle native reloads build their own generation.
@@ -396,7 +415,6 @@ impl RuntimeDictionary {
         // Release the replaced publication outside the lock; generations retains ownership until worker reaping.
         drop(retired);
     }
-
     fn deployed_snapshot(&self) -> io::Result<Arc<Index>> {
         // Serialize builders, not typing. An unchanged idle switch reuses the
         // generation already built by the background loader.
@@ -408,21 +426,43 @@ impl RuntimeDictionary {
                 return Ok(index.clone());
             }
         }
+        // A cache written for exactly this dictionary state replaces the text
+        // parse on the typing thread; any mismatch builds on the spot.
+        let key = super::index_cache::cache_key(&layers, &before.0, &before.1);
+        if let Some(cached) = super::index_cache::load(&self.user, &key) {
+            let index = Arc::new(cached);
+            // An install writes membership before its dictionary: never publish
+            // a cached generation read across a change.
+            if layers == lexicon_layers::dictionary_layers(&self.user)
+                && before == (shared_fingerprint(&self.shared), shared_fingerprint(&self.user))
+            {
+                self.deployed_generations.lock().map_err(|_| invalid("dictionary reclaimer unavailable"))?
+                    .push(index.clone());
+                *deployed = Some((layers, before.0, before.1, index.clone()));
+                super::prewarm_whole_index(index.clone());
+                return Ok(index);
+            }
+        }
         // The native decoder replaces Rime, so it needs the entire deployed
         // candidate table. Mixer still applies the existing per-word layer filter.
         let data = load_with_layers(&self.shared, &self.user, &layers, false, true)?;
         let index = Arc::new(Index::from_data(data));
         if layers != lexicon_layers::dictionary_layers(&self.user)
-            || before != (shared_fingerprint(&self.shared), shared_fingerprint(&self.user)) {
+            || before != (shared_fingerprint(&self.shared), shared_fingerprint(&self.user))
+        {
             return Err(invalid("dictionaries changed during native reload"));
         }
         self.deployed_generations.lock().map_err(|_| invalid("dictionary reclaimer unavailable"))?
             .push(index.clone());
         *deployed = Some((layers, before.0, before.1, index.clone()));
+        // The background prewarm thread writes the cache once the warm
+        // structures it must contain are ready.
+        super::index_cache::schedule_write(&self.shared, &self.user, &key, &index);
         super::prewarm_whole_index(index.clone());
         Ok(index)
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     fn ready_deployed(&self) -> Option<Arc<Index>> {
         self.deployed.try_lock().ok()?.as_ref().map(|(_, _, _, index)| index)
             .filter(|index| index.whole_ready()).cloned()
@@ -467,6 +507,7 @@ pub(crate) fn deployed_snapshot() -> io::Result<Option<Arc<Index>>> {
 
 /// A key must never join a dictionary builder or initialize its reading indexes.
 /// None inside Ok preserves the standalone decoder path without an attached runtime.
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn ready_deployed_snapshot() -> Result<Option<Arc<Index>>, ()> {
     #[cfg(test)]
     if let Some(dictionary) = super::PINNED.with(|slot| slot.borrow().clone()).flatten() {
@@ -491,6 +532,7 @@ pub(crate) fn current() -> Option<Arc<Index>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::zhixu::index_cache;
     use std::fs;
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicU64, Ordering};
@@ -576,6 +618,16 @@ mod tests {
         assert_eq!(words.len(), 1);
         assert_eq!(words[0].weight, 200);
         assert_eq!(words[0].layers, ["first", "second"]);
+    }
+
+    #[test]
+    fn correction_table_rows_outrank_other_tables_for_the_same_reading() {
+        let table = "---\nname: t\nsort: by_weight\n...\n完成了\twan cheng le\t520\n";
+        let (_, fix) = parse(table, COMMON_FIX_LAYER).unwrap();
+        let (_, general) = parse(&table.replace("520", "699"), "agent_general").unwrap();
+        assert_eq!(general[0].weight, 699);
+        assert!(fix[0].weight > general[0].weight, "a hand-written correction must beat raw frequency");
+        assert_eq!(fix[0].weight, 520 + COMMON_FIX_BOOST);
     }
 
     #[test]
@@ -915,6 +967,69 @@ mod tests {
     }
 
     #[test]
+    fn deployed_snapshot_reads_the_persisted_cache_and_dictionary_changes_rebuild() {
+        let _serialized = index_cache::tests_lock();
+        let fixture = Fixture::new();
+        let shared = fixture.shared();
+        let user = fixture.user();
+        // Stage a cache that carries a word no dictionary contains: a session
+        // must see exactly this index when the key matches.
+        let layers = lexicon_layers::dictionary_layers(&user);
+        let mut staged = load_with_layers(&shared, &user, &layers, false, true).unwrap();
+        staged.entries.push(Entry {
+            text: "缓存词".into(),
+            reading: "huan cun ci".into(),
+            weight: 999,
+            layer: "second".into(),
+        });
+        let staged = Arc::new(Index::from_data(staged));
+        staged.warm_whole();
+        let key = current_cache_key(&shared, &user).unwrap();
+        index_cache::save(&user, &key, &staged).unwrap();
+        let runtime = RuntimeDictionary::new(shared.clone(), user.clone());
+        let snapshot = runtime.deployed_snapshot().unwrap();
+        assert!(snapshot.all_readings_for_text("缓存词").next().is_some(), "the staged cache is what the session sees");
+        assert!(snapshot.whole_ready(), "the cache loads warm");
+        assert!(staged.cache_equals(&snapshot));
+        // A dictionary change invalidates the key: the marker word is gone.
+        fixture.write(
+            "shared/second.dict.yaml",
+            "---\nname: second\nsort: by_weight\n...\n更新\tgeng xin\t900\n",
+        );
+        let rebuilt = runtime.deployed_snapshot().unwrap();
+        assert!(rebuilt.all_readings_for_text("缓存词").next().is_none());
+        assert!(rebuilt.all_readings_for_text("更新").next().is_some());
+        // A layer switch invalidates the key the same way.
+        let runtime = RuntimeDictionary::new(shared.clone(), user.clone());
+        let staged_again = runtime.deployed_snapshot().unwrap();
+        assert!(staged_again.all_readings_for_text("更新").next().is_some());
+        let _ = staged_again;
+        index_cache::save(&user, &current_cache_key(&shared, &user).unwrap(), &staged).unwrap();
+        fixture.write(
+            "user/lexicon_layers_v1.json",
+            r#"{"formatVersion":1,"disabled":["second"],"enabled":[]}"#,
+        );
+        let relayered = runtime.deployed_snapshot().unwrap();
+        assert!(relayered.all_readings_for_text("缓存词").next().is_none(), "a changed layer set must not reuse the cache");
+    }
+
+    #[test]
+    fn a_fresh_deployment_writes_the_cache_in_the_background() {
+        let _serialized = index_cache::tests_lock();
+        let fixture = Fixture::new();
+        let runtime = RuntimeDictionary::new(fixture.shared(), fixture.user());
+        assert!(!fixture.user().join(index_cache::FILE_NAME).exists());
+        let built = runtime.deployed_snapshot().unwrap();
+        assert!(built.all_readings_for_text("你好").next().is_some());
+        assert!(index_cache::flush(Duration::from_millis(2_000)), "the background write settles");
+        let key = current_cache_key(&fixture.shared(), &fixture.user()).unwrap();
+        let cached = index_cache::load(&fixture.user(), &key)
+            .expect("the built deployment reaches the disk");
+        assert!(cached.all_readings_for_text("你好").next().is_some());
+        assert!(cached.whole_ready());
+    }
+
+    #[test]
     fn y4_deployment_reuses_background_generation_and_unchanged_reload() {
         let fixture = Fixture::new();
         let runtime = RuntimeDictionary::new(fixture.shared(), fixture.user());
@@ -1052,6 +1167,18 @@ mod tests {
         }
     }
 
+    fn reap_until_released(generations: &mut Vec<Arc<Index>>, index: &std::sync::Weak<Index>, message: &str) {
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        loop {
+            reap_indexes(generations);
+            if index.upgrade().is_none() {
+                return;
+            }
+            assert!(std::time::Instant::now() < deadline, "{message}");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+
     #[test]
     fn replaced_indexes_stay_worker_owned_until_readers_release_them() {
         let fixture = Fixture::new();
@@ -1083,19 +1210,15 @@ mod tests {
             previous.upgrade().is_some(),
             "dropping the last reader must leave the worker owning the old index"
         );
-        reap_indexes(&mut generations);
-        assert!(
-            previous.upgrade().is_none(),
-            "the worker reclaims a generation after its readers finish"
-        );
+        // A deployment prewarm thread may briefly hold a clone, so reclaim by polling.
+        reap_until_released(&mut generations, &previous, "the worker reclaims a generation after its readers finish");
         let current = Arc::downgrade(&runtime.snapshot().unwrap());
         drop(runtime);
         assert!(
             current.upgrade().is_some(),
             "the active generation also remains worker-owned when its runtime closes"
         );
-        reap_indexes(&mut generations);
-        assert!(current.upgrade().is_none());
+        reap_until_released(&mut generations, &current, "the closed runtime's generation is reclaimed");
         assert!(generations.is_empty());
     }
 }

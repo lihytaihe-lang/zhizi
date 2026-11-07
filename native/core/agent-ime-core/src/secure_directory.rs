@@ -1,5 +1,3 @@
-#![cfg_attr(not(any(test, feature = "librime")), allow(dead_code))]
-
 #[cfg(unix)]
 use std::ffi::CString;
 #[cfg(unix)]
@@ -135,6 +133,29 @@ fn open_owned_directory_chain(path: &Path) -> io::Result<File> {
     }
     validate_owned_directory(&current, "secure directory")?;
     Ok(current)
+}
+
+/// Opens an already-existing owned leaf directory without ever creating one:
+/// a runtime directory that vanished under a concurrent writer stays gone
+/// instead of being recreated by a late cache write.
+#[cfg(unix)]
+pub(crate) fn open_existing_owned_leaf_directory(path: &Path) -> io::Result<File> {
+    open_owned_directory_chain(path)
+}
+
+#[cfg(windows)]
+pub(crate) fn open_existing_owned_leaf_directory(path: &Path) -> io::Result<File> {
+    if !path.is_absolute() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "secure directory path must be absolute",
+        ));
+    }
+    reject_reparse_point(path.parent().ok_or_else(|| {
+        io::Error::new(io::ErrorKind::InvalidInput, "secure directory has no parent")
+    })?)?;
+    reject_reparse_point(path)?;
+    open_directory(path)
 }
 
 /// Creates only the final directory name under a stable, no-follow parent fd.

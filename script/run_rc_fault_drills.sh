@@ -673,17 +673,10 @@ SUPPORT_GIT_COMMIT="$(git -C "$ROOT_DIR" rev-parse HEAD)"
 [[ "$SUPPORT_GIT_COMMIT" == "$PRODUCT_COMMIT" ]]
 SUPPORT_SOURCE_CHECKSUM="$(support_source_checksum)"
 OFFLINE_SANDBOX='(version 1) (allow default) (deny network*)'
-PINNED_RIME_DIR="$ROOT_DIR/.build-deps/librime/1.16.1"
 PINNED_PINYIN_DIR="$ROOT_DIR/.build-deps/rime-pinyin-simp/0c6861ef7420ee780270ca6d993d18d4101049d0"
 sandbox-exec -p "$OFFLINE_SANDBOX" bash -c \
-  'source "$1"; validate_rime_dir "$2"; validate_pinyin_dir "$3"' \
-  _ "$ROOT_DIR/script/bootstrap_native.sh" "$PINNED_RIME_DIR" "$PINNED_PINYIN_DIR"
-cp "$PINNED_RIME_DIR/lib/librime.1.dylib" "$TEMP_ROOT/pinned-librime-unsigned.dylib"
-cp "$INPUT_BUNDLE/Contents/Frameworks/librime.1.dylib" "$TEMP_ROOT/bundled-librime-unsigned.dylib"
-chmod u+w "$TEMP_ROOT/pinned-librime-unsigned.dylib" "$TEMP_ROOT/bundled-librime-unsigned.dylib"
-codesign --remove-signature "$TEMP_ROOT/pinned-librime-unsigned.dylib" 2>/dev/null || true
-codesign --remove-signature "$TEMP_ROOT/bundled-librime-unsigned.dylib" 2>/dev/null || true
-cmp -s "$TEMP_ROOT/pinned-librime-unsigned.dylib" "$TEMP_ROOT/bundled-librime-unsigned.dylib"
+  'source "$1"; validate_pinyin_dir "$2"' \
+  _ "$ROOT_DIR/script/bootstrap_native.sh" "$PINNED_PINYIN_DIR"
 CORE_TARGET="$TEMP_ROOT/core-target"
 SWIFT_SCRATCH="$TEMP_ROOT/swift-build"
 IPC_TARGET="$TEMP_ROOT/ipc-target"
@@ -713,13 +706,11 @@ SWIFT_ARGS=(
 sandbox-exec -p "$OFFLINE_SANDBOX" env HOME="$SWIFT_HOME" \
   CLANG_MODULE_CACHE_PATH="$SWIFT_MODULE_CACHE" SWIFTPM_MODULECACHE_OVERRIDE="$SWIFT_MODULE_CACHE" \
   AIM_CORE_LIBRARY_DIR="$CORE_TARGET/release" \
-  DYLD_LIBRARY_PATH="$CORE_TARGET/release:$ROOT_DIR/.build-deps/librime/1.16.1/lib" \
   swift test "${SWIFT_ARGS[@]}" \
-  --filter HostSupportTests.testIncompatibleUserDBIsQuarantinedAndLastValidBackupRestored
+  --filter HostSupportTests.testRuntimeStorageUsesPrivateEphemeralFallbackForRejectedPrimaryUserDirectory
 sandbox-exec -p "$OFFLINE_SANDBOX" env HOME="$SWIFT_HOME" \
   CLANG_MODULE_CACHE_PATH="$SWIFT_MODULE_CACHE" SWIFTPM_MODULECACHE_OVERRIDE="$SWIFT_MODULE_CACHE" \
   AIM_CORE_LIBRARY_DIR="$CORE_TARGET/release" \
-  DYLD_LIBRARY_PATH="$CORE_TARGET/release:$ROOT_DIR/.build-deps/librime/1.16.1/lib" \
   swift build "${SWIFT_ARGS[@]}" --product AgentIMESnapshotHarness
 SWIFT_BIN_PATH="$(sandbox-exec -p "$OFFLINE_SANDBOX" env HOME="$SWIFT_HOME" \
   CLANG_MODULE_CACHE_PATH="$SWIFT_MODULE_CACHE" SWIFTPM_MODULECACHE_OVERRIDE="$SWIFT_MODULE_CACHE" \

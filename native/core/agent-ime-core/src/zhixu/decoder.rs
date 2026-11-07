@@ -199,7 +199,18 @@ fn generate_candidates_cached(raw: &str, entries: &[learning::Entry], tick: u64,
     let generated = crate::mixer::decoder_whole_candidates_cached(raw, entries, tick, inherited_order, lattice);
     #[cfg(test)]
     INNER_TIMING.with(|timing| timing.borrow_mut()[2] += start.elapsed().as_nanos());
+    let repair_jqx = super::fuzzy::has_jqx_spelling_error(raw);
     for candidate in generated.iter().filter(|candidate| candidate.comment == "整串 · 顺手·知序") {
+        // A malformed xang can already offer 想 for the prefix x. Upgrade that
+        // single character to the repaired whole reading. Multi-character native
+        // pieces (ganj + e, shangj + ai) retain their original suffix ownership.
+        if repair_jqx && candidate.text.chars().count() == 1
+            && let Some(position) = result.iter().position(|item|
+            item.consumed < raw.len() && item.candidate.text == candidate.text)
+        {
+            result.remove(position);
+            seen.remove(&candidate.text);
+        }
         if seen.insert(candidate.text.clone()) {
             let mut candidate = candidate.clone();
             if let Some(entry) = entries.iter().find(|entry| entry.text == candidate.text
@@ -306,7 +317,39 @@ fn generate_candidates_cached(raw: &str, entries: &[learning::Entry], tick: u64,
             }
         }
     }
+    if whole { word_boundary_ladder(&index, raw.len(), &mut result); }
     GeneratedCandidates { candidates: result, has_standalone_full }
+}
+
+/// Slots 3-5 of the first page are shorter prefixes of the input. A prefix that ends inside a word
+/// (就是这 for jiu shi zhe zhong: a learned or composed cut, no entry of the public dictionary)
+/// reads as noise in what should be a ladder of whole sentence, shorter sentence, then word prefixes
+/// (Q22A; Sogou's short prefixes always end on word boundaries). A candidate that consumes less than
+/// the whole input and is a multi-character text the public dictionary does not know yields its
+/// place in those slots to the next candidates that are words (or cover everything): it moves behind
+/// them and stays reachable on the following pages. Slots 1-2 (the whole sentence and the longest
+/// composed prefix) and everything else keep their order.
+fn word_boundary_ladder(index: &Index, raw_len: usize, result: &mut Vec<GeneratedCandidate>) {
+    const FIRST: usize = 2;
+    if result.len() <= PAGE_SIZE || raw_len == 0 { return; }
+    let cut_off = |item: &GeneratedCandidate| {
+        let text = item.candidate.text.as_str();
+        item.consumed < raw_len && text.chars().count() >= 2
+            && text.chars().all(|ch| ('\u{3400}'..='\u{9fff}').contains(&ch))
+            && !index.all_words_for_compact_reading(&item.candidate.reading_key.replace(' ', ""))
+                .any(|(word, _, _)| word == text)
+    };
+    if !result[FIRST..PAGE_SIZE].iter().any(&cut_off) { return; }
+    let mut moved = Vec::new();
+    let mut kept = Vec::new();
+    for item in result.split_off(FIRST) {
+        if kept.len() < PAGE_SIZE - FIRST && cut_off(&item) { moved.push(item); } else { kept.push(item); }
+    }
+    // kept[..3] fill the ladder slots; whatever was cut off follows them in its old order.
+    let tail = kept.split_off(kept.len().min(PAGE_SIZE - FIRST));
+    result.extend(kept);
+    result.extend(moved);
+    result.extend(tail);
 }
 
 fn generate_first_full_cached(raw: &str, entries: &[learning::Entry], tick: u64, inherited_order: bool,
@@ -691,6 +734,72 @@ mod candidate_tests {
             }] }));
             let _learning = super::super::pin_learning(Some(personal));
             assert!(generate("nihao", &[], 0).iter().any(|item| item.candidate.text == "拟好"));
+        });
+    }
+
+    fn ladder_item(text: &str, consumed: usize) -> GeneratedCandidate {
+        // A word reads as its own syllables (jiu shi for 就是); a cut or composed text has none of its own.
+        let reading = match text { "就是" | "救世" => "jiu shi", "就" => "jiu", "这种" => "zhe zhong", _ => "" };
+        GeneratedCandidate { candidate: Candidate { text: text.into(), reading_key: reading.into(), ..Candidate::default() }, consumed }
+    }
+
+    fn ladder_texts(items: &[GeneratedCandidate]) -> Vec<&str> {
+        items.iter().map(|item| item.candidate.text.as_str()).collect()
+    }
+
+    #[test]
+    fn q22a_ladder_moves_cut_off_prefixes_behind_dictionary_words() {
+        let index = Index::from_data(DictionaryData { entries: [
+            ("就是", "jiu shi"), ("救世", "jiu shi"), ("这种", "zhe zhong"), ("就", "jiu"), ("鋝", "lue"),
+        ].into_iter().map(|(text, reading)| Entry {
+            text: text.into(), reading: reading.into(), weight: 1, layer: "public-test".into(),
+        }).collect() });
+        // 22 = the whole input. 就是这种/就是这 end inside a word; the rest are entries.
+        let mut page = vec![ladder_item("就是这种长内容", 22), ladder_item("就是这种长", 19), ladder_item("就是这种", 14),
+            ladder_item("就是这", 11), ladder_item("就是", 7), ladder_item("救世", 7), ladder_item("就", 3),
+            ladder_item("就是这种长内", 21)];
+        word_boundary_ladder(&index, 22, &mut page);
+        assert_eq!(ladder_texts(&page), ["就是这种长内容", "就是这种长", "就是", "救世", "就", "就是这种", "就是这", "就是这种长内"]);
+        // Only whole-input candidates and entries in slots 3-5: nothing moves.
+        let mut words = vec![ladder_item("就是这种长内容", 22), ladder_item("就是这种长内", 21), ladder_item("就是", 7),
+            ladder_item("救世", 7), ladder_item("就", 3), ladder_item("就是这", 11)];
+        word_boundary_ladder(&index, 22, &mut words);
+        assert_eq!(ladder_texts(&words), ["就是这种长内容", "就是这种长内", "就是", "救世", "就", "就是这"]);
+        // Too few entries behind the cut-off ones: they still follow, in their old order.
+        let mut few = vec![ladder_item("就是这种长内容", 22), ladder_item("就是这种长", 19), ladder_item("就是这种", 14),
+            ladder_item("就是这", 11), ladder_item("就是", 7), ladder_item("这种", 9)];
+        word_boundary_ladder(&index, 22, &mut few);
+        assert_eq!(ladder_texts(&few), ["就是这种长内容", "就是这种长", "就是", "这种", "就是这种", "就是这"]);
+        // A page that is not longer than one page, and single characters, are never touched.
+        let mut short = vec![ladder_item("就是这种", 14), ladder_item("就是这", 11), ladder_item("鋝", 3)];
+        word_boundary_ladder(&index, 22, &mut short);
+        assert_eq!(ladder_texts(&short), ["就是这种", "就是这", "鋝"]);
+    }
+
+    #[test]
+    fn q22a_learned_segments_cut_mid_word_leave_slots_three_to_five_in_whole_mode_only() {
+        let public = Arc::new(Index::from_data(DictionaryData { entries: [
+            ("就是", "jiu shi"), ("救世", "jiu shi"), ("救市", "jiu shi"), ("九世", "jiu shi"), ("就", "jiu"),
+            ("这", "zhe"), ("种", "zhong"), ("这种", "zhe zhong"),
+        ].into_iter().map(|(text, reading)| Entry {
+            text: text.into(), reading: reading.into(), weight: 5000, layer: "public-test".into(),
+        }).collect() }));
+        super::super::with_index(public, || {
+            let personal = Arc::new(Index::from_data(DictionaryData { entries: [
+                ("就是这", "jiu shi zhe"), ("就是这种", "jiu shi zhe zhong"),
+            ].into_iter().map(|(text, reading)| Entry {
+                text: text.into(), reading: reading.into(), weight: 800, layer: "agent_zhixu_learning".into(),
+            }).collect() }));
+            let _learning = super::super::pin_learning(Some(personal));
+            let raw = "jiushizhezhongjiushi";
+            let page = |whole| generate_candidates(raw, &[], 0, true, whole).into_iter().take(PAGE_SIZE)
+                .map(|item| item.candidate.text).collect::<Vec<_>>();
+            let reach = |whole| generate_candidates(raw, &[], 0, true, whole).into_iter().map(|item| item.candidate.text).collect::<Vec<_>>();
+            for cut in ["就是这种", "就是这"] {
+                assert!(page(false).iter().any(|text| text == cut), "without whole mode {cut} keeps its place: {:?}", page(false));
+                assert!(!page(true).iter().skip(2).any(|text| text == cut), "{cut} in slots 3-5: {:?}", page(true));
+                assert!(reach(true).iter().any(|text| text == cut), "{cut} stays reachable");
+            }
         });
     }
 
@@ -1358,7 +1467,10 @@ impl Decoder for ZhixuDecoder {
     fn configure_learning(&mut self, mode: super::learning::LearningMode) -> Result<(), i32> {
         self.prefix_candidates.clear();
         self.prefix_candidate_bytes = 0;
-        self.learning.set_mode(mode, &super::current());
+        // A session's own generation seeds learning; waiting for the background
+        // index here cost the first session ~100 ms of cold start.
+        let dictionary = self.dictionary.clone().unwrap_or_else(super::current);
+        self.learning.set_mode(mode, &dictionary);
         self.refresh();
         Ok(())
     }

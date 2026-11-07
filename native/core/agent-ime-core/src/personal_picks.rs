@@ -1,5 +1,3 @@
-#![cfg_attr(not(any(test, feature = "librime")), allow(dead_code))]
-
 //! The candidates the owner deliberately picked (not the first one) for an input, kept across restarts.
 //!
 //! Until 2026-10-17 these lived only in the IME process and decayed after 128 other deliberate picks, so

@@ -20,12 +20,18 @@ use std::sync::{Arc, OnceLock, RwLock};
 
 /// Owner records: above 8 the lead replaced silent garbage (你系按看下 -> 你先看下)
 /// about nine times in ten; between 4 and 8 it misread intent more often.
-pub const COMPOSITION_LEAD_MARGIN: f64 = 8.0;
+///
+/// 2026-11-01 recalibration for the Zhixu decoder: 8 -> 4 (with the guessed margin 6 -> 2 below).
+/// Calibrated on a public held-out set (2,485 cases cut from the validation splits, seed 20261101):
+/// first choice 67.4% -> 70.4%. Not tuned on the external set or the owner sample: external set
+/// 976 -> 1,038 first (68 fixed, 6 broken), owner sample 4,035 -> 4,041 (20 fixed, 14 broken),
+/// top-5 unchanged on both. See docs/current/tasks/QUEUE-2026-10-21.md (Q21).
+pub const COMPOSITION_LEAD_MARGIN: f64 = 4.0;
 /// When the typed letters do not spell whole pinyin (zhedifangy, pinlvdt, nicshiyong)
 /// the decoder's first is itself a guess at abbreviations or a slip, so less is needed to
 /// replace it. External set 2026-10-11 at 6: 58.4% -> 59.8% first, the owner's October
 /// set 89.7% -> 89.9% (你测试用, 都点了, 能发了); at 4 full-pinyin words broke (制定).
-pub const GUESSED_COMPOSITION_LEAD_MARGIN: f64 = 6.0;
+pub const GUESSED_COMPOSITION_LEAD_MARGIN: f64 = 2.0;
 /// Legacy mean edit cost and multiplier for normalized C3 costs (P(keys | text)).
 /// Owner replay 2026-10-10: at 4, one-slip repairs led with 装新版 over the heavy-garble
 /// 换个新版, and 真没想到, 更不用说, 清单列出来 over garbage.
@@ -682,13 +688,18 @@ mod tests {
     #[test]
     fn composition_leads_past_the_margin_after_the_edit_penalty() {
         let page = texts(&["台服砸了", "太复杂了", "太傅砸了"]);
-        assert_eq!(composition_lead(&page, &[-30.0, -21.0, -40.0], &[0.0, 0.0, 0.0], false), Some(1));
-        assert_eq!(composition_lead(&page, &[-30.0, -23.0, -40.0], &[0.0, 0.0, 0.0], false), None);
-        // One changed letter costs 4: a 10-point win becomes 6.
-        assert_eq!(composition_lead(&page, &[-30.0, -20.0, -40.0], &[0.0, 1.0, 0.0], false), None);
-        assert_eq!(composition_lead(&page, &[-30.0, f64::NAN, -40.0], &[0.0, 0.0, 0.0], false), None);
-        // A first guessed from abbreviations needs only 6.
-        assert_eq!(composition_lead(&page, &[-30.0, -23.0, -40.0], &[0.0, 0.0, 0.0], true), Some(1));
+        let none = [0.0, 0.0, 0.0];
+        // Margin 4 (recalibrated 2026-11-01): a 9-point win leads, a 3-point win does not.
+        assert_eq!(composition_lead(&page, &[-30.0, -21.0, -40.0], &none, false), Some(1));
+        assert_eq!(composition_lead(&page, &[-30.0, -27.0, -40.0], &none, false), None);
+        // One changed letter costs 4: a 10-point win becomes 6 and leads, a 7-point win becomes 3 and does not.
+        assert_eq!(composition_lead(&page, &[-30.0, -20.0, -40.0], &[0.0, 1.0, 0.0], false), Some(1));
+        assert_eq!(composition_lead(&page, &[-30.0, -23.0, -40.0], &[0.0, 1.0, 0.0], false), None);
+        assert_eq!(composition_lead(&page, &[-30.0, f64::NAN, -40.0], &none, false), None);
+        // A first guessed from abbreviations needs only 2: 2.5 points lead there, not against whole pinyin.
+        assert_eq!(composition_lead(&page, &[-30.0, -27.5, -40.0], &none, true), Some(1));
+        assert_eq!(composition_lead(&page, &[-30.0, -27.5, -40.0], &none, false), None);
+        assert_eq!(composition_lead(&page, &[-30.0, -28.5, -40.0], &none, true), None);
     }
 
     #[test]

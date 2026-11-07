@@ -6,7 +6,9 @@ AMD	amd
 API	api
 APP	app
 ASCII	ascii
+AUTHORS	authors
 AWS	aws
+AZXI	azxi
 AgentAction	agentaction
 AgentIMEProductCommit	agentimeproductcommit
 AgentInputController	agentinputcontroller
@@ -55,6 +57,7 @@ EvidenceCommit	evidencecommit
 FAIL	fail
 FAULT	fault
 FFI	ffi
+FLAG	flag
 FREEZE	freeze
 FTS	fts
 Figma	figma
@@ -95,6 +98,7 @@ Kotlin	kotlin
 Kubernetes	kubernetes
 LABEL	label
 LGPL	lgpl
+LICENSE	license
 LangChain	langchain
 LaunchServices	launchservices
 LevelDB	leveldb
@@ -143,12 +147,14 @@ Python	python
 README	readme
 READY	ready
 REG	reg
+REPORT	report
 REST	rest
 RSS	rss
 RapidJSON	rapidjson
 React	react
 Redis	redis
 RenderCandidates	rendercandidates
+RimeShim	rimeshim
 RuntimeRecovery	runtimerecovery
 Rust	rust
 SDK	sdk
@@ -224,6 +230,7 @@ embedding	embedding
 entities	entities
 entitlement	entitlement
 entries	entries
+expire	expire
 facts	facts
 fallback	fallback
 file	file
@@ -245,12 +252,12 @@ iTerm	iterm
 initial	initial
 insert	insert
 insertText	inserttext
+invalid	invalid
 letter	letter
 libSystem	libsystem
 librime	librime
 lipo	lipo
 localStorage	localstorage
-lookup	lookup
 macOS	macos
 nginx	nginx
 npm	npm
@@ -263,8 +270,8 @@ provisional	provisional
 python	python
 record	record
 relations	relations
-remove	remove
-replace	replace
+remaining	remaining
+remember	remember
 reqwest	reqwest
 restore	restore
 revision	revision
@@ -287,6 +294,7 @@ terminal	terminal
 terminals	terminals
 token	token
 unknown	unknown
+withdraw	withdraw
 〇	ling
 㳇	fu
 䶮	yan

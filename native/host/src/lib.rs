@@ -3,21 +3,28 @@
 //! A shell (Windows TSF now, Linux later) turns platform key events into [`Key`]s,
 //! calls [`Host::process`], and draws the returned [`View`]: the composition text,
 //! the candidate row, and any text to commit. Everything else lives here and is the
-//! same on every platform: the core (Rime, mixer, slips, English words), the
-//! 顺手·知字 ranking on top of it, and the quality records.
+//! same on every platform: the core (the Zhixu decoder, mixer, slips, English words),
+//! the 顺手·知字 ranking on top of it, and the quality records.
 
 pub mod quality;
 pub mod ranking;
 pub mod settings;
 
-pub use agent_ime_core::zhixu::learning::LearningMode;
+/// The learning provider: Zhixu only. The retired Rime rule stays rejected by the
+/// core ABI (`aim_session_set_learning(0)` answers -2).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum LearningMode {
+    #[default]
+    Zhixu = 1,
+}
 
 use agent_ime_core::{
     AimCandidate, AimKeyEvent, AimResult, AimSession, aim_result_free,
     aim_session_composition_alternatives, aim_session_composition_edits, aim_session_composition_guessed,
     aim_session_context_complete_mask,
     aim_session_context_group_mask, aim_session_create, aim_session_destroy,
-    aim_session_lead_with_composition, aim_session_offer_composition, aim_session_peek_following_pages,
+    aim_session_lead_with_composition, aim_session_offer_composition, aim_session_page_texts,
+    aim_session_peek_following_pages,
     aim_session_process,
     aim_session_reorder_context_candidates, aim_session_set_mode, aim_session_set_preceding_text,
     aim_session_set_candidate_context, aim_session_set_typo_correction, aim_session_set_learning, aim_session_set_fuzzy,
@@ -87,9 +94,9 @@ pub struct View {
 }
 
 pub struct HostConfig {
-    /// Rime shared data shipped with the input method.
+    /// Dictionary data shipped with the input method (the `Rime` resource directory).
     pub shared_dir: PathBuf,
-    /// Per-user Rime data (learning, blacklist, English choices).
+    /// Per-user data (learning, blacklist, English choices).
     pub user_dir: PathBuf,
     /// Application identifier (process name); learning order is per application.
     pub app_id: String,
@@ -162,7 +169,8 @@ pub struct Host {
     ablation: Ablation,
     recorder: Option<quality::Recorder>,
     app_id: String,
-    /// Unique per key: the core claims each selection's ID once before Rime may learn.
+    /// Unique per key: the core claims each selection's ID once before the learning
+    /// store may retain it.
     next_delivery_id: u64,
 }
 
@@ -202,7 +210,7 @@ impl Host {
             recorder: None,
             app_id: config.app_id.clone(),
             // Start from the clock so IDs never repeat across restarts within the
-            // ledger's window.
+            // learning store's window.
             next_delivery_id: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_micros() as u64)
@@ -236,8 +244,8 @@ impl Host {
         agent_ime_core::ranking::load_owner_style(records);
     }
 
-    /// Selects the learning provider. Rime remains the default; the Zhixu trial
-    /// decoder writes only Zhixu learning. Rime-backed sessions retain Rime writes.
+    /// Selects the learning provider. Zhixu is the only provider: every session
+    /// learns Zhixu from the start, and the core ABI rejects every other mode.
     pub fn set_learning(&mut self, mode: LearningMode) -> bool {
         unsafe { aim_session_set_learning(self.session, mode as u32) == 0 }
     }
@@ -398,6 +406,31 @@ impl Host {
     pub fn scored_page_slots(&self) -> Vec<usize> {
         let mask = unsafe { aim_session_context_complete_mask(self.session) | aim_session_context_group_mask(self.session) };
         (0..32).filter(|i| mask & (1 << i) != 0).collect()
+    }
+
+    /// Texts of the page digit keys commit (`aim_session_page_texts`). Read-only: one retry when the
+    /// buffer is short; an empty page is an empty vec.
+    pub fn core_page_texts(&self) -> Vec<String> {
+        let mut capacity = 2048usize;
+        for _ in 0..2 {
+            let mut buffer = vec![0u8; capacity];
+            let written = unsafe {
+                aim_session_page_texts(self.session, buffer.as_mut_ptr(), buffer.len())
+            };
+            if written >= 0 {
+                buffer.truncate(written as usize);
+                let text = String::from_utf8_lossy(&buffer);
+                if text.is_empty() {
+                    return Vec::new();
+                }
+                return text.split('\t').map(str::to_string).collect();
+            }
+            let Some(needed) = written.checked_neg() else {
+                return Vec::new();
+            };
+            capacity = needed as usize;
+        }
+        Vec::new()
     }
 
     /// The core's whole-reading compositions for the current input (C3 candidates).
@@ -654,8 +687,8 @@ mod context_tests {
             app_id: String::new(),
             next_delivery_id: 1,
         };
-        assert_eq!(LearningMode::default(), LearningMode::Rime);
-        assert!(!host.set_learning(LearningMode::Zhixu), "a closed session cannot switch providers");
+        assert_eq!(LearningMode::default(), LearningMode::Zhixu);
+        assert!(!host.set_learning(LearningMode::Zhixu), "a closed session cannot configure learning");
         assert_ne!(unsafe { aim_session_set_learning(host.session, 2) }, 0);
         host.set_context("");
         assert_eq!(host.recent, "", "a successfully read empty document clears stale context");
@@ -664,5 +697,55 @@ mod context_tests {
         host.set_context(&"字".repeat(40));
         assert_eq!(host.recent.chars().count(), 32, "the context stays short");
         std::mem::forget(host); // no session to destroy
+    }
+}
+
+#[cfg(test)]
+mod page_texts_tests {
+    use super::*;
+
+    /// The same minimal tables the core FFI tests deploy: enough for `ni` → 你.
+    fn minimal_directories(name: &str) -> (PathBuf, PathBuf, PathBuf) {
+        let root = std::env::temp_dir().join(format!(
+            "zhizi-host-page-{name}-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        let shared = root.join("shared");
+        let user = root.join("user");
+        std::fs::create_dir_all(&shared).unwrap();
+        std::fs::create_dir_all(&user).unwrap();
+        std::fs::write(
+            shared.join("agent_pinyin.dict.yaml"),
+            "---\nname: agent_pinyin\nsort: by_weight\nimport_tables:\n  - pinyin_simp\n...\n",
+        )
+        .unwrap();
+        std::fs::write(
+            shared.join("pinyin_simp.dict.yaml"),
+            "---\nname: pinyin_simp\nsort: by_weight\n...\n你\tni\t100\n好\thao\t80\n",
+        )
+        .unwrap();
+        (root, shared, user)
+    }
+
+    #[test]
+    fn core_page_texts_is_empty_then_matches_the_process_page() {
+        let (root, shared, user) = minimal_directories("texts");
+        let mut host = Host::open(&HostConfig {
+            shared_dir: shared,
+            user_dir: user,
+            app_id: "zhizi.page-texts-test".into(),
+        })
+        .expect("open");
+        assert_eq!(host.core_page_texts(), Vec::<String>::new());
+        host.process(Key::Text("n".into()), 0, false);
+        let view = host.process(Key::Text("i".into()), 0, false);
+        let shown: Vec<String> = view.candidates.iter().map(|candidate| candidate.text.clone()).collect();
+        let core = host.core_page_texts();
+        let count = core.len().min(shown.len());
+        assert!(count > 0, "typing ni yields candidates, core={core:?} shown={shown:?}");
+        assert_eq!(&core[..count], &shown[..count], "core={core:?} shown={shown:?}");
+        drop(host);
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

@@ -2,9 +2,10 @@
 # test_partial_coverage_synthetic.sh — partial-coverage synthetic-entry top1 test
 #
 # Synthetic preconditions (self-contained; do not depend on external task notes):
-#   - Fresh empty user dir (mktemp -d only); import EXACTLY ONE public-source
-#     synthetic userdb entry from quality/corpus/partial-coverage-synthetic-v1.json:
-#     text=就可以做完, pinyin="jiu ke yi zuo wan", entryLine snapshot with c=1.
+#   - Fresh empty user dir (mktemp -d only); seed EXACTLY ONE public-source
+#     synthetic learned entry into the zhixu learning store from
+#     quality/corpus/partial-coverage-synthetic-v1.json:
+#     text=就可以做完, pinyin="jiu ke yi zuo wan", count=1.
 #   - PRE-DECLARED functional gate (Arm S): for queries "jiukyizuow" and
 #     "jiukeyizuow", page-1 candidate #1 (pages[0].candidates[0]) MUST equal
 #     就可以做完. No set-equality, no rank-distribution assertions.
@@ -20,13 +21,12 @@
 #
 # Dependencies (explicitly prechecked, nothing assumed preinstalled):
 #   python3, shasum; existing binaries (no build here):
-#   AgentIMEUserDBHarness, AgentIMEUserDBCtl, script/artifact_checksum.sh
+#   AgentIMEUserDBHarness, script/artifact_checksum.sh
 #
 # Env overrides (testing only; must point at existing files/dirs, never a real
 # user library; overrides are flagged as toolOverrides=true in the report):
 #   AIM_SYNTHETIC_BUNDLE       default: <root>/build/native/release/Agent Input Method.inputmethod
 #   AIM_SYNTHETIC_PROBE_BIN    default: <root>/native/macos/.build/debug/AgentIMEUserDBHarness
-#   AIM_SYNTHETIC_CTL_BIN      default: <root>/native/macos/.build/debug/AgentIMEUserDBCtl
 #   AIM_SYNTHETIC_TMP_PARENT   mktemp parent for ALL temp dirs/reports (default ${TMPDIR:-/tmp});
 #                              must NOT be an existing user-library path
 set -euo pipefail
@@ -37,10 +37,9 @@ CORPUS="$ROOT/quality/corpus/partial-coverage-synthetic-v1.json"
 BUNDLE="${AIM_SYNTHETIC_BUNDLE:-$ROOT/build/native/release/Agent Input Method.inputmethod}"
 SHARED="$BUNDLE/Contents/Resources/Rime"
 PROBE="${AIM_SYNTHETIC_PROBE_BIN:-$ROOT/native/macos/.build/debug/AgentIMEUserDBHarness}"
-CTL="${AIM_SYNTHETIC_CTL_BIN:-$ROOT/native/macos/.build/debug/AgentIMEUserDBCtl}"
 PAGES=3
 TMP_PARENT="${AIM_SYNTHETIC_TMP_PARENT:-${TMPDIR:-/tmp}}"
-TOOL_OVERRIDES=$([ -n "${AIM_SYNTHETIC_PROBE_BIN:-}" ] || [ -n "${AIM_SYNTHETIC_CTL_BIN:-}" ] && echo true || echo false)
+TOOL_OVERRIDES=$([ -n "${AIM_SYNTHETIC_PROBE_BIN:-}" ] && echo true || echo false)
 WORK="$(mktemp -d "$TMP_PARENT/agent-ime-synthetic.XXXXXX")"
 REPORT="$WORK/synthetic-report.json"
 STATUS=FAIL
@@ -56,10 +55,10 @@ emit_report() {
     return 1
   fi
   python3 - "$REPORT" "$STATUS" "$FAILED_CASES" "$PASSED_CASES" "$CTRL_NOTE" "$REASON" \
-    "$TOOL_OVERRIDES" "$RUNNER" "$CORPUS" "$SHARED" "$PROBE" "$CTL" "$WORK/obs.txt" <<'PY'
+    "$TOOL_OVERRIDES" "$RUNNER" "$CORPUS" "$SHARED" "$PROBE" "$WORK/obs.txt" <<'PY'
 import hashlib, json, os, sys
 (out, status, failed, passed, ctrl, reason, tool, runner,
- corpus, shared, probe, ctl, obs_path) = sys.argv[1:14]
+ corpus, shared, probe, obs_path) = sys.argv[1:13]
 obs = {}
 if os.path.exists(obs_path):
     for line in open(obs_path, encoding="utf-8"):
@@ -104,7 +103,6 @@ report = {
         "runnerSha256": sha(runner),
         "sharedDirListingSha256": dirsha(shared),
         "probeBinSha256": sha(probe),
-        "ctlBinSha256": sha(ctl),
     },
     "observations": obs,
 }
@@ -128,7 +126,6 @@ fail_run() { # $1 reason, $2 exit code
 command -v python3 >/dev/null 2>&1 || fail_run "python3 missing from PATH (explicit dependency, not assumed bundled)" 1
 command -v shasum >/dev/null 2>&1 || fail_run "shasum missing from PATH" 1
 [ -x "$PROBE" ] || fail_run "probe binary missing/not executable: $PROBE" 1
-[ -x "$CTL" ] || fail_run "ctl binary missing/not executable: $CTL" 1
 [ -d "$SHARED" ] || fail_run "shared Rime dir missing: $SHARED" 1
 { [ -d "$BUNDLE" ] && [ ! -L "$BUNDLE" ]; } || fail_run "bundle missing or symlink: $BUNDLE" 1
 [ -f "$ROOT/script/artifact_checksum.sh" ] || fail_run "artifact_checksum.sh missing" 1
@@ -155,8 +152,7 @@ PY
 
 probe_once() { # userdir query outjson
   local userdir="$1" query="$2" out="$3" pages="${4:-$PAGES}"
-  DYLD_LIBRARY_PATH="$BUNDLE/Contents/Frameworks:$ROOT/native/core/target/release" \
-    "$PROBE" --process-deep-candidate-probe "$SHARED" "$userdir" "$query" "$out" "$pages" \
+  "$PROBE" --process-deep-candidate-probe "$SHARED" "$userdir" "$query" "$out" "$pages" \
     >"$WORK/probe-$(basename "$userdir")-$query.log" 2>&1
 }
 
@@ -219,28 +215,29 @@ CTRL_NOTE="recorded (no absence assertion)"
 
 # ---- Arm S: synthetic state (restore exactly one entry, then gate) ---------
 USER_S="$(mktemp -d "$WORK/user-S.XXXXXX")"
-python3 - "$CORPUS" >"$WORK/restore-input.json" <<'PY'
-import json, sys
-c = json.load(open(sys.argv[1], encoding="utf-8"))
-e = c["syntheticEntry"]
-print(json.dumps([{"id": e["id"], "text": e["text"], "pinyin": e["pinyin"], "entryLine": e["entryLine"]}], ensure_ascii=False))
-PY
-"$CTL" restore "$SHARED" "$USER_S" <"$WORK/restore-input.json" >"$WORK/restore-echo.json" 2>"$WORK/restore.err" \
-  || fail_run "restore failed (WORK=$WORK, see restore.err)" 1
-python3 - "$WORK/restore-echo.json" <<'PY' || fail_run "restore echo != exactly 1 item" 1
-import json, sys
-assert len(json.load(open(sys.argv[1], encoding="utf-8")).get("items", [])) == 1
-PY
-"$CTL" list "$SHARED" "$USER_S" >"$WORK/list.json" 2>"$WORK/list.err" \
-  || fail_run "list failed (WORK=$WORK, see list.err)" 1
-python3 - "$WORK/list.json" "$CORPUS" <<'PY' || fail_run "list readback != exactly one expected entry (count/fields/entryLine==1)" 1
-import json, sys
-items = json.load(open(sys.argv[1], encoding="utf-8")).get("items", [])
-e = json.load(open(sys.argv[2], encoding="utf-8"))["syntheticEntry"]
-assert len(items) == 1, "entry count %d != 1" % len(items)
-it = items[0]
-assert it.get("text") == e["text"] and it.get("pinyin") == e["pinyin"], "field mismatch"
-assert it.get("entryLine") == "1", "entryLine count %r != 1" % it.get("entryLine")
+python3 - "$CORPUS" "$USER_S" <<'PY' || fail_run "zhixu store seed/readback failed (WORK=$WORK)" 1
+import json, os, sys, time
+e = json.load(open(sys.argv[1], encoding="utf-8"))["syntheticEntry"]
+user_dir = sys.argv[2]
+document = {
+    "formatVersion": 1,
+    "entries": [{
+        "reading": e["pinyin"],
+        "text": e["text"],
+        "count": 1,
+        "lastMs": int(time.time() * 1000),
+    }],
+    "choices": [],
+}
+path = os.path.join(user_dir, "agent_zhixu_learning_v1.json")
+fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+with os.fdopen(fd, "w", encoding="utf-8") as handle:
+    json.dump(document, handle, ensure_ascii=False)
+readback = json.load(open(path, encoding="utf-8"))
+entries = readback.get("entries", [])
+assert len(entries) == 1, "entry count %d != 1" % len(entries)
+assert entries[0].get("text") == e["text"] and entries[0].get("reading") == e["pinyin"], "field mismatch"
+assert entries[0].get("count") == 1
 PY
 
 for CASE in 1 2; do

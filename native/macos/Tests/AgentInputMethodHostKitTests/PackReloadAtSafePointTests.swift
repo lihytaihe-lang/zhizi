@@ -73,20 +73,20 @@ final class PackReloadAtSafePointTests: XCTestCase {
         defer { removePackAndRedeploy(directories) }
         try installPack(directories)
 
-        // A deploy whose schema file is gone fails (status != 0), which is what a broken download produces.
-        let schema = directories.shared.appendingPathComponent("agent_pinyin.schema.yaml")
-        let parked = directories.shared.appendingPathComponent("agent_pinyin.schema.yaml.parked")
-        try FileManager.default.moveItem(at: schema, to: parked)
+        // A deploy whose base dictionary file is gone fails (status != 0), which is what a broken download produces.
+        let baseDictionary = directories.shared.appendingPathComponent("agent_pinyin.dict.yaml")
+        let parked = directories.shared.appendingPathComponent("agent_pinyin.dict.yaml.parked")
+        try FileManager.default.moveItem(at: baseDictionary, to: parked)
         defer {
             if FileManager.default.fileExists(atPath: parked.path) {
-                try? FileManager.default.moveItem(at: parked, to: schema)
+                try? FileManager.default.moveItem(at: parked, to: baseDictionary)
             }
         }
         controller.activateServer(client)
         XCTAssertEqual(appliedFingerprint(), "", "the failed deploy applied nothing")
 
         // Back in place, a retry of the same files would now succeed; the controller must not make it.
-        try FileManager.default.moveItem(at: parked, to: schema)
+        try FileManager.default.moveItem(at: parked, to: baseDictionary)
         controller.activateServer(client)
         XCTAssertEqual(appliedFingerprint(), "", "the same fingerprint is not retried")
         XCTAssertFalse(try typeAndInspect(controller, client), "without a retry the word stays invisible")
@@ -103,7 +103,7 @@ final class PackReloadAtSafePointTests: XCTestCase {
     // MARK: fixtures and helpers
 
     private func makeController() throws -> (AgentInputController, SerializationTextInputClient, ControllerTestDirectories) {
-        let directories = try RealRimeProcessFixture.directories.get()
+        let directories = try RealZhixuProcessFixture.directories.get()
         let client = SerializationTextInputClient()
         // The same identifier as the client's, so activateServer takes the plain path with no app-switch rebuild.
         let controller = try XCTUnwrap(AgentInputController(

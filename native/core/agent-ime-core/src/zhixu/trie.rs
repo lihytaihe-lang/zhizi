@@ -1,6 +1,9 @@
 //! Compact syllable trie shared by the lattice and typo decoders.
 
-#[derive(Clone, Copy, Debug, Default)]
+use super::index_cache::{Reader, Writer};
+use std::io;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct CompactReadingNode {
     letters: u32,
     children_start: u32,
@@ -146,9 +149,59 @@ impl CompactReadingTrie {
         }
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn estimated_bytes(&self) -> usize {
         self.nodes.capacity() * std::mem::size_of::<CompactReadingNode>()
             + self.children.capacity() * std::mem::size_of::<u32>()
+    }
+
+    /// Frozen-node serialization for the persisted index cache; the reader
+    /// rejects any node or child outside the arrays it just decoded.
+    pub(crate) fn cache_write(&self, out: &mut Writer) {
+        out.u64(self.nodes.len() as u64);
+        for node in &self.nodes {
+            out.u32(node.letters);
+            out.u32(node.children_start);
+            out.u32(node.words_start);
+            out.u32(node.words_len);
+        }
+        out.u64(self.children.len() as u64);
+        out.slice_u32(&self.children);
+    }
+
+    pub(crate) fn cache_read(from: &mut Reader, words_bound: usize) -> io::Result<Self> {
+        let nodes = from.count(from.remaining() / 16)?;
+        let mut node_list = Vec::with_capacity(nodes);
+        for _ in 0..nodes {
+            node_list.push(CompactReadingNode {
+                letters: from.u32()?,
+                children_start: from.u32()?,
+                words_start: from.u32()?,
+                words_len: from.u32()?,
+            });
+        }
+        let children = from.count(from.remaining() / 4)?;
+        let child_list = from.slice_u32(children)?;
+        for node in &node_list {
+            let child_count = node.letters.count_ones() as usize;
+            let end = node.children_start as usize + child_count;
+            if end > child_list.len() {
+                return Err(from.invalid("compact trie children run out"));
+            }
+            if child_list[node.children_start as usize..end].iter().any(|&child| child as usize >= nodes) {
+                return Err(from.invalid("compact trie child is not a node"));
+            }
+            if node.words_start as usize + node.words_len as usize > words_bound {
+                return Err(from.invalid("compact trie words run out"));
+            }
+        }
+        Ok(Self { nodes: node_list, children: child_list })
+    }
+
+    /// Structural equality for the cache round-trip checks: same nodes in the
+    /// same slots and the same child arrays.
+    pub(crate) fn cache_equals(&self, other: &Self) -> bool {
+        self.nodes == other.nodes && self.children == other.children
     }
 }
 
@@ -159,7 +212,7 @@ pub(crate) struct HeavyTerminal {
     pub(crate) full_letter_count: u8,
 }
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct HeavyTrieNode {
     letters: u32,
     children_start: u32,
@@ -205,6 +258,7 @@ impl<T> Pool<T> {
         (index < self.len).then(|| &self[index])
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     fn estimated_bytes(&self) -> usize {
         self.pages.capacity() * std::mem::size_of::<Vec<T>>()
             + self
@@ -394,10 +448,12 @@ impl HeavyTrie {
         &self.words[start..start + len as usize]
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn node_count(&self) -> usize {
         self.nodes.len()
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn memory_breakdown(&self) -> [(&'static str, usize); 5] {
         use std::mem::size_of;
         [
@@ -425,6 +481,132 @@ impl HeavyTrie {
                 .iter()
                 .map(|(_, bytes)| bytes)
                 .sum::<usize>()
+    }
+
+    /// Frozen-node serialization for the persisted index cache. Only finished
+    /// tries (no builder) are written; the reader rebuilds the page pool and
+    /// rejects any slot outside the arrays it just decoded.
+    pub(crate) fn cache_write(&self, out: &mut Writer) {
+        debug_assert!(self.builder.is_none());
+        out.u64(self.nodes.len() as u64);
+        for id in 0..self.nodes.len() {
+            let node = &self.nodes[id];
+            out.u32(node.letters);
+            out.u32(node.children_start);
+            out.u32(node.boundary);
+            out.u32(node.abbreviation_start);
+            out.u32(node.abbreviation_len);
+            out.u32(node.words_start);
+            out.u32(node.exact_len);
+            out.u32(node.prefix_len);
+            out.u32(node.terminal);
+        }
+        out.u64(self.children.len() as u64);
+        out.slice_u32(&self.children);
+        out.u64(self.abbreviation_boundaries.len() as u64);
+        out.slice_u32(&self.abbreviation_boundaries);
+        out.u64(self.terminals.len() as u64);
+        for terminal in &self.terminals {
+            out.u32(terminal.text);
+            out.i64(terminal.lexical_score);
+            out.u8(terminal.full_letter_count);
+        }
+        out.u64(self.words.len() as u64);
+        for terminal in &self.words {
+            out.u32(terminal.text);
+            out.i64(terminal.lexical_score);
+            out.u8(terminal.full_letter_count);
+        }
+    }
+
+    pub(crate) fn cache_read(from: &mut Reader, texts_bound: usize) -> io::Result<Self> {
+        let node_count = from.count(from.remaining() / 36)?;
+        let mut nodes = Pool::new();
+        for _ in 0..node_count {
+            nodes.push(HeavyTrieNode {
+                letters: from.u32()?,
+                children_start: from.u32()?,
+                boundary: from.u32()?,
+                abbreviation_start: from.u32()?,
+                abbreviation_len: from.u32()?,
+                words_start: from.u32()?,
+                exact_len: from.u32()?,
+                prefix_len: from.u32()?,
+                terminal: from.u32()?,
+            });
+        }
+        let child_count = from.count(from.remaining() / 4)?;
+        let children = from.slice_u32(child_count)?;
+        let abbreviation_count = from.count(from.remaining() / 4)?;
+        let abbreviations = from.slice_u32(abbreviation_count)?;
+        let read_terminals = |from: &mut Reader| -> io::Result<Vec<HeavyTerminal>> {
+            let count = from.count(from.remaining() / 13)?;
+            let mut terminals = Vec::with_capacity(count);
+            for _ in 0..count {
+                terminals.push(HeavyTerminal {
+                    text: from.u32()?,
+                    lexical_score: from.i64()?,
+                    full_letter_count: from.u8()?,
+                });
+            }
+            Ok(terminals)
+        };
+        let terminals = read_terminals(from)?;
+        let words = read_terminals(from)?;
+        let node = |slot: u32| slot as usize - 1;
+        for id in 0..node_count {
+            let trie_node = nodes[id];
+            let letters = trie_node.letters.count_ones() as usize;
+            let child_end = trie_node.children_start as usize + letters;
+            if child_end > children.len()
+                || children[trie_node.children_start as usize..child_end]
+                    .iter()
+                    .any(|&child| child == 0 || node(child) >= node_count)
+            {
+                return Err(from.invalid("heavy trie children run out"));
+            }
+            if trie_node.boundary != 0 && node(trie_node.boundary) >= node_count {
+                return Err(from.invalid("heavy trie boundary is not a node"));
+            }
+            let abbreviation_end = trie_node.abbreviation_start as usize + trie_node.abbreviation_len as usize;
+            if abbreviation_end > abbreviations.len()
+                || abbreviations[trie_node.abbreviation_start as usize..abbreviation_end]
+                    .iter()
+                    .any(|&slot| slot == 0 || node(slot) >= node_count)
+            {
+                return Err(from.invalid("heavy trie abbreviations run out"));
+            }
+            if trie_node.terminal != 0 && node(trie_node.terminal) >= terminals.len() {
+                return Err(from.invalid("heavy trie terminal is not a word"));
+            }
+            let words_end =
+                trie_node.words_start as usize + trie_node.exact_len.max(trie_node.prefix_len) as usize;
+            if words_end > words.len() {
+                return Err(from.invalid("heavy trie words run out"));
+            }
+        }
+        if terminals.iter().chain(&words).any(|terminal| terminal.text as usize >= texts_bound) {
+            return Err(from.invalid("heavy trie terminal text is not a string"));
+        }
+        Ok(Self {
+            nodes,
+            children,
+            abbreviation_boundaries: abbreviations,
+            terminals,
+            words,
+            builder: None,
+        })
+    }
+
+    /// Structural equality for the cache round-trip checks: every node slot,
+    /// child array, boundary list, terminal, and homophone list matches.
+    pub(crate) fn cache_equals(&self, other: &Self) -> bool {
+        self.nodes.len() == other.nodes.len()
+            && (0..self.nodes.len()).all(|id| self.nodes[id] == other.nodes[id])
+            && self.children == other.children
+            && self.abbreviation_boundaries == other.abbreviation_boundaries
+            && self.terminals == other.terminals
+            && self.words == other.words
     }
 }
 

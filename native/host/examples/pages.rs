@@ -35,7 +35,7 @@ fn main() {
         }
     }
     let view: zhizi_host::View = view;
-    println!("page 1: {}", view.candidates.iter().map(|c| c.text.clone()).collect::<Vec<_>>().join(" "));
+    println!("page 1: {}", view.candidates.iter().map(|c| if std::env::var_os("PAGES_COMMENTS").is_some() { format!("{}[{}]", c.text, c.comment) } else { c.text.clone() }).collect::<Vec<_>>().join(" "));
     let more = host.peek_following_pages(a.get(3).and_then(|n| n.parse().ok()).unwrap_or(12));
     for (i, page) in more.iter().enumerate() {
         println!("page {}: {}", i + 2, page.text.replace('\t', " "));
