@@ -184,11 +184,8 @@ shasum -a 256 \
   "$CONTENTS/Resources/Skins/Builtin/shuitun/skin.json" \
   "$CONTENTS/Resources/Skins/Builtin/youzi/skin.json" \
   "$CONTENTS/Resources/Skins/Builtin/juzimao/skin.json" \
-  "$CONTENTS/Resources/Skins/Builtin/juzimao/cat-actions.png" \
   "$CONTENTS/Resources/Skins/Builtin/chaiquan/skin.json" \
-  "$CONTENTS/Resources/Skins/Builtin/chaiquan/shiba-actions.png" \
   "$CONTENTS/Resources/Skins/Builtin/baitu/skin.json" \
-  "$CONTENTS/Resources/Skins/Builtin/baitu/rabbit-actions.png" \
   "$CONTENTS/Resources/Skins/Builtin/yueye/skin.json" \
   "$CONTENTS/Resources/Skins/Builtin/luoying/skin.json" \
   "$CONTENTS/Resources/Skins/Builtin/fenghong/skin.json" \

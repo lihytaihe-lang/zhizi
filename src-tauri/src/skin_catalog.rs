@@ -6,6 +6,7 @@ pub struct CandidateSkinCatalogEntry {
     pub display_name_en: &'static str,
     pub author: &'static str,
     pub description: &'static str,
+    pub tags: &'static [&'static str],
 }
 
 pub const CANDIDATE_SKIN_CATALOG: &[CandidateSkinCatalogEntry] = &[
@@ -15,48 +16,55 @@ pub const CANDIDATE_SKIN_CATALOG: &[CandidateSkinCatalogEntry] = &[
         display_name_en: "Clean",
         author: "Agent Input Method",
         description: "默认皮肤：液态玻璃卡片，顶行显示拼音，右侧带知字水印；浅色下首选是亮珊瑚橙字衬一层很淡的粉底，深色下是青玉绿字（和玄墨一致）；跟随系统明暗。",
+        tags: &["简约"],
     },
     CandidateSkinCatalogEntry {
         id: "xuanmo",
         display_name_zh: "玄墨",
         display_name_en: "Ink",
         author: "Agent Input Method",
-        description: "深色皮肤：墨色底带细亮边，青玉色首选，右侧带知字水印；明暗外观下都保持深色。",
+        description: "水墨卷轴：宣纸卷边框配墨色字，笔触飞白点缀；明暗外观下都保持宣纸色。",
+        tags: &["简约"],
     },
     CandidateSkinCatalogEntry {
         id: "shuitun",
         display_name_zh: "水豚",
         display_name_en: "Capybara",
         author: "Agent Input Method",
-        description: "暖米色底，水豚在右侧小跑着轻轻颠簸；开启「减弱动态效果」时静止。",
+        description: "水豚趴在候选条上沿，轻轻呼吸、偶尔歪头眨眼；开启「减弱动态效果」时静止。",
+        tags: &["萌宠"],
     },
     CandidateSkinCatalogEntry {
         id: "youzi",
         display_name_zh: "柚子水豚",
         display_name_en: "Yuzu Capybara",
         author: "Agent Input Method",
-        description: "淡青米色底，顶着柚子的水豚坐在右侧，轻轻呼吸；开启「减弱动态效果」时静止。",
+        description: "柚子水豚泡在候选条下沿，呼吸时轻沉水面、偶尔睁眼，水波缓缓舒展；开启「减弱动态效果」时静止。",
+        tags: &["萌宠"],
     },
     CandidateSkinCatalogEntry {
         id: "juzimao",
         display_name_zh: "橘猫",
         display_name_en: "Orange cat",
         author: "Agent Input Method",
-        description: "暖奶油底，橘猫在右侧：招手、坐、走来走去、奔跑、蹦一下，一套动作循环着演；开启「减弱动态效果」时静止。",
+        description: "橘猫趴在候选条上沿，肚子轻轻起伏、尾巴慢摆，偶尔睁眼看看；开启「减弱动态效果」时静止。",
+        tags: &["萌宠"],
     },
     CandidateSkinCatalogEntry {
         id: "chaiquan",
         display_name_zh: "柴犬",
         display_name_en: "Shiba Inu",
         author: "Agent Input Method",
-        description: "淡天蓝底，柴犬在右侧：招手、坐、走来走去、奔跑、蹦一下，一套动作循环着演；开启「减弱动态效果」时静止。",
+        description: "暖杏底，柴犬双爪搭在左上沿向右探头，会呼吸、偶尔歪头和眨眼；开启「减弱动态效果」时静止。",
+        tags: &["萌宠"],
     },
     CandidateSkinCatalogEntry {
         id: "baitu",
         display_name_zh: "白兔",
         display_name_en: "White rabbit",
         author: "Agent Input Method",
-        description: "淡粉紫底，白兔在右侧：招手、坐、走来走去、奔跑、蹦一下，一套动作循环着演；开启「减弱动态效果」时静止。",
+        description: "白兔从候选条上沿探出耳朵，轻轻起伏、轮流抖耳，一只耳朵缓缓侧摆；开启「减弱动态效果」时静止。",
+        tags: &["萌宠"],
     },
     CandidateSkinCatalogEntry {
         id: "yueye",
@@ -64,13 +72,15 @@ pub const CANDIDATE_SKIN_CATALOG: &[CandidateSkinCatalogEntry] = &[
         display_name_en: "Moonlit Night",
         author: "Agent Input Method",
         description: "深蓝夜空，金色弯月微微漂浮发光，星星闪烁，偶尔有流星划过；开启「减弱动态效果」时静止。",
+        tags: &["国风"],
     },
     CandidateSkinCatalogEntry {
         id: "luoying",
         display_name_zh: "落樱",
         display_name_en: "Falling Sakura",
         author: "Agent Input Method",
-        description: "深梅紫底、金色细边，樱花枝从右上角垂下轻摆，花瓣缓缓飘落；开启「减弱动态效果」时静止。",
+        description: "深梅紫底、金色细边，樱枝沿候选条上沿横展，花瓣从枝头缓缓飘落；开启「减弱动态效果」时静止。",
+        tags: &["国风"],
     },
     CandidateSkinCatalogEntry {
         id: "fenghong",
@@ -78,13 +88,15 @@ pub const CANDIDATE_SKIN_CATALOG: &[CandidateSkinCatalogEntry] = &[
         display_name_en: "Maple Red",
         author: "Agent Input Method",
         description: "暖棕红底，枫叶枝从右上角垂下轻摆，落叶缓缓飘落；开启「减弱动态效果」时静止。",
+        tags: &["国风"],
     },
     CandidateSkinCatalogEntry {
         id: "denglong",
         display_name_zh: "红灯笼",
         display_name_en: "Red Lantern",
         author: "Agent Input Method",
-        description: "朱红底、金色细边，红灯笼在右上角轻轻摆动、发出暖光，金粉闪烁；开启「减弱动态效果」时静止。",
+        description: "深红半透明底、金色细边，左右灯笼沿框外缘垂挂轻摆，暖光与金粉相映；开启「减弱动态效果」时静止。",
+        tags: &["节日", "国风"],
     },
     CandidateSkinCatalogEntry {
         id: "songxue",
@@ -92,6 +104,7 @@ pub const CANDIDATE_SKIN_CATALOG: &[CandidateSkinCatalogEntry] = &[
         display_name_en: "Snowy Pine",
         author: "Agent Input Method",
         description: "深青蓝夜色，覆雪的松枝从右上角垂下轻摆，雪花飘落；开启「减弱动态效果」时静止。",
+        tags: &["国风"],
     },
     CandidateSkinCatalogEntry {
         id: "nihong",
@@ -99,9 +112,31 @@ pub const CANDIDATE_SKIN_CATALOG: &[CandidateSkinCatalogEntry] = &[
         display_name_en: "Neon",
         author: "Agent Input Method",
         description: "近黑底，右侧一个霓虹线框超立方体持续旋转，扫过一道流光；开启「减弱动态效果」时静止。",
+        tags: &[],
     },
 ];
 
 pub fn is_candidate_skin_id(id: &str) -> bool {
     CANDIDATE_SKIN_CATALOG.iter().any(|entry| entry.id == id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gallery_tags_match_the_built_in_categories() {
+        for entry in CANDIDATE_SKIN_CATALOG {
+            let expected: &[&str] = match entry.id {
+                "system" | "xuanmo" => &["简约"],
+                "shuitun" | "youzi" | "juzimao" | "chaiquan" | "baitu" => &["萌宠"],
+                "luoying" | "fenghong" | "songxue" | "yueye" => &["国风"],
+                "denglong" => &["节日", "国风"],
+                _ => &[],
+            };
+            assert_eq!(entry.tags, expected, "{}", entry.id);
+        }
+        assert_eq!(CANDIDATE_SKIN_CATALOG.len(), 13);
+        assert!(!is_candidate_skin_id("external-test"));
+    }
 }

@@ -1,0 +1,6 @@
+text	pinyin	definition	sourceName	sourceUrl	license	domain	expiresDays
+测试词	ce shi ci	仅用于管道测试的样例，不是真实热词。	测试样例	https://example.invalid/test/1	仅测试，不代表真实来源授权	test	30
+你好	ni hao	仅用于管道测试的样例，不是真实热词。	测试样例	https://example.invalid/test/2	仅测试，不代表真实来源授权	test	30
+离线样例	li xian yang li	仅用于管道测试的样例，不是真实热词。	测试样例	https://example.invalid/test/3	仅测试，不代表真实来源授权	test	30
+签名样例	qian ming yang li	仅用于管道测试的样例，不是真实热词。	测试样例	https://example.invalid/test/4	仅测试，不代表真实来源授权	test	30
+审核样例	shen he yang li	仅用于管道测试的样例，不是真实热词。	测试样例	https://example.invalid/test/5	仅测试，不代表真实来源授权	test	30

@@ -167,6 +167,12 @@ pub(crate) fn jqx_spelling_repairs(raw: &str) -> Vec<SpellingRepair> {
     repairs
 }
 
+/// A repair that only swaps two adjacent letters (jain -> jian) keeps the letter
+/// count, so a word read through it accounts for exactly the letters typed.
+pub(crate) fn jqx_swap_spellings(raw: &str) -> Vec<String> {
+    jqx_spelling_repairs(raw).into_iter().filter(|repair| repair.inserted == 0).map(|repair| repair.spelling).collect()
+}
+
 /// Whether `raw` (apostrophes mark required boundaries) spells the spaced
 /// `reading` one syllable per token under `mask`, each token being the
 /// syllable itself or one of its fuzzy spellings.

@@ -36,7 +36,7 @@ const fontWeights = new Set(["regular", "medium", "semibold", "bold"]);
 // Fonts that ship with macOS only (nothing is bundled); a family missing on a machine falls back to PingFang SC.
 const fontFamilies = new Set(["PingFang SC", "systemMonospacedDigit", "Kaiti SC", "Songti SC", "Yuanti SC", "Xingkai SC", "Hannotate SC", "Hanzipen SC", "Wawati SC", "Weibei SC", "Libian SC", "Baoli SC", "Yuppy SC"]);
 // "glass" is macOS 26 Liquid Glass (NSGlassEffectView); older systems fall back to popover.
-const materials = new Set(["popover", "hudWindow", "glass"]);
+const materials = new Set(["popover", "hudWindow", "glass", "none"]);
 const colorPattern = /^#[0-9A-F]{6}(?:[0-9A-F]{2})?$/u;
 const idPattern = /^[a-z][a-z0-9._-]{0,63}$/u;
 
@@ -73,36 +73,75 @@ const assetNamePattern = /^[a-z0-9][a-z0-9._-]{0,62}\.png$/u;
 const maximumAssetBytes = 1024 * 1024; // action-sequence sheets (one row per action) are bigger than the old single strips
 const maximumPackageBytes = 1536 * 1024;
 
-// Animated decorations (sprite runs, twinkling stars): declarative data only, mirrored by CandidateDecorationParser in Swift.
+// Data-only decorations, mirrored by CandidateDecorationParser in Swift.
 function validateDecorations(skin, assets) {
   const list = skin.decorations;
   const used = new Set();
   if (list !== undefined) {
-    if (!Array.isArray(list) || list.length < 1 || list.length > 4) fail(`${skin.id}.decorations`, "must hold 1 to 4 items");
+    if (!Array.isArray(list) || list.length < 1 || list.length > 8) fail(`${skin.id}.decorations`, "must hold 1 to 8 items");
     list.forEach((item, index) => {
       const label = `${skin.id}.decorations[${index}]`;
       if (item === null || typeof item !== "object") fail(label, "must be an object");
-      if (!["sprite", "twinkle", "petals", "gradient", "shimmer", "shootingStar"].includes(item.type)) fail(label, "has an unsupported type");
+      if (!["sprite", "twinkle", "petals", "gradient", "shimmer", "shootingStar", "water", "frame"].includes(item.type)) fail(label, "has an unsupported type");
       if (item.overflow !== undefined && typeof item.overflow !== "boolean") fail(label, "overflow must be a boolean");
       if (item.layer !== undefined && !["below", "above"].includes(item.layer)) fail(label, "layer must be below or above");
-      if (item.type === "sprite") {
+      if (item.type === "frame") {
+        if (Object.keys(item).some((key) => !["type", "sheet", "slice", "opacity"].includes(key))) {
+          fail(label, "has an unsupported frame field");
+        }
+        if (typeof item.sheet !== "string" || !assetNamePattern.test(item.sheet) || !assets.has(item.sheet)) {
+          fail(`${label}.sheet`, "must name a png in the package");
+        }
+        used.add(item.sheet);
+        const slice = item.slice;
+        if (slice === null || typeof slice !== "object" || Array.isArray(slice)
+          || Object.keys(slice).sort().join(",") !== "bottom,left,right,top") {
+          fail(`${label}.slice`, "must contain exactly left, right, top and bottom");
+        }
+        for (const edge of ["left", "right", "top", "bottom"]) {
+          validateNumber(slice[edge], `${label}.slice.${edge}`, { maximum: 2048 });
+        }
+        if ("opacity" in item) validateNumber(item.opacity, `${label}.opacity`, { maximum: 1 });
+        const png = assets.get(item.sheet);
+        if (png.length < 33 || !png.subarray(0, 16).equals(Buffer.from("89504e470d0a1a0a0000000d49484452", "hex"))) {
+          fail(`${label}.sheet`, "must have a png IHDR header");
+        }
+        const width = png.readUInt32BE(16), height = png.readUInt32BE(20);
+        if (width < 1 || width > 4096 || height < 1 || height > 1536) {
+          fail(`${label}.sheet`, "png dimensions must be 1...4096 by 1...1536");
+        }
+        if (slice.left + slice.right >= width || slice.top + slice.bottom >= height) {
+          fail(`${label}.slice`, "must leave a stretchable middle in both dimensions");
+        }
+      } else if (item.type === "sprite") {
         if (typeof item.sheet !== "string" || !assets.has(item.sheet)) fail(label, "sheet must name a png in the package");
         used.add(item.sheet);
         if (!Number.isInteger(item.frames) || item.frames < 1 || item.frames > 24) fail(label, "frames must be an integer 1...24");
         validateNumber(item.fps ?? 8, `${label}.fps`, { minimum: 1, maximum: 30 });
-        validateNumber(item.size?.width, `${label}.size.width`, { minimum: 1, maximum: 256 });
+        validateNumber(item.size?.width, `${label}.size.width`, { minimum: 1, maximum: 300 });
         validateNumber(item.size?.height, `${label}.size.height`, { minimum: 1, maximum: 256 });
         for (const [index, motion] of (item.motion ?? []).entries()) {
           const at = `${label}.motion[${index}]`;
-          if (!["float", "breathe", "sway", "glow", "fade", "hop"].includes(motion.kind)) fail(at, "has an unsupported kind");
+          if (!["float", "breathe", "sway", "twitch", "glow", "fade", "hop", "fall"].includes(motion.kind)) fail(at, "has an unsupported kind");
           validateNumber(motion.period, `${at}.period`, { minimum: 1, maximum: 20 });
           if (motion.kind === "float") validateNumber(motion.amplitude, `${at}.amplitude`, { minimum: 0.5, maximum: 12 });
           if (motion.kind === "hop") {
             validateNumber(motion.height, `${at}.height`, { minimum: 1, maximum: 16 });
             validateNumber(motion.squash, `${at}.squash`, { minimum: 0, maximum: 0.25 });
           }
+          if (motion.kind === "fall") {
+            validateNumber(motion.height, `${at}.height`, { minimum: 1, maximum: 120 });
+            validateNumber(motion.drift ?? 0, `${at}.drift`, { minimum: -40, maximum: 40 });
+          }
           if (motion.kind === "breathe") validateNumber(motion.scale, `${at}.scale`, { minimum: 0.005, maximum: 0.12 });
           if (motion.kind === "sway") validateNumber(motion.degrees, `${at}.degrees`, { minimum: 0.3, maximum: 12 });
+          if (motion.kind === "twitch") {
+            if (Object.keys(motion).sort().join(",") !== "degrees,delay,duration,kind,period") fail(at, "twitch requires exactly kind, degrees, period, delay and duration");
+            validateNumber(motion.degrees, `${at}.degrees`, { minimum: 0.3, maximum: 12 });
+            validateNumber(motion.delay, `${at}.delay`, { maximum: 20 });
+            validateNumber(motion.duration, `${at}.duration`, { minimum: 0.3, maximum: 0.5 });
+            if (motion.delay + motion.duration > motion.period) fail(at, "twitch must settle within its period");
+          }
           if (motion.kind === "fade") validateNumber(motion.minimum, `${at}.minimum`, { minimum: 0.1, maximum: 0.95 });
           if (motion.kind === "glow") {
             validateNumber(motion.radius, `${at}.radius`, { minimum: 2, maximum: 30 });
@@ -114,6 +153,13 @@ function validateDecorations(skin, assets) {
           validateNumber(item.travel.to, `${label}.travel.to`, { minimum: -1, maximum: 2 });
           validateNumber(item.travel.duration, `${label}.travel.duration`, { minimum: 1, maximum: 120 });
         }
+      } else if (item.type === "water") {
+        validateNumber(item.depth, `${label}.depth`, { minimum: 8, maximum: 120 });
+        validateNumber(item.poolWidth, `${label}.poolWidth`, { minimum: 32, maximum: 300 });
+        validateNumber(item.period ?? 5, `${label}.period`, { minimum: 1, maximum: 20 });
+        validateColor(item.from, `${label}.from`);
+        validateColor(item.to, `${label}.to`);
+        validateColor(item.highlight, `${label}.highlight`);
       } else if (item.type === "gradient") {
         validateColor(item.from, `${label}.from`);
         validateColor(item.to, `${label}.to`);
@@ -215,13 +261,31 @@ function validateSkin(skin, directoryName, assets = new Map()) {
   }
   if ("overflow" in skin) {
     for (const field of ["top", "left", "bottom", "right"]) {
-      validateNumber(skin.overflow?.[field], `${skin.id}.overflow.${field}`, { maximum: 64 });
+      validateNumber(skin.overflow?.[field], `${skin.id}.overflow.${field}`, { maximum: 120 });
     }
   }
   validateDecorations(skin, assets);
 }
 
 const preferredBuiltInOrder = ["system", "xuanmo", "shuitun", "youzi", "juzimao", "chaiquan", "baitu", "yueye", "luoying", "fenghong", "denglong", "songxue", "nihong"];
+// Built-in gallery tags (节日/国风/萌宠/简约) live here, not in skin.json; ids without an entry stay untagged.
+const builtInGalleryTags = {
+  system: ["简约"],
+  xuanmo: ["简约"],
+  shuitun: ["萌宠"],
+  youzi: ["萌宠"],
+  juzimao: ["萌宠"],
+  chaiquan: ["萌宠"],
+  baitu: ["萌宠"],
+  yueye: ["国风"],
+  luoying: ["国风"],
+  fenghong: ["国风"],
+  songxue: ["国风"],
+  denglong: ["节日", "国风"],
+  nihong: [],
+};
+const galleryTags = (skin) => builtInGalleryTags[skin.id] ?? [];
+const tagList = (skin) => `[${galleryTags(skin).map((tag) => JSON.stringify(tag)).join(", ")}]`;
 const packageNames = (await readdir(builtInRoot, { withFileTypes: true }))
   .filter((entry) => entry.isDirectory())
   .map((entry) => entry.name)
@@ -249,7 +313,7 @@ for (const packageName of packageNames) {
     if (!entry.isFile() || !assetNamePattern.test(entry.name) || info.size > maximumAssetBytes) {
       fail(`${packageName}.${entry.name}`, "built-in packages may hold only skin.json and small png sprite sheets");
     }
-    assets.set(entry.name, info.size);
+    assets.set(entry.name, await readFile(path.join(packageDirectory, entry.name)));
   }
   if (packageBytes > maximumPackageBytes) fail(packageName, "built-in package exceeds 1.5 MiB");
   const skin = JSON.parse(await readFile(path.join(packageDirectory, "skin.json"), "utf8"));
@@ -271,7 +335,8 @@ const swiftMetadata = skins.map((skin) =>
   `        .${skin.id}: CandidateSkinMetadata(\n`
   + `            displayName: CandidateSkinDisplayName(zh: ${JSON.stringify(skin.displayName.zh)}, en: ${JSON.stringify(skin.displayName.en)}),\n`
   + `            author: ${JSON.stringify(skin.author)},\n`
-  + `            description: ${JSON.stringify(skin.description)}\n`
+  + `            description: ${JSON.stringify(skin.description)},\n`
+  + `            tags: ${tagList(skin)}\n`
   + "        )"
 ).join(",\n");
 const swift = `// Generated by scripts/generate_candidate_skins.mjs. Do not edit.
@@ -316,6 +381,7 @@ public struct CandidateSkinMetadata: Equatable, Sendable {
     public let displayName: CandidateSkinDisplayName
     public let author: String
     public let description: String
+    public let tags: [String]
 }
 
 public enum CandidateSkinCatalog {
@@ -334,8 +400,11 @@ const rustEntries = skins.map((skin) =>
   + `        display_name_en: ${JSON.stringify(skin.displayName.en)},\n`
   + `        author: ${JSON.stringify(skin.author)},\n`
   + `        description: ${JSON.stringify(skin.description)},\n`
+  + `        tags: &${tagList(skin)},\n`
   + "    },"
 ).join("\n");
+// The inline test below mirrors builtInGalleryTags on purpose: when a skin gains or
+// loses tags, extend both the table and the match arms (cargo test catches a mismatch).
 const rust = `// Generated by scripts/generate_candidate_skins.mjs. Do not edit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CandidateSkinCatalogEntry {
@@ -344,6 +413,7 @@ pub struct CandidateSkinCatalogEntry {
     pub display_name_en: &'static str,
     pub author: &'static str,
     pub description: &'static str,
+    pub tags: &'static [&'static str],
 }
 
 pub const CANDIDATE_SKIN_CATALOG: &[CandidateSkinCatalogEntry] = &[
@@ -353,10 +423,31 @@ ${rustEntries}
 pub fn is_candidate_skin_id(id: &str) -> bool {
     CANDIDATE_SKIN_CATALOG.iter().any(|entry| entry.id == id)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gallery_tags_match_the_built_in_categories() {
+        for entry in CANDIDATE_SKIN_CATALOG {
+            let expected: &[&str] = match entry.id {
+                "system" | "xuanmo" => &["简约"],
+                "shuitun" | "youzi" | "juzimao" | "chaiquan" | "baitu" => &["萌宠"],
+                "luoying" | "fenghong" | "songxue" | "yueye" => &["国风"],
+                "denglong" => &["节日", "国风"],
+                _ => &[],
+            };
+            assert_eq!(entry.tags, expected, "{}", entry.id);
+        }
+        assert_eq!(CANDIDATE_SKIN_CATALOG.len(), 13);
+        assert!(!is_candidate_skin_id("external-test"));
+    }
+}
 `;
 
 const tsEntries = skins.map((skin) =>
-  `  { id: ${JSON.stringify(skin.id)}, displayName: { zh: ${JSON.stringify(skin.displayName.zh)}, en: ${JSON.stringify(skin.displayName.en)} }, author: ${JSON.stringify(skin.author)}, description: ${JSON.stringify(skin.description)} },`
+  `  { id: ${JSON.stringify(skin.id)}, displayName: { zh: ${JSON.stringify(skin.displayName.zh)}, en: ${JSON.stringify(skin.displayName.en)} }, author: ${JSON.stringify(skin.author)}, description: ${JSON.stringify(skin.description)}, tags: ${tagList(skin)} },`
 ).join("\n");
 const typescript = `// Generated by scripts/generate_candidate_skins.mjs. Do not edit.
 export const candidateSkinCatalog = [

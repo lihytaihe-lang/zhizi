@@ -13,10 +13,7 @@ private struct CompositionPanelGeometry {
     static let keepRatio: CGFloat = 0.75
 
     mutating func resolve(fitting: NSSize, theme: CandidateTheme) -> NSSize {
-        // The fitting width holds the left inset but not the right one (ordinary skins live on the slack of the width
-        // quantization). A skin that reserves an art zone on the right (right inset wider than the left) gets it added.
-        let artZone = theme.edgeInsets.right > theme.edgeInsets.left ? theme.edgeInsets.right : 0
-        let unclampedWidth = max(theme.minimumPanelSize.width, fitting.width + artZone)
+        let unclampedWidth = max(theme.minimumPanelSize.width, fitting.width)
         let quantizedWidth = ceil(unclampedWidth / theme.widthQuantization)
             * theme.widthQuantization
         let target = NSSize(
@@ -333,10 +330,13 @@ public final class CandidatePanelController: NSObject {
     private var theme: CandidateTheme
     private var pendingTheme: CandidateTheme?
     private var compositionGeometry = CompositionPanelGeometry()
+    private var mouseEventMonitors: [Any] = []
     // Hosted mode (skin gallery preview): the bar is a plain view inside another window's view instead of a floating panel.
     private weak var hostView: NSView?
     private var hostInset = CGPoint.zero
     private var hostCentered = false
+    private var hostCentersOverflow = false
+    private var trimsUnusedPreviewSlots = false
     private let rootStack = NSStackView()
     private let firstRow = NSStackView()
     private var candidateButtons: [CandidateSlotControl] = []
@@ -384,6 +384,7 @@ public final class CandidatePanelController: NSObject {
         panel.backgroundColor = .clear
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
         panel.hidesOnDeactivate = false
+        panel.acceptsMouseMovedEvents = true
 
         content.wantsLayer = true
         content.setAccessibilityRole(.group)
@@ -558,14 +559,24 @@ public final class CandidatePanelController: NSObject {
         applyPanelAppearance(theme)
     }
 
+    isolated deinit {
+        mouseEventMonitors.forEach { NSEvent.removeMonitor($0) }
+        panel.orderOut(nil)
+    }
+
     /// Shows this bar as part of `container` (top-left at `inset`) instead of in its own floating panel; used by the skin gallery so
-    /// the preview belongs to the window. Decorations still animate; the container clips what leans out.
-    func embed(in container: NSView, inset: CGPoint, centered: Bool = false) {
+    /// the preview belongs to the window. Gallery previews can centre the complete overflow and omit unused sample slots;
+    /// both options default off, preserving the input panel's layout.
+    func embed(in container: NSView, inset: CGPoint, centered: Bool = false, includingOverflow: Bool = false, trimmingUnusedSlots: Bool = false) {
+        stopMouseTracking()
         panel.orderOut(nil)
         panel.contentView = NSView()
         hostView = container
         hostInset = inset
         hostCentered = centered
+        hostCentersOverflow = includingOverflow
+        trimsUnusedPreviewSlots = trimmingUnusedSlots
+        firstRow.detachesHiddenViews = trimmingUnusedSlots
         visual.blendingMode = .withinWindow
         root.translatesAutoresizingMaskIntoConstraints = true
         root.autoresizingMask = []   // a hosted bar keeps its own size; it must not stretch or pin the host's size
@@ -576,7 +587,10 @@ public final class CandidatePanelController: NSObject {
         guard let hostView else { return }
         let width = size.width + margin.left + margin.right
         let height = size.height + margin.top + margin.bottom
-        if hostCentered {
+        if hostCentered && hostCentersOverflow {
+            root.frame = NSRect(x: (hostView.bounds.width - width) / 2,
+                                y: (hostView.bounds.height - height) / 2, width: width, height: height)
+        } else if hostCentered {
             // The card, not the leaning-out art, is centred; the margin keeps the art inside the host.
             root.frame = NSRect(x: (hostView.bounds.width - size.width) / 2 - margin.left,
                                 y: (hostView.bounds.height - size.height) / 2 - margin.bottom, width: width, height: height)
@@ -589,14 +603,14 @@ public final class CandidatePanelController: NSObject {
     /// Re-lays the hosted bar out after its host changed size (the gallery scales card previews with the card).
     func relayoutHosted() {
         guard hostView != nil else { return }
-        let size = compositionGeometry.resolve(fitting: content.fittingSize, theme: theme)
+        let size = compositionGeometry.resolve(fitting: fittingCardSize, theme: theme)
         positionHosted(size: size, margin: theme.overflowInsets)
         root.layoutSubtreeIfNeeded()
     }
 
     /// The hosted bar's size with the art that leans out of it.
     var hostedOuterSize: CGSize {
-        let size = compositionGeometry.resolve(fitting: content.fittingSize, theme: theme)
+        let size = compositionGeometry.resolve(fitting: fittingCardSize, theme: theme)
         let margin = theme.overflowInsets
         return CGSize(width: size.width + margin.left + margin.right, height: size.height + margin.top + margin.bottom)
     }
@@ -620,6 +634,7 @@ public final class CandidatePanelController: NSObject {
         secondaryButtons.forEach { $0.applyTheme(theme) }
         expandedButtons.joined().forEach { $0.applyTheme(theme) }
         if layoutEnabled { panel.contentView?.layoutSubtreeIfNeeded() }
+        if panel.isVisible { updateMouseTracking() }
     }
 
     private func applyPanelAppearance(_ theme: CandidateTheme) {
@@ -759,6 +774,7 @@ public final class CandidatePanelController: NSObject {
             compositionGeometry.reset()
         }
         appliedCandidateCount = visibleCandidates.count
+        if trimsUnusedPreviewSlots { candidateButtons.forEach { $0.isHidden = !$0.isEnabled } }
         if layoutEnabled { Self.fitFirstRow(candidateButtons, grid: grid != nil, theme: theme) }
         let visibleSecondary = secure || grid != nil ? [] : secondaryCandidatesThatFit(secondaryCandidates)
         for (index, button) in secondaryButtons.enumerated() {
@@ -801,11 +817,12 @@ public final class CandidatePanelController: NSObject {
         guard !candidates.isEmpty || !visibleSecondary.isEmpty else {
             compositionGeometry.markHidden(at: ProcessInfo.processInfo.systemUptime)
             setDecorationsRunning(false)
+            stopMouseTracking()
             panel.orderOut(nil)
             return
         }
         compositionGeometry.expireIfIdle(at: ProcessInfo.processInfo.systemUptime)
-        let fitting = content.fittingSize
+        let fitting = fittingCardSize
         let size = compositionGeometry.resolve(fitting: fitting, theme: theme)
         let margin = theme.overflowInsets
         if hostView != nil {
@@ -814,12 +831,58 @@ public final class CandidatePanelController: NSObject {
             setDecorationsRunning(true)
             return
         }
-        panel.setContentSize(NSSize(width: size.width + margin.left + margin.right, height: size.height + margin.top + margin.bottom))
-        // The card, not the transparent margin, sits at the caret.
-        let cardOrigin = Self.origin(anchor: anchor, windowSize: size, screens: NSScreen.screens)
-        panel.setFrameOrigin(NSPoint(x: cardOrigin.x - margin.left, y: cardOrigin.y - margin.bottom))
+        let cardOrigin = Self.origin(anchor: anchor, windowSize: size, screens: NSScreen.screens, overflow: margin)
+        panel.setFrame(Self.windowFrame(cardOrigin: cardOrigin, cardSize: size, overflow: margin), display: false)
+        root.layoutSubtreeIfNeeded()
+        // Set the window-server hit region before showing, even if the pointer has not moved since the last keystroke.
+        updateMouseTracking()
         panel.orderFrontRegardless()
         setDecorationsRunning(true)
+    }
+
+    private var hasOverflow: Bool {
+        let margin = theme.overflowInsets
+        return margin.top > 0 || margin.left > 0 || margin.bottom > 0 || margin.right > 0
+    }
+
+    private var fittingCardSize: NSSize {
+        // The leading-aligned stack's fitting width includes the left inset but omits the right one.
+        let fitting = content.fittingSize
+        return NSSize(width: fitting.width + theme.edgeInsets.right, height: fitting.height)
+    }
+
+    private var cardScreenFrame: NSRect {
+        panel.convertToScreen(content.convert(content.bounds, to: nil))
+    }
+
+    private func refreshMouseEventHandling(at point: NSPoint) {
+        let ignores = invisibleForTesting || (hasOverflow && Self.shouldIgnoreMouseEvents(at: point, cardFrame: cardScreenFrame))
+        if panel.ignoresMouseEvents != ignores { panel.ignoresMouseEvents = ignores }
+    }
+
+    private func updateMouseTracking() {
+        if hasOverflow {
+            if mouseEventMonitors.isEmpty {
+                let events: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged]
+                // Local events cover the card; global events cover other apps while this nonactivating panel ignores them.
+                // AppKit invokes both monitors on the main thread. Stay synchronous so entering the card restores clicks.
+                if let monitor = NSEvent.addLocalMonitorForEvents(matching: events, handler: { [weak self] event in
+                    MainActor.assumeIsolated { self?.refreshMouseEventHandling(at: NSEvent.mouseLocation) }
+                    return event
+                }) { mouseEventMonitors.append(monitor) }
+                if let monitor = NSEvent.addGlobalMonitorForEvents(matching: events, handler: { [weak self] _ in
+                    MainActor.assumeIsolated { self?.refreshMouseEventHandling(at: NSEvent.mouseLocation) }
+                }) { mouseEventMonitors.append(monitor) }
+            }
+        } else {
+            stopMouseTracking()
+        }
+        refreshMouseEventHandling(at: NSEvent.mouseLocation)
+    }
+
+    private func stopMouseTracking() {
+        mouseEventMonitors.forEach { NSEvent.removeMonitor($0) }
+        mouseEventMonitors.removeAll()
     }
 
     /// Decorations animate only while the panel is on screen.
@@ -916,6 +979,7 @@ public final class CandidatePanelController: NSObject {
             self.pendingTheme = nil
             setTheme(pendingTheme)
         }
+        stopMouseTracking()
         if presentationEnabled {
             setDecorationsRunning(false)
             panel.orderOut(nil)
@@ -923,11 +987,16 @@ public final class CandidatePanelController: NSObject {
     }
     var decorationLayerCountForTesting: Int { decorationsBelow.layerCountForTesting + decorationsAbove.layerCountForTesting + decorationsOverflow.layerCountForTesting + decorationsFrame.layerCountForTesting }
     /// The laid-out bar as an image (pictures included, nothing animating), drawn off screen, for the skin gallery's thumbnails.
-    func renderedStill() -> NSImage? {
+    func renderedStill(trimmingUnusedSlots: Bool = false) -> NSImage? {
+        if trimmingUnusedSlots { compositionGeometry.reset() }
+        candidateButtons.forEach { $0.isHidden = false }
+        firstRow.layoutSubtreeIfNeeded()
+        firstRow.detachesHiddenViews = trimmingUnusedSlots
+        candidateButtons.forEach { $0.isHidden = trimmingUnusedSlots && !$0.isEnabled }
         applyPanelAppearance(theme)
         root.appearance = NSApp.effectiveAppearance
         root.layoutSubtreeIfNeeded()
-        let size = compositionGeometry.resolve(fitting: content.fittingSize, theme: theme)
+        let size = compositionGeometry.resolve(fitting: fittingCardSize, theme: theme)
         let margin = theme.overflowInsets
         root.frame = NSRect(x: 0, y: 0, width: size.width + margin.left + margin.right, height: size.height + margin.top + margin.bottom)
         root.layoutSubtreeIfNeeded()
@@ -940,15 +1009,30 @@ public final class CandidatePanelController: NSObject {
     /// Tests that need a shown window keep it fully transparent so nothing flashes on the owner's screen.
     var invisibleForTesting: Bool {
         get { panel.alphaValue == 0 }
-        set { panel.alphaValue = newValue ? 0 : 1; panel.ignoresMouseEvents = newValue }
+        set {
+            panel.alphaValue = newValue ? 0 : 1
+            refreshMouseEventHandling(at: NSEvent.mouseLocation)
+        }
     }
-    var cardFittingSizeForTesting: NSSize { content.fittingSize }
+    var cardFittingSizeForTesting: NSSize { fittingCardSize }
     var firstRowTrailingEdgeForTesting: CGFloat {
         content.layoutSubtreeIfNeeded()
         return candidateButtons.filter { !$0.isHidden }.map { content.convert($0.bounds, from: $0).maxX }.max() ?? 0
     }
+    var firstRowCandidateFramesForTesting: [NSRect] {
+        root.layoutSubtreeIfNeeded()
+        return candidateButtons.filter(\.isEnabled).map { root.convert($0.bounds, from: $0) }
+    }
+    var preeditSeparatorFrameForTesting: NSRect? {
+        root.layoutSubtreeIfNeeded()
+        return preeditRow.isHidden ? nil : root.convert(preeditSeparator.bounds, from: preeditSeparator)
+    }
     var cardWidthForTesting: CGFloat { content.frame.width }
     var cardHeightForTesting: CGFloat { content.frame.height }
+    var cardScreenFrameForTesting: NSRect { cardScreenFrame }
+    var ignoresMouseEventsForTesting: Bool { panel.ignoresMouseEvents }
+    var mouseEventMonitorCountForTesting: Int { mouseEventMonitors.count }
+    func updateMouseLocationForTesting(_ point: NSPoint) { refreshMouseEventHandling(at: point) }
     var decorationEmitterCountForTesting: Int { decorationsBelow.emitterCountForTesting + decorationsAbove.emitterCountForTesting + decorationsOverflow.emitterCountForTesting }
     var decorationAnimationKeysForTesting: [String] { decorationsBelow.animationKeysForTesting + decorationsAbove.animationKeysForTesting + decorationsOverflow.animationKeysForTesting }
     func setDecorationsRunningForTesting(_ running: Bool) { setDecorationsRunning(running) }
@@ -1009,6 +1093,17 @@ public final class CandidatePanelController: NSObject {
         guard candidateButtons.indices.contains(index) else { return false }
         return candidateButtons[index].accessibilityPerformPress()
     }
+    func performCandidateMouseDownForTesting(at index: Int) -> Bool {
+        guard candidateButtons.indices.contains(index) else { return false }
+        let button = candidateButtons[index]
+        let point = root.convert(NSPoint(x: button.bounds.midX, y: button.bounds.midY), from: button)
+        guard let hit = root.hitTest(point), hit === button,
+              let event = NSEvent.mouseEvent(with: .leftMouseDown, location: root.convert(point, to: nil),
+                                             modifierFlags: [], timestamp: 0, windowNumber: panel.windowNumber,
+                                             context: nil, eventNumber: 0, clickCount: 1, pressure: 1) else { return false }
+        hit.mouseDown(with: event)
+        return true
+    }
     func performSecondaryActionForTesting(at index: Int) -> Bool {
         guard secondaryButtons.indices.contains(index) else { return false }
         return secondaryButtons[index].accessibilityPerformPress()
@@ -1016,18 +1111,31 @@ public final class CandidatePanelController: NSObject {
     public var windowNumber: Int { panel.windowNumber }
     public var frame: NSRect { panel.frame }
 
-    public static func origin(anchor: NSRect, windowSize: NSSize, screens: [NSScreen]) -> NSPoint {
+    static func shouldIgnoreMouseEvents(at point: NSPoint, cardFrame: NSRect) -> Bool {
+        !NSPointInRect(point, cardFrame)
+    }
+
+    static func windowFrame(cardOrigin: NSPoint, cardSize: NSSize, overflow: NSEdgeInsets) -> NSRect {
+        NSRect(x: cardOrigin.x - overflow.left, y: cardOrigin.y - overflow.bottom,
+               width: cardSize.width + overflow.left + overflow.right,
+               height: cardSize.height + overflow.top + overflow.bottom)
+    }
+
+    public static func origin(
+        anchor: NSRect, windowSize: NSSize, screens: [NSScreen], overflow: NSEdgeInsets = NSEdgeInsets()
+    ) -> NSPoint {
         var frames = screens.map { (frame: $0.frame, visibleFrame: $0.visibleFrame) }
         if frames.isEmpty, let main = NSScreen.main {
             frames = [(main.frame, main.visibleFrame)]
         }
-        return origin(anchor: anchor, windowSize: windowSize, screenFrames: frames)
+        return origin(anchor: anchor, windowSize: windowSize, screenFrames: frames, overflow: overflow)
     }
 
     static func origin(
         anchor: NSRect,
         windowSize: NSSize,
-        screenFrames: [(frame: NSRect, visibleFrame: NSRect)]
+        screenFrames: [(frame: NSRect, visibleFrame: NSRect)],
+        overflow: NSEdgeInsets = NSEdgeInsets()
     ) -> NSPoint {
         // Caret rects reported by text clients are routinely zero-width (a
         // bare insertion line), and an empty NSRect never intersects any
@@ -1040,10 +1148,13 @@ public final class CandidatePanelController: NSObject {
         let screen = screenFrames.first(where: { NSPointInRect(anchorPoint, $0.frame) })
             ?? screenFrames.first(where: { $0.visibleFrame.intersects(anchor) })
             ?? screenFrames.first
-        guard let frame = screen?.visibleFrame else { return NSPoint(x: anchor.minX, y: anchor.minY - windowSize.height) }
+        guard let frame = screen?.visibleFrame else {
+            return NSPoint(x: anchor.minX, y: anchor.minY - windowSize.height - overflow.top)
+        }
         var x = anchor.minX
-        var y = anchor.minY - windowSize.height - 4
-        if y < frame.minY { y = anchor.maxY + 4 }
+        // Only the margin facing the caret reserves space. Away-side art may extend outside the visible frame.
+        var y = anchor.minY - windowSize.height - 4 - overflow.top
+        if y < frame.minY { y = anchor.maxY + 4 + overflow.bottom }
         x = min(max(x, frame.minX), max(frame.minX, frame.maxX - windowSize.width))
         y = min(max(y, frame.minY), max(frame.minY, frame.maxY - windowSize.height))
         return NSPoint(x: x, y: y)

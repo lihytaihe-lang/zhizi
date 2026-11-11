@@ -9,7 +9,6 @@ if($Public -and (Test-Path $StageDir) -and (Get-ChildItem $StageDir -Force | Sel
 $env:CARGO_TARGET_DIR="$Root\target"
 $env:CARGO_HOME="$Root\cargo"
 $env:TEMP="$Root\temp"; $env:TMP=$env:TEMP
-$env:RIME_ROOT="$Root\deps\librime-1.16.1\dist"
 New-Item -ItemType Directory -Force $env:TEMP,$env:CARGO_HOME,"$StageDir","$Root\output" | Out-Null
 $manifest="$Root\src\native\windows\zhizi-tsf\Cargo.toml"
 # TSF recording is a compile-time capability; public builds ignore any inherited flag.
@@ -32,7 +31,7 @@ try {
 } # public-check: friend end
 cargo build --release --bin zhizi-settings --manifest-path "$Root\src\native\host\Cargo.toml"
 if($LASTEXITCODE -ne 0){throw 'Settings tool build failed'}
-Copy-Item "$Root\target\release\zhizi_tsf.dll","$Root\target\release\zhizi-settings.exe","$env:RIME_ROOT\lib\rime.dll" "$StageDir" -Force
+Copy-Item "$Root\target\release\zhizi_tsf.dll","$Root\target\release\zhizi-settings.exe" "$StageDir" -Force
 if(!$Public){ # public-check: friend begin
  Copy-Item "$Root\target\release\zhizi-upload.exe" "$StageDir" -Force
 } # public-check: friend end

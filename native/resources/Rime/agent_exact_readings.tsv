@@ -77,7 +77,10 @@ HTTP	http
 HTTPS	https
 Hugging Face	huggingface
 IBus	ibus
+IDAT	idat
 IDE	ide
+IEND	iend
+IHDR	ihdr
 IME	ime
 IMK	imk
 IMKInputController	imkinputcontroller
@@ -267,6 +270,7 @@ prompt	prompt
 proposed	proposed
 prose	prose
 provisional	provisional
+purchase	purchase
 python	python
 record	record
 relations	relations

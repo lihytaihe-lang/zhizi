@@ -1,0 +1,52 @@
+[
+  {
+    "text": "测试词",
+    "pinyin": "ce shi ci",
+    "definition": "仅用于管道测试的样例，不是真实热词。",
+    "sourceName": "测试样例",
+    "sourceUrl": "https://example.invalid/test/1",
+    "license": "仅测试，不代表真实来源授权",
+    "domain": "test",
+    "expiresDays": 30
+  },
+  {
+    "text": "你好",
+    "pinyin": "ni hao",
+    "definition": "仅用于管道测试的样例，不是真实热词。",
+    "sourceName": "测试样例",
+    "sourceUrl": "https://example.invalid/test/2",
+    "license": "仅测试，不代表真实来源授权",
+    "domain": "test",
+    "expiresDays": 30
+  },
+  {
+    "text": "离线样例",
+    "pinyin": "li xian yang li",
+    "definition": "仅用于管道测试的样例，不是真实热词。",
+    "sourceName": "测试样例",
+    "sourceUrl": "https://example.invalid/test/3",
+    "license": "仅测试，不代表真实来源授权",
+    "domain": "test",
+    "expiresDays": 30
+  },
+  {
+    "text": "签名样例",
+    "pinyin": "qian ming yang li",
+    "definition": "仅用于管道测试的样例，不是真实热词。",
+    "sourceName": "测试样例",
+    "sourceUrl": "https://example.invalid/test/4",
+    "license": "仅测试，不代表真实来源授权",
+    "domain": "test",
+    "expiresDays": 30
+  },
+  {
+    "text": "审核样例",
+    "pinyin": "shen he yang li",
+    "definition": "仅用于管道测试的样例，不是真实热词。",
+    "sourceName": "测试样例",
+    "sourceUrl": "https://example.invalid/test/5",
+    "license": "仅测试，不代表真实来源授权",
+    "domain": "test",
+    "expiresDays": 30
+  }
+]

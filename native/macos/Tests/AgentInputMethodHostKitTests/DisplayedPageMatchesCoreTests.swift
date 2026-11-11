@@ -82,8 +82,8 @@ final class DisplayedPageMatchesCoreTests: XCTestCase {
             XCTAssertEqual(shown.candidates.first?.comment, "整句 · 顺手·知字")
         } else {
             XCTAssertNotEqual(shown.candidates.first?.text, "再等我一下")
-            XCTAssertEqual(shown.candidates.last?.text, "再等我一下")
-            XCTAssertEqual(shown.candidates.last?.comment, "整句 · 备选")
+            // Since 0.3.30 the sentence is already offered among the whole-sentence alternates on page 1.
+            XCTAssertTrue(shown.candidates.contains { $0.text == "再等我一下" }, "\(shown.candidates.map(\.text))")
         }
         XCTAssertEqual(probe.displayedPageMismatches, 0)
     }

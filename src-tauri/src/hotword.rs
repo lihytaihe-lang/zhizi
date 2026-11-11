@@ -1,3 +1,4 @@
+use crate::hotword_pack::{self, Latest, Pack};
 use crate::storage::{AppStorage, LexiconSource};
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -6,6 +7,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
 const MAX_FEED_BYTES: usize = 2 * 1024 * 1024;
+const HOTWORD_PACK_SETTING: &str = "hotwordPack";
+const HOTWORD_PACK_SOURCE_ID: &str = "pack:dynamic-hotwords";
+const DEFAULT_PACK_EXPIRY_MS: i64 = 30 * 24 * 60 * 60 * 1000;
 const FETCH_TIMEOUT: Duration = Duration::from_secs(12);
 pub(crate) const SELF_AUTHORED_HOTWORD_SOURCE_ID: &str = "owner-self-authored-hotwords";
 
@@ -62,6 +66,7 @@ pub struct HotwordItem {
     pub domain: String,
     pub expires_at_ms: Option<i64>,
     pub review_required: bool,
+    pub pinyin_warning: Option<String>,
     pub state: String,
     pub source_ids: Vec<String>,
     pub exposure_count: i64,
@@ -98,6 +103,24 @@ pub struct RefreshResult {
     pub staged_count: usize,
     pub review_count: usize,
     pub retained_previous_on_failure: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct HotwordPackSettings {
+    pub url: String,
+    pub last_pack_id: Option<String>,
+    pub last_updated_at_ms: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct HotwordPackUpdateResult {
+    pub already_latest: bool,
+    pub pack_id: String,
+    pub received_count: usize,
+    pub pinyin_conflict_count: usize,
+    pub message: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -137,7 +160,7 @@ impl AppStorage {
     ) -> Result<RefreshResult, String> {
         let source = DynamicSourceInput {
             id: SELF_AUTHORED_HOTWORD_SOURCE_ID.into(),
-            display_name: "Owner 自著热词".into(),
+            display_name: "Owner 自著个人词/术语".into(),
             source_type: "local_text".into(),
             refresh_interval_minutes: 60,
             authorization: "self-authored: owner explicitly approved each entry".into(),
@@ -163,7 +186,7 @@ impl AppStorage {
                      WHERE kind='generated_hotword' AND review_state='approved' AND pinyin<>''
                      ORDER BY text,pinyin,id",
                 )
-                .map_err(|error| format!("无法准备已审热词本地源：{error}"))?;
+                .map_err(|error| format!("无法准备已审个人词/术语本地源：{error}"))?;
             let rows = statement
                 .query_map([], |row| {
                     Ok(format!(
@@ -173,15 +196,18 @@ impl AppStorage {
                         row.get::<_, String>(2)?
                     ))
                 })
-                .map_err(|error| format!("无法读取已审热词本地源：{error}"))?;
+                .map_err(|error| format!("无法读取已审个人词/术语本地源：{error}"))?;
             rows.collect::<Result<Vec<_>, _>>()
-                .map_err(|error| format!("无法解析已审热词本地源：{error}"))?
+                .map_err(|error| format!("无法解析已审个人词/术语本地源：{error}"))?
                 .join("\n")
         };
         self.ingest_hotword_feed(SELF_AUTHORED_HOTWORD_SOURCE_ID, document.as_bytes(), now_ms)
     }
 
     pub fn save_dynamic_source(&self, input: DynamicSourceInput) -> Result<DynamicSource, String> {
+        if input.id.trim().starts_with("pack:") {
+            return Err("pack: 是签名词包保留来源 ID，请使用「更新热词」。".into());
+        }
         let input = validate_source_input(input)?;
         let mut connection = self.lock_connection()?;
         let transaction = connection
@@ -324,6 +350,12 @@ impl AppStorage {
                 )
                 .map_err(|error| format!("无法清除派生热词：{error}"))?;
         }
+        if id == HOTWORD_PACK_SOURCE_ID {
+            let mut settings = read_pack_settings(&transaction)?;
+            settings.last_pack_id = None;
+            settings.last_updated_at_ms = None;
+            write_pack_settings(&transaction, &settings)?;
+        }
         transaction
             .commit()
             .map_err(|error| format!("无法提交清除事务：{error}"))?;
@@ -384,6 +416,8 @@ impl AppStorage {
                 .map_err(|error| format!("无法读取热词来源：{error}"))?
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(|error| format!("无法解析热词来源：{error}"))?;
+            let pinyin_warning = source_ids.iter().any(|id| id.starts_with("pack:"))
+                .then(|| pack_pinyin_warning(&text, &pinyin)).flatten();
             items.push(HotwordItem {
                 id,
                 text,
@@ -393,6 +427,7 @@ impl AppStorage {
                 domain,
                 expires_at_ms,
                 review_required,
+                pinyin_warning,
                 state,
                 source_ids,
                 exposure_count,
@@ -586,6 +621,9 @@ impl AppStorage {
         body: &[u8],
         now_ms: i64,
     ) -> Result<RefreshResult, String> {
+        if source_id.starts_with("pack:") {
+            return Err("签名词包只能通过「更新热词」验签后入库。".into());
+        }
         let source = self
             .get_dynamic_source(source_id)?
             .ok_or_else(|| "数据源不存在。".to_string())?;
@@ -666,6 +704,216 @@ impl AppStorage {
         })
     }
 
+    pub fn get_hotword_pack_settings(&self) -> Result<HotwordPackSettings, String> {
+        let connection = self.lock_connection()?;
+        read_pack_settings(&connection)
+    }
+
+    pub fn save_hotword_pack_url(&self, url: &str) -> Result<HotwordPackSettings, String> {
+        let url = url.trim();
+        if !url.is_empty() {
+            validate_pack_url(url)?;
+        }
+        let mut connection = self.lock_connection()?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| format!("无法保存热词包设置：{error}"))?;
+        let mut settings = read_pack_settings(&transaction)?;
+        settings.url = url.into();
+        write_pack_settings(&transaction, &settings)?;
+        transaction
+            .commit()
+            .map_err(|error| format!("无法提交热词包设置：{error}"))?;
+        Ok(settings)
+    }
+
+    fn ingest_verified_hotword_pack(
+        &self,
+        pack: &Pack,
+        now_ms: i64,
+    ) -> Result<HotwordPackUpdateResult, String> {
+        let generated_at_ms = hotword_pack::parse_timestamp_ms(&pack.generated_at)?;
+        let mut connection = self.lock_connection()?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| format!("无法开始词包入库事务：{error}"))?;
+        let mut settings = read_pack_settings(&transaction)?;
+        if settings.last_pack_id.as_deref() == Some(&pack.pack_id) {
+            return Ok(latest_pack_result(&pack.pack_id));
+        }
+        let mut names = BTreeSet::new();
+        let mut urls = BTreeSet::new();
+        let mut licenses = BTreeSet::new();
+        for entry in &pack.entries {
+            for source in &entry.sources {
+                names.insert(source.name.as_str());
+                urls.insert(source.url.as_str());
+                licenses.insert(source.license.as_str());
+            }
+        }
+        if !pack.entries.is_empty() {
+            let source = DynamicSource {
+                id: HOTWORD_PACK_SOURCE_ID.into(),
+                display_name: format!("签名热词包 {}", pack.pack_id),
+                source_type: "official_json".into(),
+                refresh_interval_minutes: 60,
+                authorization: format!(
+                    "签名词包来源声明：{}",
+                    names.into_iter().collect::<Vec<_>>().join("；")
+                ),
+                terms_url: urls.into_iter().collect::<Vec<_>>().join("\n"),
+                license: licenses.into_iter().collect::<Vec<_>>().join("；"),
+                cache_policy: "manual-signed-pack".into(),
+                ownership: "remote_cached".into(),
+                distribution: "reviewed-snapshot-only".into(),
+                disable_policy: "pause-and-clear".into(),
+                endpoint: String::new(),
+                enabled: true,
+                opt_in: true,
+                last_refresh_ms: Some(now_ms),
+                last_error: None,
+                created_at_ms: now_ms,
+                updated_at_ms: now_ms,
+            };
+            enforce_enable_policy(&source)?;
+            transaction.execute(
+                "INSERT INTO dynamic_sources
+                 (id,display_name,source_type,refresh_interval_minutes,authorization,terms_url,license,
+                  cache_policy,ownership,distribution,disable_policy,endpoint,enabled,opt_in,
+                  last_refresh_ms,created_at_ms,updated_at_ms)
+                 VALUES (?1,?2,'official_json',60,?3,?4,?5,'manual-signed-pack','remote_cached',
+                         'reviewed-snapshot-only','pause-and-clear','',1,1,?6,?6,?6)
+                 ON CONFLICT(id) DO UPDATE SET display_name=excluded.display_name,
+                   authorization=excluded.authorization,terms_url=excluded.terms_url,license=excluded.license,
+                   enabled=1,opt_in=1,last_refresh_ms=excluded.last_refresh_ms,last_error=NULL,
+                   updated_at_ms=excluded.updated_at_ms",
+                params![source.id, source.display_name, source.authorization, source.terms_url, source.license, now_ms]
+            ).map_err(|error| format!("无法登记词包来源：{error}"))?;
+        }
+        transaction
+            .execute(
+                "DELETE FROM hotword_item_sources WHERE source_id=?1",
+                params![HOTWORD_PACK_SOURCE_ID],
+            )
+            .map_err(|error| format!("无法替换词包来源关联：{error}"))?;
+        // The owner's review UI reads `knowledge_terms`, not `hotword_items`: stage the
+        // pack there too (kind 'pack_hotword', second row) so approval actually works.
+        let pack_review_source = "pack-hotword-review";
+        let pack_digest = format!("{:x}", Sha256::digest(pack.pack_id.as_bytes()));
+        let pack_document_id = format!("pack-doc-{pack_digest}");
+        let pack_chunk_id = format!("pack-chunk-{pack_digest}");
+        if !pack.entries.is_empty() {
+            transaction.execute(
+                "INSERT INTO knowledge_sources
+                 (id,name,source_type,authorized_scope,authorization,status,last_error,created_at_ms,updated_at_ms)
+                 VALUES (?1,'在线热词包待审','local_path','managed-local://hotword-pack-review',
+                         'signed hotword pack, owner reviews each entry','ready',NULL,?2,?2)
+                 ON CONFLICT(id) DO UPDATE SET status='ready',last_error=NULL,updated_at_ms=excluded.updated_at_ms",
+                params![pack_review_source, now_ms],
+            ).map_err(|error| format!("无法登记词包待审来源：{error}"))?;
+            transaction.execute(
+                "INSERT OR REPLACE INTO knowledge_documents
+                 (id,source_id,relative_path,format,content_hash,byte_count,updated_at_ms)
+                 VALUES (?1,?2,?3,'json',?4,?5,?6)",
+                params![pack_document_id, pack_review_source, format!("{}.json", pack.pack_id),
+                    pack_digest, pack.pack_id.len() as i64, now_ms],
+            ).map_err(|error| format!("无法记录词包待审批次：{error}"))?;
+            transaction.execute(
+                "INSERT OR REPLACE INTO knowledge_chunks (id,document_id,ordinal,content_hash,content)
+                 VALUES (?1,?2,0,?3,?4)",
+                params![pack_chunk_id, pack_document_id, pack_digest, pack.pack_id],
+            ).map_err(|error| format!("无法记录词包待审内容：{error}"))?;
+        }
+        let pack_texts: BTreeSet<&str> = pack.entries.iter().map(|entry| entry.text.as_str()).collect();
+        let stale: Vec<String> = {
+            let mut statement = transaction
+                .prepare("SELECT text FROM knowledge_terms WHERE source_id=?1 AND review_state='pending'")
+                .map_err(|error| format!("无法读取旧待审词包词条：{error}"))?;
+            let rows = statement
+                .query_map(params![pack_review_source], |row| row.get::<_, String>(0))
+                .map_err(|error| format!("无法读取旧待审词包词条：{error}"))?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|error| format!("无法解析旧待审词包词条：{error}"))?;
+            rows
+        };
+        for text in stale.iter().filter(|text| !pack_texts.contains(text.as_str())) {
+            transaction.execute(
+                "DELETE FROM knowledge_terms WHERE source_id=?1 AND text=?2 AND review_state='pending'",
+                params![pack_review_source, text],
+            ).map_err(|error| format!("无法清理旧待审词包词条：{error}"))?;
+        }
+        let mut conflicts = 0;
+        for entry in &pack.entries {
+            let pinyin = normalize_pinyin(&entry.pinyin);
+            conflicts += usize::from(pack_pinyin_warning(&entry.text, &pinyin).is_some());
+            let metadata = serde_json::to_string(entry)
+                .map_err(|error| format!("无法保存词包词条出处：{error}"))?;
+            transaction.execute(
+                "INSERT INTO hotword_items
+                 (id,text,pinyin,confidence_millis,freshness_millis,domain,expires_at_ms,
+                  review_required,state,created_at_ms,updated_at_ms)
+                 VALUES (?1,?2,?3,?4,1000,?5,?6,1,'review',?7,?7)
+                 ON CONFLICT(text,pinyin) DO UPDATE SET
+                   confidence_millis=max(hotword_items.confidence_millis,excluded.confidence_millis),
+                   freshness_millis=1000,domain=excluded.domain,expires_at_ms=excluded.expires_at_ms,
+                   review_required=1,state='review',updated_at_ms=excluded.updated_at_ms",
+                params![stable_id(&entry.text, &pinyin), entry.text, pinyin, entry.confidence_millis,
+                    entry.domain, entry.expires_at_ms.unwrap_or(now_ms.saturating_add(DEFAULT_PACK_EXPIRY_MS)), now_ms]
+            ).map_err(|error| format!("无法保存待审词包：{error}"))?;
+            transaction.execute(
+                "INSERT OR IGNORE INTO hotword_item_sources (item_id,source_id,source_record_id,fetched_at_ms)
+                 SELECT id,?3,?4,?5 FROM hotword_items WHERE text=?1 AND pinyin=?2",
+                params![entry.text, pinyin, HOTWORD_PACK_SOURCE_ID, metadata, now_ms]
+            ).map_err(|error| format!("无法保存词包出处：{error}"))?;
+            transaction.execute(
+                "INSERT INTO knowledge_terms
+                 (id,source_id,chunk_id,text,pinyin,kind,relation,definition,candidate_layer,
+                  confidence_millis,review_state,fixed,last_verified_ms)
+                 VALUES (?1,?2,?3,?4,?5,'pack_hotword','hotword-pack',?6,'secondary',?7,'pending',0,?8)
+                 ON CONFLICT(source_id,text) DO UPDATE SET
+                   chunk_id=excluded.chunk_id,
+                   pinyin=CASE WHEN knowledge_terms.review_state='pending' THEN excluded.pinyin ELSE knowledge_terms.pinyin END,
+                   definition=CASE WHEN knowledge_terms.review_state='pending' THEN excluded.definition ELSE knowledge_terms.definition END,
+                   confidence_millis=excluded.confidence_millis",
+                params![format!("pack-term-{:x}", Sha256::digest(entry.text.as_bytes())),
+                    pack_review_source, pack_chunk_id, entry.text, pinyin, entry.definition,
+                    entry.confidence_millis, now_ms],
+            ).map_err(|error| format!("无法保存词包审核词条：{error}"))?;
+        }
+        transaction
+            .execute(
+                "DELETE FROM hotword_items WHERE NOT EXISTS
+            (SELECT 1 FROM hotword_item_sources WHERE item_id=hotword_items.id)",
+                [],
+            )
+            .map_err(|error| format!("无法清理旧词包词条：{error}"))?;
+        if pack.entries.is_empty() {
+            transaction
+                .execute(
+                    "DELETE FROM dynamic_sources WHERE id=?1",
+                    params![HOTWORD_PACK_SOURCE_ID],
+                )
+                .map_err(|error| format!("无法清理空词包来源：{error}"))?;
+        }
+        settings.last_pack_id = Some(pack.pack_id.clone());
+        settings.last_updated_at_ms = Some(generated_at_ms);
+        write_pack_settings(&transaction, &settings)?;
+        transaction
+            .commit()
+            .map_err(|error| format!("无法提交词包入库：{error}"))?;
+        Ok(HotwordPackUpdateResult {
+            already_latest: false,
+            pack_id: pack.pack_id.clone(),
+            received_count: pack.entries.len(),
+            pinyin_conflict_count: conflicts,
+            message: format!(
+                "已将 {} 个词送入审核队列；{} 个词的拼音与冻结索引不一致，请审核。",
+                pack.entries.len(),
+                conflicts
+            ),
+        })
+    }
+
     pub fn record_dynamic_source_error(&self, id: &str, message: &str) -> Result<(), String> {
         let connection = self.lock_connection()?;
         connection
@@ -688,11 +936,185 @@ impl AppStorage {
     }
 }
 
+fn read_pack_settings(connection: &rusqlite::Connection) -> Result<HotwordPackSettings, String> {
+    let value: Option<String> = connection
+        .query_row(
+            "SELECT value FROM settings WHERE key=?1",
+            params![HOTWORD_PACK_SETTING],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|error| format!("无法读取热词包设置：{error}"))?;
+    value
+        .map(|value| serde_json::from_str(&value).map_err(|_| "热词包设置损坏。".into()))
+        .transpose()
+        .map(|settings| settings.unwrap_or_default())
+}
+
+fn write_pack_settings(
+    transaction: &rusqlite::Transaction<'_>,
+    settings: &HotwordPackSettings,
+) -> Result<(), String> {
+    let value =
+        serde_json::to_string(settings).map_err(|error| format!("无法编码热词包设置：{error}"))?;
+    transaction
+        .execute(
+            "INSERT INTO settings (key,value,updated_at) VALUES (?1,?2,CURRENT_TIMESTAMP)
+         ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP",
+            params![HOTWORD_PACK_SETTING, value],
+        )
+        .map_err(|error| format!("无法保存热词包设置：{error}"))?;
+    Ok(())
+}
+
+fn pack_pinyin_warning(text: &str, pinyin: &str) -> Option<String> {
+    let readings = crate::knowledge::exact_readings_by_text().get(text)?;
+    if readings
+        .split(',')
+        .any(|reading| normalize_pinyin(reading) == pinyin)
+    {
+        None
+    } else {
+        Some(format!(
+            "拼音与冻结索引不一致（索引：{readings}），请审核；保留包内拼音。"
+        ))
+    }
+}
+
+fn validate_pack_url(value: &str) -> Result<reqwest::Url, String> {
+    let url = reqwest::Url::parse(value)
+        .map_err(|_| "热词包地址无效，请填写 HTTPS 地址。".to_string())?;
+    if url.scheme() != "https"
+        || url.host_str().is_none()
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.query().is_some()
+        || url.fragment().is_some()
+        || value.contains('@')
+        || value.chars().any(char::is_control)
+    {
+        return Err("热词包地址只允许 HTTPS，且不能含查询参数、身份信息或片段。".into());
+    }
+    Ok(url)
+}
+
+fn extend_pack_body(body: &mut Vec<u8>, chunk: &[u8]) -> Result<(), String> {
+    if body.len().saturating_add(chunk.len()) > MAX_FEED_BYTES {
+        return Err("热词包响应超过 2 MiB 上限；整包已丢弃。".into());
+    }
+    body.extend_from_slice(chunk);
+    Ok(())
+}
+
+async fn fetch_pack_document(client: &reqwest::Client, value: String) -> Result<Vec<u8>, String> {
+    let url = validate_pack_url(&value)?;
+    let mut response = client.get(url).send().await.map_err(|error| {
+        if error.is_timeout() {
+            "热词包下载超时，请稍后重试。".to_string()
+        } else {
+            "热词包下载失败，请检查网络和地址。".to_string()
+        }
+    })?;
+    if !response.status().is_success() {
+        return Err(format!(
+            "热词包服务返回 HTTP {}，未更新本地词条。",
+            response.status()
+        ));
+    }
+    if response
+        .content_length()
+        .is_some_and(|length| length > MAX_FEED_BYTES as u64)
+    {
+        return Err("热词包响应超过 2 MiB 上限；整包已丢弃。".into());
+    }
+    let mut body = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|_| "读取热词包响应失败，整包已丢弃。".to_string())?
+    {
+        extend_pack_body(&mut body, &chunk)?;
+    }
+    Ok(body)
+}
+
+fn latest_pack_result(pack_id: &str) -> HotwordPackUpdateResult {
+    HotwordPackUpdateResult {
+        already_latest: true,
+        pack_id: pack_id.into(),
+        received_count: 0,
+        pinyin_conflict_count: 0,
+        message: "已是最新。".into(),
+    }
+}
+
+pub async fn update_hotword_pack(
+    storage: &AppStorage,
+    now_ms: i64,
+) -> Result<HotwordPackUpdateResult, String> {
+    let client = hotword_fetch_client_builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|_| "无法创建热词包下载器。".to_string())?;
+    update_hotword_pack_with(
+        storage,
+        now_ms,
+        |url| fetch_pack_document(&client, url),
+        hotword_pack::verify_latest,
+        hotword_pack::verify_pack,
+    )
+    .await
+}
+
+async fn update_hotword_pack_with<F, Fut, VLatest, VPack>(
+    storage: &AppStorage,
+    now_ms: i64,
+    mut fetch: F,
+    verify_latest: VLatest,
+    verify_pack: VPack,
+) -> Result<HotwordPackUpdateResult, String>
+where
+    F: FnMut(String) -> Fut,
+    Fut: std::future::Future<Output = Result<Vec<u8>, String>>,
+    VLatest: Fn(&[u8], &str) -> Result<Latest, String>,
+    VPack: Fn(&[u8], &str, i64) -> Result<Pack, String>,
+{
+    let settings = storage.get_hotword_pack_settings()?;
+    if settings.url.is_empty() {
+        return Err("未配置热词包地址。".into());
+    }
+    validate_pack_url(&settings.url)?;
+    let latest_bytes = fetch(settings.url.clone()).await?;
+    let latest_sig = fetch(format!("{}.sig", settings.url)).await?;
+    let latest = verify_latest(&latest_bytes, signature_text(&latest_sig)?)?;
+    validate_pack_url(&latest.url)?;
+    if settings.last_pack_id.as_deref() == Some(&latest.pack_id) {
+        return Ok(latest_pack_result(&latest.pack_id));
+    }
+    let bytes = fetch(latest.url.clone()).await?;
+    let sig = fetch(format!("{}.sig", latest.url)).await?;
+    if format!("{:x}", Sha256::digest(&bytes)) != latest.sha256.to_ascii_lowercase() {
+        return Err("词包 SHA-256 与指针不一致；整包已丢弃。".into());
+    }
+    let pack = verify_pack(&bytes, signature_text(&sig)?, now_ms)?;
+    if pack.pack_id != latest.pack_id || pack.generated_at != latest.generated_at {
+        return Err("词包编号或生成时间与指针不一致；整包已丢弃。".into());
+    }
+    storage.ingest_verified_hotword_pack(&pack, now_ms)
+}
+
+fn signature_text(bytes: &[u8]) -> Result<&str, String> {
+    std::str::from_utf8(bytes).map_err(|_| "签名不是有效的十六进制文本；整包已丢弃。".into())
+}
+
 pub async fn refresh_remote_source(
     storage: &AppStorage,
     source_id: &str,
     now_ms: i64,
 ) -> Result<RefreshResult, String> {
+    if source_id.starts_with("pack:") {
+        return Err("签名词包请使用「更新热词」，不得使用普通来源刷新。".into());
+    }
     let source = storage
         .get_dynamic_source(source_id)?
         .ok_or_else(|| "数据源不存在。".to_string())?;
@@ -971,7 +1393,7 @@ struct NormalizedRecord {
     source_record_id: String,
 }
 
-fn normalize_pinyin(value: &str) -> String {
+pub(crate) fn normalize_pinyin(value: &str) -> String {
     let mut syllables = BTreeSet::new();
     let normalized = value
         .to_lowercase()
@@ -992,13 +1414,13 @@ fn stable_id(text: &str, pinyin: &str) -> String {
     format!("hot-{:x}", digest)[..28].to_string()
 }
 
+fn hotword_fetch_client_builder() -> reqwest::ClientBuilder {
+    // 共享 HTTPS 和超时边界；词包额外禁用重定向，普通来源保留原有行为。
+    reqwest::Client::builder().timeout(FETCH_TIMEOUT).https_only(true)
+}
+
 fn hotword_fetch_client() -> Result<reqwest::Client, String> {
-    // Hotword feeds carry no credentials, but the fetch must still not be
-    // downgradeable: https_only refuses every http request and redirect
-    // target up front.
-    reqwest::Client::builder()
-        .timeout(FETCH_TIMEOUT)
-        .https_only(true)
+    hotword_fetch_client_builder()
         .build()
         .map_err(|error| format!("无法创建官方源适配器：{error}"))
 }
@@ -1038,6 +1460,346 @@ mod tests {
             !error.is_connect() && !error.is_timeout(),
             "refusal must happen before any network attempt: {error}"
         );
+    }
+
+    #[test]
+    fn signed_pack_settings_reject_identity_and_default_to_empty() {
+        let db = path("signed-pack-settings");
+        let _ = std::fs::remove_file(&db);
+        let storage = AppStorage::open(db.clone()).unwrap();
+        assert_eq!(storage.get_hotword_pack_settings().unwrap().url, "");
+        for url in [
+            "http://example.invalid/latest.json",
+            "https://example.invalid/latest.json?token=no",
+            "https://name@example.invalid/latest.json",
+            "https://example.invalid/latest.json#fragment",
+        ] {
+            assert!(storage.save_hotword_pack_url(url).is_err(), "{url}");
+        }
+        let url = "https://example.invalid/latest.json";
+        assert_eq!(storage.save_hotword_pack_url(url).unwrap().url, url);
+        drop(storage);
+        let reopened = AppStorage::open(db.clone()).unwrap();
+        assert_eq!(reopened.get_hotword_pack_settings().unwrap().url, url);
+        drop(reopened);
+        let _ = std::fs::remove_file(db);
+    }
+
+    const PACK_NOW_MS: i64 = 1_794_096_000_000;
+
+    fn signed_pack_value() -> serde_json::Value {
+        serde_json::json!({
+            "schema":"agent-ime-hotword-pack/1", "packId":"hotword-test-only-20261108",
+            "generatedAt":"2026-11-08T00:00:00Z", "validUntil":"2026-12-08T00:00:00Z",
+            "producer":"TEST ONLY", "entryCount":1,
+            "entries":[{"text":"测试样例词", "pinyin":"ce shi yang li ci", "definition":"仅测试",
+                "domain":"test", "confidenceMillis":600, "firstSeenAt":"2026-11-08",
+                "sources":[{"name":"测试样例", "url":"https://example.invalid/test",
+                    "license":"TEST ONLY", "collectedAt":"2026-11-08T00:00:00Z"}]}]
+        })
+    }
+
+    fn mock_pack_update(
+        storage: &AppStorage,
+        pack_value: &serde_json::Value,
+        latest_edit: impl FnOnce(&mut serde_json::Value),
+        body_edit: impl FnOnce(&mut Vec<u8>, &mut String),
+    ) -> (Result<HotwordPackUpdateResult, String>, Vec<String>) {
+        use crate::hotword_pack::{sign_test_value, TEST_KEY_HEX};
+        let (mut body, mut sig) = sign_test_value(pack_value);
+        body_edit(&mut body, &mut sig);
+        let mut latest = serde_json::json!({
+            "schema":"agent-ime-hotword-latest/1", "packId":pack_value["packId"],
+            "url":"https://example.invalid/hotword.json",
+            "sha256":format!("{:x}", Sha256::digest(&body)), "generatedAt":pack_value["generatedAt"]
+        });
+        latest_edit(&mut latest);
+        let (latest_body, latest_sig) = sign_test_value(&latest);
+        let mut documents = std::collections::VecDeque::from([
+            latest_body,
+            latest_sig.into_bytes(),
+            body,
+            sig.into_bytes(),
+        ]);
+        let mut requests = Vec::new();
+        let result = tauri::async_runtime::block_on(update_hotword_pack_with(
+            storage,
+            PACK_NOW_MS,
+            |url| {
+                requests.push(url);
+                std::future::ready(Ok(documents.pop_front().expect("no extra downloads")))
+            },
+            |bytes, sig| hotword_pack::verify_latest_with_key(bytes, sig, TEST_KEY_HEX),
+            |bytes, sig, now| hotword_pack::verify_pack_with_key(bytes, sig, now, TEST_KEY_HEX),
+        ));
+        (result, requests)
+    }
+
+    fn pack_database_counts(storage: &AppStorage) -> (i64, i64, i64) {
+        let connection = storage.lock_connection().unwrap();
+        let count = |table: &str| {
+            connection
+                .query_row(&format!("SELECT count(*) FROM {table}"), [], |row| {
+                    row.get(0)
+                })
+                .unwrap()
+        };
+        (
+            count("hotword_items"),
+            count("hotword_item_sources"),
+            count("dynamic_sources"),
+        )
+    }
+
+    #[test]
+    fn signed_pack_words_reach_second_row_only_after_approval_and_until_expiry() {
+        let db = path("signed-pack-second-row");
+        let _ = std::fs::remove_file(&db);
+        let storage = AppStorage::open(db.clone()).unwrap();
+        storage
+            .save_hotword_pack_url("https://example.invalid/latest.json")
+            .unwrap();
+        let (result, _) = mock_pack_update(&storage, &signed_pack_value(), |_| {}, |_, _| {});
+        result.unwrap();
+        let terms = storage.list_knowledge_terms().unwrap();
+        let term = terms.iter().find(|t| t.kind == "pack_hotword").expect("staged for review");
+        assert_eq!(term.review_state, "pending");
+        assert_eq!(term.candidate_layer, "secondary");
+        assert!(storage.approved_knowledge_secondary_entries().unwrap().is_empty());
+        let (id, text, pinyin, definition) =
+            (term.id.clone(), term.text.clone(), term.pinyin.clone(), term.definition.clone());
+        storage
+            .review_knowledge_term_details(&id, "approved", &text, &pinyin, &definition, "secondary", false, PACK_NOW_MS)
+            .unwrap();
+        let entries = storage.approved_knowledge_secondary_entries().unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].candidate_layer, "secondary");
+        assert_eq!(entries[0].sources[0].license, "signed-hotword-pack");
+        // Expired pack entry leaves the second row.
+        storage
+            .lock_connection()
+            .unwrap()
+            .execute("UPDATE hotword_items SET expires_at_ms=1", [])
+            .unwrap();
+        assert!(storage.approved_knowledge_secondary_entries().unwrap().is_empty());
+        drop(storage);
+        let _ = std::fs::remove_file(db);
+    }
+
+    #[test]
+    fn signed_pack_enters_review_deduplicates_and_blocks_unsigned_refresh() {
+        let db = path("signed-pack-good");
+        let _ = std::fs::remove_file(&db);
+        let storage = AppStorage::open(db.clone()).unwrap();
+        storage
+            .save_hotword_pack_url("https://example.invalid/latest.json")
+            .unwrap();
+        let (result, requests) =
+            mock_pack_update(&storage, &signed_pack_value(), |_| {}, |_, _| {});
+        assert_eq!(
+            requests,
+            [
+                "https://example.invalid/latest.json",
+                "https://example.invalid/latest.json.sig",
+                "https://example.invalid/hotword.json",
+                "https://example.invalid/hotword.json.sig"
+            ]
+        );
+        assert_eq!(result.unwrap().received_count, 1);
+        let items = storage.list_hotword_items().unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].state, "review");
+        assert!(items[0].review_required);
+        assert_eq!(
+            items[0].expires_at_ms,
+            Some(PACK_NOW_MS + DEFAULT_PACK_EXPIRY_MS)
+        );
+        assert!(
+            storage
+                .list_prediction_entries(PACK_NOW_MS)
+                .unwrap()
+                .is_empty(),
+            "unreviewed pack never enters candidates"
+        );
+        let pack_source = storage
+            .get_dynamic_source(HOTWORD_PACK_SOURCE_ID)
+            .unwrap()
+            .unwrap();
+        assert_eq!(pack_source.ownership, "remote_cached");
+        enforce_enable_policy(&pack_source).unwrap();
+        assert_eq!(pack_source.license, "TEST ONLY");
+        assert_eq!(pack_source.terms_url, "https://example.invalid/test");
+        let before_settings = storage.get_hotword_pack_settings().unwrap();
+        assert_eq!(before_settings.last_updated_at_ms, Some(PACK_NOW_MS));
+        let (again, requests) = mock_pack_update(&storage, &signed_pack_value(), |_| {}, |_, _| {});
+        assert!(again.unwrap().already_latest);
+        assert_eq!(requests.len(), 2, "same packId must not fetch body");
+        assert_eq!(pack_database_counts(&storage), (1, 1, 1));
+        assert_eq!(
+            storage.get_hotword_pack_settings().unwrap(),
+            before_settings
+        );
+        assert!(storage
+            .ingest_hotword_feed(HOTWORD_PACK_SOURCE_ID, b"{}", PACK_NOW_MS)
+            .is_err());
+        assert!(storage
+            .save_dynamic_source(source(HOTWORD_PACK_SOURCE_ID, "local_text"))
+            .is_err());
+        assert_eq!(
+            storage
+                .get_dynamic_source(HOTWORD_PACK_SOURCE_ID)
+                .unwrap()
+                .unwrap(),
+            pack_source
+        );
+        let refresh = tauri::async_runtime::block_on(refresh_remote_source(
+            &storage,
+            HOTWORD_PACK_SOURCE_ID,
+            PACK_NOW_MS,
+        ));
+        assert!(refresh.unwrap_err().contains("更新热词"));
+        assert_eq!(
+            storage
+                .clear_dynamic_source(HOTWORD_PACK_SOURCE_ID)
+                .unwrap(),
+            1
+        );
+        assert!(storage
+            .get_hotword_pack_settings()
+            .unwrap()
+            .last_pack_id
+            .is_none());
+        drop(storage);
+        let _ = std::fs::remove_file(db);
+    }
+
+    #[test]
+    fn signed_pack_failures_leave_every_queue_table_and_settings_unchanged() {
+        let db = path("signed-pack-bad");
+        let _ = std::fs::remove_file(&db);
+        let storage = AppStorage::open(db.clone()).unwrap();
+        storage
+            .save_hotword_pack_url("https://example.invalid/latest.json")
+            .unwrap();
+        mock_pack_update(&storage, &signed_pack_value(), |_| {}, |_, _| {})
+            .0
+            .unwrap();
+        let before = storage.get_hotword_pack_settings().unwrap();
+        let before_items = storage.list_hotword_items().unwrap();
+        let before_sources = storage.list_dynamic_sources().unwrap();
+        let counts = pack_database_counts(&storage);
+        for invalid in ["schema", "validUntil", "entryCount", "entry"] {
+            let mut value = signed_pack_value();
+            value["packId"] = format!("new-invalid-{invalid}").into();
+            match invalid {
+                "schema" => value["schema"] = "wrong".into(),
+                "validUntil" => value["validUntil"] = "2026-11-07T00:00:00Z".into(),
+                "entryCount" => value["entryCount"] = 2.into(),
+                _ => {
+                    let mut second = value["entries"][0].clone();
+                    second["text"] = "".into();
+                    value["entries"].as_array_mut().unwrap().push(second);
+                    value["entries"][0]["text"] = "不得半包入库".into();
+                    value["entryCount"] = 2.into();
+                }
+            }
+            let (result, _) = mock_pack_update(&storage, &value, |_| {}, |_, _| {});
+            assert!(result.is_err(), "{invalid}");
+            assert_eq!(pack_database_counts(&storage), counts);
+            assert_eq!(storage.get_hotword_pack_settings().unwrap(), before);
+            assert_eq!(storage.list_hotword_items().unwrap(), before_items);
+            assert_eq!(storage.list_dynamic_sources().unwrap(), before_sources);
+        }
+        for failure in ["hash", "signature", "body", "packId", "generatedAt", "url"] {
+            let mut value = signed_pack_value();
+            value["packId"] = format!("new-invalid-{failure}").into();
+            let (result, _) = mock_pack_update(
+                &storage,
+                &value,
+                |latest| match failure {
+                    "hash" => latest["sha256"] = "0".repeat(64).into(),
+                    "packId" => latest["packId"] = "different".into(),
+                    "generatedAt" => latest["generatedAt"] = "2026-11-07T00:00:00Z".into(),
+                    "url" => latest["url"] = "https://example.invalid/pack?identity=no".into(),
+                    _ => {}
+                },
+                |body, sig| {
+                    if failure == "signature" {
+                        sig.replace_range(..1, if sig.starts_with('0') { "1" } else { "0" });
+                    }
+                    if failure == "body" {
+                        body[0] ^= 1;
+                    }
+                },
+            );
+            assert!(result.is_err(), "{failure}");
+            assert_eq!(pack_database_counts(&storage), counts);
+            assert_eq!(storage.get_hotword_pack_settings().unwrap(), before);
+            assert_eq!(storage.list_hotword_items().unwrap(), before_items);
+            assert_eq!(storage.list_dynamic_sources().unwrap(), before_sources);
+        }
+        drop(storage);
+        let _ = std::fs::remove_file(db);
+    }
+
+    #[test]
+    fn signed_pack_database_error_rolls_back_source_items_and_settings() {
+        let db = path("signed-pack-rollback");
+        let _ = std::fs::remove_file(&db);
+        let storage = AppStorage::open(db.clone()).unwrap();
+        storage
+            .save_hotword_pack_url("https://example.invalid/latest.json")
+            .unwrap();
+        storage.lock_connection().unwrap().execute_batch("CREATE TRIGGER fail_pack BEFORE INSERT ON hotword_item_sources BEGIN SELECT RAISE(FAIL,'test failure'); END;").unwrap();
+        let before = storage.get_hotword_pack_settings().unwrap();
+        let (result, _) = mock_pack_update(&storage, &signed_pack_value(), |_| {}, |_, _| {});
+        assert!(result.is_err());
+        assert_eq!(pack_database_counts(&storage), (0, 0, 0));
+        assert_eq!(storage.get_hotword_pack_settings().unwrap(), before);
+        drop(storage);
+        let _ = std::fs::remove_file(db);
+    }
+
+    #[test]
+    fn signed_pack_flags_pinyin_conflicts_without_rewriting_and_accepts_all_readings() {
+        let db = path("signed-pack-pinyin");
+        let _ = std::fs::remove_file(&db);
+        let storage = AppStorage::open(db.clone()).unwrap();
+        storage
+            .save_hotword_pack_url("https://example.invalid/latest.json")
+            .unwrap();
+        let (&text, &readings) = crate::knowledge::exact_readings_by_text()
+            .iter()
+            .find(|(text, readings)| text.chars().count() <= 16 && readings.contains(','))
+            .expect("polyphonic frozen index fixture");
+        for reading in readings.split(',') {
+            assert!(pack_pinyin_warning(text, &normalize_pinyin(reading)).is_none());
+        }
+        let mut value = signed_pack_value();
+        value["entries"][0]["text"] = text.into();
+        value["entries"][0]["pinyin"] = "wrong".into();
+        value["entries"][0]["expiresAtMs"] = (PACK_NOW_MS + 123).into();
+        let (result, _) = mock_pack_update(&storage, &value, |_| {}, |_, _| {});
+        assert_eq!(result.unwrap().pinyin_conflict_count, 1);
+        let item = &storage.list_hotword_items().unwrap()[0];
+        assert_eq!(item.pinyin, "wrong");
+        assert_eq!(item.expires_at_ms, Some(PACK_NOW_MS + 123));
+        assert!(item.pinyin_warning.as_ref().unwrap().contains("冻结索引"));
+        assert_eq!(item.state, "review");
+        drop(storage);
+        let _ = std::fs::remove_file(db);
+    }
+
+    #[test]
+    fn signed_pack_streamed_size_limit_applies_without_content_length() {
+        let mut body = Vec::new();
+        extend_pack_body(&mut body, &vec![b'x'; MAX_FEED_BYTES / 2]).unwrap();
+        extend_pack_body(&mut body, &vec![b'x'; MAX_FEED_BYTES / 2]).unwrap();
+        assert_eq!(body.len(), MAX_FEED_BYTES);
+        assert!(extend_pack_body(&mut body, b"x")
+            .unwrap_err()
+            .contains("2 MiB"));
+        assert_eq!(body.len(), MAX_FEED_BYTES);
     }
 
     fn source(id: &str, source_type: &str) -> DynamicSourceInput {

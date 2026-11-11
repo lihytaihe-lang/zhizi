@@ -6,10 +6,10 @@
   },
   "formatVersion": 1,
   "author": "Agent Input Method",
-  "description": "深梅紫底、金色细边，樱花枝从右上角垂下轻摆，花瓣缓缓飘落；开启「减弱动态效果」时静止。",
+  "description": "深梅紫底、金色细边，樱枝沿候选条上沿横展，花瓣从枝头缓缓飘落；开启「减弱动态效果」时静止。",
   "candidateFont": {
     "family": "Kaiti SC",
-    "size": 17,
+    "size": 19,
     "weight": "medium"
   },
   "indexFont": {
@@ -52,14 +52,14 @@
   "capsuleCornerRadius": 14,
   "panelCornerRadius": 14,
   "edgeInsets": {
-    "top": 11,
+    "top": 31,
     "left": 13,
     "bottom": 11,
-    "right": 84
+    "right": 13
   },
   "material": "hudWindow",
   "minimumPanelSize": {
-    "width": 120,
+    "width": 300,
     "height": 60
   },
   "maximumPanelWidth": 760,
@@ -75,10 +75,10 @@
   "panelBorderWidth": 1,
   "shadowEnabled": true,
   "overflow": {
-    "top": 26,
+    "top": 44,
     "left": 0,
     "bottom": 0,
-    "right": 8
+    "right": 0
   },
   "decorations": [
     {
@@ -108,12 +108,12 @@
       "lifetime": 6.5,
       "fallSpeed": 15,
       "drift": -7,
-      "layer": "above",
+      "layer": "below",
       "region": {
-        "x": 0.62,
-        "y": 0.6,
-        "width": 0.36,
-        "height": 0.4
+        "x": 0.72,
+        "y": 0.95,
+        "width": 0.26,
+        "height": 0.05
       }
     },
     {
@@ -125,36 +125,25 @@
       "period": 10,
       "width": 0.16,
       "angle": 18,
-      "layer": "above"
+      "layer": "below"
     },
     {
       "type": "sprite",
-      "sheet": "sakura.png",
+      "sheet": "sakura-top.png",
       "frames": 1,
       "size": {
-        "width": 92,
-        "height": 102
+        "width": 300,
+        "height": 96
       },
       "anchor": {
         "x": 1,
         "y": 1
       },
       "offset": {
-        "x": 8,
-        "y": 26
+        "x": 0,
+        "y": 54
       },
-      "overflow": true,
-      "pivot": {
-        "x": 1,
-        "y": 1
-      },
-      "motion": [
-        {
-          "kind": "sway",
-          "degrees": 1.5,
-          "period": 6.5
-        }
-      ]
+      "overflow": true
     }
   ]
 }

@@ -9,6 +9,8 @@ pub mod learning;
 pub(crate) mod learning_session;
 pub mod decoder;
 pub(crate) mod fuzzy;
+#[cfg(test)]
+pub(crate) mod key_latency_profile;
 
 use index_cache::{Reader, Writer};
 use loader::{DictionaryData, Entry};

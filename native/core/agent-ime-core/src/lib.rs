@@ -1592,3 +1592,20 @@ mod ffi_tests {
         std::fs::remove_dir_all(root).unwrap();
     }
 }
+
+/// Test helper: background prewarm/index-cache threads may still be writing into a temp directory when a test ends,
+/// which makes a single `remove_dir_all` fail with "Directory not empty" (Q23). Retry for a few seconds.
+#[cfg(test)]
+pub(crate) fn remove_dir_all_settled(path: impl AsRef<std::path::Path>) {
+    let path = path.as_ref();
+    let mut last = None;
+    for _ in 0..250 {
+        match std::fs::remove_dir_all(path) {
+            Ok(()) => return,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return,
+            Err(error) => last = Some(error),
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    panic!("{path:?} still not removable after retries: {last:?}");
+}

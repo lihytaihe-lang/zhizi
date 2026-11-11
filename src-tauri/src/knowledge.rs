@@ -107,7 +107,7 @@ fn hash(value: &[u8]) -> String {
     format!("{:x}", Sha256::digest(value))
 }
 
-fn exact_readings_by_text() -> &'static BTreeMap<&'static str, &'static str> {
+pub(crate) fn exact_readings_by_text() -> &'static BTreeMap<&'static str, &'static str> {
     static READINGS: OnceLock<BTreeMap<&'static str, &'static str>> = OnceLock::new();
     READINGS.get_or_init(|| {
         include_str!("../../native/resources/Rime/agent_exact_readings.tsv")
@@ -432,7 +432,7 @@ impl AppStorage {
         now_ms: i64,
     ) -> Result<HotwordGenerationStageReport, String> {
         if output.len() > 256 * 1024 {
-            return Err("单次热词生成结果超过 256 KiB。".into());
+            return Err("单次个人词/术语候选生成结果超过 256 KiB。".into());
         }
         let (rows, invalid_count) = generated_hotword_rows(output);
         let missing_pinyin_count = rows
@@ -453,14 +453,14 @@ impl AppStorage {
         let mut connection = self.lock_connection()?;
         let transaction = connection
             .transaction()
-            .map_err(|error| format!("无法开始热词待审事务：{error}"))?;
+            .map_err(|error| format!("无法开始个人词/术语候选待审事务：{error}"))?;
         transaction
             .execute(
                 "INSERT INTO knowledge_sources
                  (id,name,source_type,authorized_scope,authorization,status,last_error,created_at_ms,updated_at_ms)
-                 VALUES (?1,'Owner 生成热词待审','local_path','managed-local://generated-hotword-review',
+                 VALUES (?1,'Owner 生成个人词/术语候选待审','local_path','managed-local://generated-hotword-review',
                          'owner explicit generation action','ready',NULL,?2,?2)
-                 ON CONFLICT(id) DO UPDATE SET status='ready',last_error=NULL,updated_at_ms=excluded.updated_at_ms",
+                 ON CONFLICT(id) DO UPDATE SET name=excluded.name,status='ready',last_error=NULL,updated_at_ms=excluded.updated_at_ms",
                 params![source_id, now_ms],
             )
             .map_err(|error| format!("无法复用知识层待审来源：{error}"))?;
@@ -478,14 +478,14 @@ impl AppStorage {
                     now_ms
                 ],
             )
-            .map_err(|error| format!("无法记录热词生成批次：{error}"))?;
+            .map_err(|error| format!("无法记录个人词/术语候选生成批次：{error}"))?;
         transaction
             .execute(
                 "INSERT INTO knowledge_chunks (id,document_id,ordinal,content_hash,content)
                  VALUES (?1,?2,0,?3,?4)",
                 params![&chunk_id, &document_id, hash(output.as_bytes()), output],
             )
-            .map_err(|error| format!("无法记录热词生成内容：{error}"))?;
+            .map_err(|error| format!("无法记录个人词/术语候选生成内容：{error}"))?;
         for (text, pinyin, definition) in &rows {
             let term_id = hash(format!("{source_id}:{text}").as_bytes());
             transaction
@@ -501,11 +501,11 @@ impl AppStorage {
                        last_verified_ms=excluded.last_verified_ms",
                     params![term_id, source_id, &chunk_id, text, pinyin, definition, now_ms],
                 )
-                .map_err(|error| format!("无法写入热词审核队列：{error}"))?;
+                .map_err(|error| format!("无法写入个人词/术语候选审核队列：{error}"))?;
         }
         transaction
             .commit()
-            .map_err(|error| format!("无法提交热词待审批次：{error}"))?;
+            .map_err(|error| format!("无法提交个人词/术语候选待审批次：{error}"))?;
         Ok(HotwordGenerationStageReport {
             staged_count: rows.len(),
             invalid_count,
@@ -1012,6 +1012,24 @@ impl AppStorage {
         &self,
         layer: &'static str,
     ) -> Result<Vec<LexiconSnapshotEntry>, String> {
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|elapsed| elapsed.as_millis() as i64)
+            .unwrap_or(0);
+        // Pack hotwords are time-limited: an approved one leaves the snapshot when its
+        // pack entry expires, or when a newer pack no longer carries it.
+        let live_pack_words: std::collections::BTreeSet<(String, String)> = {
+            let connection = self.lock_connection()?;
+            let mut statement = connection
+                .prepare("SELECT text,pinyin FROM hotword_items WHERE expires_at_ms IS NOT NULL AND expires_at_ms > ?1")
+                .map_err(|error| format!("无法读取词包有效期：{error}"))?;
+            let rows = statement
+                .query_map(params![now_ms], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))
+                .map_err(|error| format!("无法读取词包有效期：{error}"))?
+                .collect::<Result<_, _>>()
+                .map_err(|error| format!("无法解析词包有效期：{error}"))?;
+            rows
+        };
         Ok(self
             .list_knowledge_terms()?
             .into_iter()
@@ -1020,6 +1038,8 @@ impl AppStorage {
                     && !term.pinyin.is_empty()
                     && term.text.chars().count() <= 32
                     && term.candidate_layer == layer
+                    && (term.kind != "pack_hotword"
+                        || live_pack_words.contains(&(term.text.clone(), term.pinyin.clone())))
             })
             .map(|term| LexiconSnapshotEntry {
                 id: format!("knowledge-{}", term.id),
@@ -1031,7 +1051,11 @@ impl AppStorage {
                 sources: vec![LexiconSnapshotSource {
                     source_kind: "knowledge".into(),
                     source: format!("{}:{}", term.source_name, term.source_path),
-                    license: "private-user-data".into(),
+                    license: if term.kind == "pack_hotword" {
+                        "signed-hotword-pack".into()
+                    } else {
+                        "private-user-data".into()
+                    },
                     confidence_millis: term.confidence_millis,
                 }],
                 // Second-row terms stay unfixed and unweighted-up: routing a term there
@@ -1188,6 +1212,34 @@ mod tests {
             .delete_knowledge_source("source-b", true, 8)
             .unwrap());
         assert_eq!(indexed_chunk_counts(&storage), (0, 0));
+        drop(storage);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn regenerating_personal_candidates_renames_legacy_review_source() {
+        let root = std::env::temp_dir().join(format!(
+            "agent-personal-candidate-label-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let storage = AppStorage::open(root.join("db.sqlite3")).unwrap();
+        storage
+            .stage_generated_hotword_candidates("测试词\tce shi ci\t仅测试", 10)
+            .unwrap();
+        storage.lock_connection().unwrap().execute(
+            "UPDATE knowledge_sources SET name='Owner 生成热词待审' WHERE id='generated-hotword-review'", []
+        ).unwrap();
+        storage
+            .stage_generated_hotword_candidates("测试词\tce shi ci\t仅测试", 11)
+            .unwrap();
+        let sources = storage.list_knowledge_sources().unwrap();
+        let source = sources
+            .iter()
+            .find(|source| source.id == "generated-hotword-review")
+            .unwrap();
+        assert_eq!(source.name, "Owner 生成个人词/术语候选待审");
         drop(storage);
         let _ = fs::remove_dir_all(root);
     }

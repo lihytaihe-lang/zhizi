@@ -982,27 +982,10 @@ final class HostSupportTests: XCTestCase {
             return [value.redComponent, value.greenComponent, value.blueComponent, value.alphaComponent]
         }
 
-        for identifier in [CandidateThemeIdentifier.xuanmo] {
-            let background = try XCTUnwrap(CandidateTheme.resolve(identifier).panelBackground)
-            XCTAssertEqual(
-                try rgba(background, appearance: .aqua),
-                try rgba(background, appearance: .darkAqua)
-            )
-            var renderedBackgrounds: [[CGFloat]] = []
-            for appearance in [NSAppearance.Name.aqua, .darkAqua] {
-                NSAppearance(named: appearance)?.performAsCurrentDrawingAppearance {
-                    let panel = CandidatePanelController(
-                        presentationEnabled: false,
-                        theme: CandidateTheme.resolve(identifier)
-                    )
-                    if let layerBackground = panel.panelLayerBackgroundForTesting,
-                       let components = try? rgba(layerBackground, appearance: appearance) {
-                        renderedBackgrounds.append(components)
-                    }
-                }
-            }
-            XCTAssertEqual(renderedBackgrounds.count, 2)
-            XCTAssertEqual(renderedBackgrounds[0], renderedBackgrounds[1])
+        // The ink skin is a fixed parchment scroll: its text colours do not follow the system appearance.
+        let ink = CandidateTheme.resolve(.xuanmo)
+        for colour in [ink.candidateColor, ink.secondaryCandidateColor, ink.highlightedCandidateColor, ink.highlightFillColor] {
+            XCTAssertEqual(try rgba(colour, appearance: .aqua), try rgba(colour, appearance: .darkAqua))
         }
         // The default skin follows the system appearance: no fixed background, an accent that differs between light and dark.
         XCTAssertNil(CandidateTheme.system.panelBackground)
@@ -1015,9 +998,10 @@ final class HostSupportTests: XCTestCase {
             presentationEnabled: false,
             theme: .xuanmo
         )
-        XCTAssertNotNil(xuanmoPanel.panelBackgroundForTesting)
-        XCTAssertEqual(xuanmoPanel.panelBorderWidthForTesting, 0.5)
-        XCTAssertTrue(xuanmoPanel.panelHasShadowForTesting)
+        // The scroll frame is a decoration; the panel itself draws no card, border or shadow.
+        XCTAssertNil(xuanmoPanel.panelBackgroundForTesting)
+        XCTAssertNil(xuanmoPanel.panelBorderWidthForTesting)
+        XCTAssertFalse(xuanmoPanel.panelHasShadowForTesting)
     }
 
     @MainActor
@@ -1037,13 +1021,11 @@ final class HostSupportTests: XCTestCase {
         XCTAssertTrue(system.shadowEnabled)
         XCTAssertGreaterThan(system.highlightFillColor.alphaComponent, 0.05, "the first candidate sits on a soft plate; a bare coloured word looked odd (owner 2026-10-15)")
 
-        // The dark one: a fixed ink card with a hairline border, the same layout and mark.
-        let ink = CandidateTheme.xuanmo
-        XCTAssertEqual(ink.rowHeight, system.rowHeight)
-        XCTAssertEqual(ink.edgeInsets.right, 46)
-        XCTAssertNotNil(ink.panelBackground)
-        XCTAssertEqual(ink.panelBorderWidth, 0.5)
-        XCTAssertTrue(ink.preeditRow)
+        // The ink skin: a scroll frame (nine-slice decoration) instead of a drawn card; keeps the preedit row.
+        let inkSkin = CandidateTheme.xuanmo
+        XCTAssertNil(inkSkin.panelBackground)
+        XCTAssertTrue(inkSkin.decorations.contains { if case .frame = $0 { return true } else { return false } })
+        XCTAssertTrue(inkSkin.preeditRow)
     }
 
     @MainActor

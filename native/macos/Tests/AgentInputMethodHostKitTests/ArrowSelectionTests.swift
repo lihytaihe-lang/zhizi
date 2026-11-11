@@ -33,13 +33,20 @@ final class ArrowSelectionTests: XCTestCase {
     func testArrowThenSpaceOnAPartialCandidateKeepsTheRestOfThePinyin() throws {
         let directories = try RealZhixuProcessFixture.directories.get()
         var deliveryID: UInt64 = 0xA0_0000
-        for (input, downs, rest) in [("zenmeyang", 1, "yang"), ("wobujiaode", 1, "jiao de"), ("woxiangqukankan", 1, "qu kan kan")] {
+        for (input, downs, rest) in [("zenmeyang", 1, "yang"), ("wobujiaode", 1, "jiao de"), ("woxiangqukankan", 1, "kan kan")] {
             let session = try XCTUnwrap(CoreSession(sharedDirectory: directories.shared,
                 userDirectory: directories.user, appIdentifier: "com.agentinputlayer.arrow-\(input)"))
             defer { session.close() }
             var view: IMEViewModel?
             for c in input { view = session.process(kind: .text, text: String(c), security: .nonSecure) }
+            let whole = try XCTUnwrap(view).candidates.first?.text.count ?? 0
             for _ in 0..<downs { view = session.process(kind: .down, security: .nonSecure) }
+            // Since the phrase ladder (0.3.30) the second row can be another
+            // whole-sentence alternate; keep arrowing until a true prefix is highlighted.
+            for _ in 0..<5 {
+                guard let current = view, current.candidates[current.highlightedIndex].text.count >= whole else { break }
+                view = session.process(kind: .down, security: .nonSecure)
+            }
             let shown = try XCTUnwrap(view)
             let picked = shown.candidates[shown.highlightedIndex].text
             deliveryID += 1

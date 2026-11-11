@@ -15,6 +15,39 @@ final class CandidatePanelStyleTests: XCTestCase {
         texts.map { IMECandidate(text: $0, comment: "", readingKey: "x") }
     }
 
+    func testEveryBuiltInPanelReservesTrailingInsetWithFiveCandidates() throws {
+        try assertBuiltInPanelsReserveTrailingInset(candidateCount: 5)
+    }
+
+    func testEveryBuiltInPanelReservesTrailingInsetWithTwoCandidates() throws {
+        try assertBuiltInPanelsReserveTrailingInset(candidateCount: 2)
+    }
+
+    private func assertBuiltInPanelsReserveTrailingInset(candidateCount: Int) throws {
+        let texts = Array(["我对比", "我对你", "我对", "我队", "我"].prefix(candidateCount))
+        for identifier in CandidateSkinCatalog.builtInIdentifiers {
+            let theme = CandidateSkinCatalog.theme(for: identifier)
+            let panel = CandidatePanelController(presentationEnabled: true, theme: theme)
+            panel.invisibleForTesting = true
+            defer { panel.hide() }
+            panel.update(candidates: candidates(texts), highlighted: 0, preedit: "wo dui bi", anchor: anchor, secure: false)
+            let label = "\(identifier.rawValue), \(candidateCount) candidates"
+            let frames = panel.firstRowCandidateFramesForTesting
+            XCTAssertEqual(frames.count, candidateCount, label)
+            let trailing = try XCTUnwrap(frames.last, label).maxX
+            // Check the card edge as well: transparent overflow is decoration space, not text padding.
+            let cardRight = panel.frame.width - theme.overflowInsets.right
+            XCTAssertLessThanOrEqual(trailing + theme.edgeInsets.right, cardRight + 0.01, label)
+            XCTAssertLessThanOrEqual(trailing + theme.edgeInsets.right, panel.frame.width + 0.01, label)
+            if theme.preeditRow {
+                let separator = try XCTUnwrap(panel.preeditSeparatorFrameForTesting, label)
+                XCTAssertGreaterThanOrEqual(separator.minX, theme.overflowInsets.left + theme.edgeInsets.left - 0.01, label)
+                XCTAssertLessThanOrEqual(separator.maxX + theme.edgeInsets.right, cardRight + 0.01, label)
+                XCTAssertLessThanOrEqual(separator.maxX, panel.frame.width + 0.01, label)
+            }
+        }
+    }
+
     func testPinyinRowPrintsSyllablesWithSpacesNotApostrophes() {
         XCTAssertEqual(CandidatePanelController.displayedPinyin("ni'hao", spaced: true), "ni hao")
         XCTAssertEqual(CandidatePanelController.displayedPinyin("ni'hao", spaced: false), "ni'hao")

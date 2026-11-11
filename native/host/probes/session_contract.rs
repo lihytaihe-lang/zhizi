@@ -291,7 +291,7 @@ fn session_contract_empty_suite_never_passes() { compare(&[], &[]); }
     drop(session);
     assert!(LearningStore::load(&directory, now).entries().is_empty());
     assert_eq!(trace(&mut build(), "type n\ntype i\n", 3).pop().unwrap().visible.candidates, baseline);
-    std::fs::remove_dir_all(directory).unwrap();
+    crate::remove_dir_all_settled(directory);
 }
 
 // The legacy Rime session (A side) retired with the engine: Y3 now re-runs the

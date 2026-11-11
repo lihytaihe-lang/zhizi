@@ -74,8 +74,8 @@ skin-example/
 | `shadowEnabled` | 否 | 是否启用面板阴影。 | 布尔值 |
 | `preeditRow` | 否 | 是否在候选上方显示正在输入的拼音。 | 布尔值 |
 | `indexSuffix` | 否 | 附在候选序号后的后缀。 | `""`, `"."` |
-| `decorations` | 否 | 数据式装饰列表，无需携带代码。 | 数组 1–4; `spriteDecoration` / `twinkleDecoration` / `petalsDecoration` / `gradientDecoration` / `shimmerDecoration` / `shootingStarDecoration` / `frameDecoration` |
-| `overflow` | 否 | 面板四周额外透明留白；装饰内同名布尔字段控制是否越出卡片绘制。 | {top: 0–64, left: 0–64, bottom: 0–64, right: 0–64} |
+| `decorations` | 否 | 数据式装饰列表，无需携带代码。 | 数组 1–8; `spriteDecoration` / `twinkleDecoration` / `petalsDecoration` / `gradientDecoration` / `shimmerDecoration` / `shootingStarDecoration` / `frameDecoration` |
+| `overflow` | 否 | 面板四周额外透明留白；装饰内同名布尔字段控制是否越出卡片绘制。 | {top: 0–120, left: 0–120, bottom: 0–120, right: 0–120} |
 | `slotColors` | 否 | 首行五个未高亮候选及其序号的独立颜色；导入仅接受 light/dark 对象。 | 数组 5–5; `lightDarkColor`（schema 也允许语义色，但导入代码不接受） |
 
 ## 颜色、字体与复合值
@@ -136,9 +136,9 @@ skin-example/
 
 PNG 文件名必须匹配 `^[a-z0-9][a-z0-9._-]{0,62}\.png$`：文件名主体 1–63 个字符，以小写字母或数字开头，后续仅小写字母、数字、点、下划线、连字符，扩展名为小写 `.png`。素材必须是真正的单图 PNG；所有图片都必须被 `decorations` 引用，引用的图片也必须存在。
 
-整张图片最多 4096 × 1536 像素，宽度必须能被精灵 `frames` 整除，且每格至少宽 1 像素。普通精灵是一条横向等分的帧带；单张静态图片使用 `frames: 1`。动作序列使用多行等宽格子，每行一个动作，从图片顶部第 0 行开始计数。各格宽高比必须与显示 `size` 对应：解析器按宽度/列数和 `size` 比例推导行高，推导后的整图高度误差不得超过图片高度的 3%，且所有 `row` 必须存在。显示宽高各为 1–256 点，不能把图片像素数直接当作显示尺寸。
+整张图片最多 4096 × 1536 像素，宽度必须能被精灵 `frames` 整除，且每格至少宽 1 像素。普通精灵是一条横向等分的帧带；单张静态图片使用 `frames: 1`。动作序列使用多行等宽格子，每行一个动作，从图片顶部第 0 行开始计数。各格宽高比必须与显示 `size` 对应：解析器按宽度/列数和 `size` 比例推导行高，推导后的整图高度误差不得超过图片高度的 3%，且所有 `row` 必须存在。显示宽度为 1–300 点、高度为 1–256 点，不能把图片像素数直接当作显示尺寸。
 
-每个动作 `frames` 为 1 到精灵表列数，`fps` 为 1–30，`seconds` 为 0.2–30。整个序列最多 16 段，所有段的 `seconds × fps` 之和不得超过 1200；`clips` 与 `travel` 不能同时写，`zone` 仅用于 `clips`。开启系统「减弱动态效果」时，精灵停止运动并使用 `staticFrame`（序列使用图片第 0 行）。
+每个动作 `frames` 为 1 到精灵表列数，`fps` 为 1–30，`seconds` 为 0.2–30。整个序列最多 16 段，所有段的 `seconds × fps` 之和不得超过 1200；`clips` 与 `travel` 不能同时写，`zone` 仅用于 `clips`。开启系统「减弱动态效果」时，精灵停止运动并使用 `staticFrame`（序列使用图片第 0 行），保留第一个动作的 `flip` 朝向。单个单帧动作设为 `flip: true` 即可镜像静态图片，无需另一张 PNG。
 
 ### 柴犬实例
 
@@ -283,7 +283,7 @@ python3 scripts/tools/build_sprite_sheet.py \
 | `sheet` | 是 | 引用包内 PNG 文件名。 | `^[a-z0-9][a-z0-9._-]{0,62}\.png$` |
 | `frames` | 是 | 精灵表列数；clip 内表示该动作使用的前几列。 | 整数 1–24 |
 | `fps` | 否 | 每秒播放帧数，省略时为 8；clip 的默认值独立为 8。 | 1–30 |
-| `size` | 是 | 整格显示尺寸，单位为点；动作序列必须与图片格子宽高比匹配。 | {width: 1–256, height: 1–256} |
+| `size` | 是 | 整格显示尺寸，单位为点；动作序列必须与图片格子宽高比匹配。 | {width: 1–300, height: 1–256} |
 | `anchor` | 否 | 在卡片可用空间内的归一化位置，(0,0) 为左下角，默认 (0,0)。 | {x: 0–1, y: 0–1} |
 | `offset` | 否 | 位置偏移，单位为点，默认 (0,0)。 | {x: -256–256, y: -256–256} |
 | `travel` | 否 | 横向循环位移；不能与 clips 同时使用。 | {from: -1–2, to: -1–2, duration: 1–120} |
@@ -418,7 +418,7 @@ python3 scripts/tools/build_sprite_sheet.py \
 | 项目 | 导入限制 |
 |---|---|
 | 目录内容 | 平面目录，仅普通 `skin.json` 与合规 PNG；不允许子目录、符号链接、特殊文件或额外说明文件 |
-| 文件数量 | 最多 8 个（含 `skin.json`）；装饰最多 4 项，所有 PNG 都须引用 |
+| 文件数量 | 最多 8 个（含 `skin.json`）；装饰最多 8 项，所有 PNG 都须引用 |
 | 总大小 | 最多 512 KiB（524288 字节，即窗口提示的 512 KB），包含 JSON 和所有 PNG |
 | JSON 大小 | 最多 256 KiB（262144 字节） |
 | 单个 PNG | 外部文件读取上限为 512 KiB，且仍受整个包 512 KiB 的约束 |

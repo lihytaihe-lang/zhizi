@@ -27,7 +27,7 @@ fn main() {
         let raw = event["pinyin"].as_str().unwrap_or_default();
         let chosen = event["selectedText"].as_str().unwrap_or_default();
         let context = event["precedingText"].as_str().unwrap_or_default();
-        if raw.len() < 4 || chosen.is_empty() || !raw.bytes().all(|b| b.is_ascii_lowercase()) {
+        if raw.len() < std::env::var("ZHIZI_MIN_KEYS").ok().and_then(|v| v.parse().ok()).unwrap_or(4) || chosen.is_empty() || !raw.bytes().all(|b| b.is_ascii_lowercase()) {
             continue;
         }
         if !seen.insert((raw.to_string(), context.to_string(), chosen.to_string())) {
@@ -40,7 +40,8 @@ fn main() {
         for c in raw.chars() {
             view = host.process(Key::Text(c.to_string()), 0, false);
         }
-        for _ in 0..40 {
+        let wait_polls: u32 = std::env::var("ZHIZI_WAIT_MS").ok().and_then(|v| v.parse::<u32>().ok()).map(|ms| ms / 5).unwrap_or(40);
+        for _ in 0..wait_polls {
             if host.model_observation().outcome != "pending" {
                 break;
             }
@@ -53,12 +54,22 @@ fn main() {
         // A composition trace belongs to this input only.
         let now = view.candidates.first().map(|c| c.text.clone()).unwrap_or_default();
         let outcome = host.model_observation().outcome;
+        let model_ms = host.model_observation().latency_ms;
         let trace = host.last_composition().clone();
+        let group = host.last_group().clone();
+        let model_ready = !trace.scores.is_empty() || !group.scores.is_empty();
+        let mut all: Vec<String> = view.candidates.iter().map(|c| c.text.clone()).collect();
+        for following in host.peek_following_pages(60) {
+            all.extend(following.text.split('\t').filter(|t| !t.is_empty()).map(str::to_string));
+        }
+        let rank_all = all.iter().position(|t| t == chosen).map(|i| i as i64).unwrap_or(-1);
         let page: Vec<String> = view.candidates.iter().take(5).map(|c| format!("{}|{}", c.text, c.comment)).collect();
         host.process(Key::Escape, 0, false);
         let record = serde_json::json!({
             "raw": raw, "context": context, "shown": shown, "now": now, "chosen": chosen, "outcome": outcome,
-            "page": page, "texts": trace.texts, "edits": trace.edits, "scores": trace.scores,
+            "gtexts": group.texts, "gscores": group.scores, "ghomo": group.homophone, "page": page, "texts": trace.texts, "edits": trace.edits, "scores": trace.scores,
+            "candidates": all.iter().take(60).collect::<Vec<_>>(), "rank_all": rank_all,
+            "model_ready": model_ready, "model_ms": model_ms,
         });
         writeln!(output, "{record}").unwrap();
     }

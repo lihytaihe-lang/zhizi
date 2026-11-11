@@ -22,14 +22,14 @@ use agent_ime_core::{
     AimCandidate, AimKeyEvent, AimResult, AimSession, aim_result_free,
     aim_session_composition_alternatives, aim_session_composition_edits, aim_session_composition_guessed,
     aim_session_context_complete_mask,
-    aim_session_context_group_mask, aim_session_create, aim_session_destroy,
+    aim_session_context_group_mask, aim_session_create, aim_session_current_page, aim_session_destroy,
     aim_session_lead_with_composition, aim_session_offer_composition, aim_session_page_texts,
     aim_session_peek_following_pages,
     aim_session_process,
     aim_session_reorder_context_candidates, aim_session_set_mode, aim_session_set_preceding_text,
     aim_session_set_candidate_context, aim_session_set_typo_correction, aim_session_set_learning, aim_session_set_fuzzy,
 };
-use ranking::{COMPOSITION_COMMENT, COMPOSITION_OFFER_COMMENT, Done, Job, Worker};
+use ranking::{Done, Job, Worker};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -158,6 +158,14 @@ pub struct CompositionTrace {
     pub scores: Vec<f64>,
 }
 
+/// The C2/C1 group the model scored for the last key (local evaluation only).
+#[derive(Clone, Debug, Default)]
+pub struct GroupTrace {
+    pub texts: Vec<String>,
+    pub scores: Vec<f64>,
+    pub homophone: Vec<bool>,
+}
+
 pub struct Host {
     session: *mut AimSession,
     recent: String,
@@ -166,6 +174,7 @@ pub struct Host {
     pending: Option<Pending>,
     observation: ModelObservation,
     last_composition: CompositionTrace,
+    last_group: GroupTrace,
     ablation: Ablation,
     recorder: Option<quality::Recorder>,
     app_id: String,
@@ -206,6 +215,7 @@ impl Host {
             pending: None,
             observation: ModelObservation::default(),
             last_composition: CompositionTrace::default(),
+            last_group: GroupTrace::default(),
             ablation: Ablation::None,
             recorder: None,
             app_id: config.app_id.clone(),
@@ -269,6 +279,11 @@ impl Host {
         &self.last_composition
     }
 
+    /// The last C2/C1 group's texts, scores and homophone flags (local evaluation only).
+    pub fn last_group(&self) -> &GroupTrace {
+        &self.last_group
+    }
+
     fn composition_edits(&mut self) -> Vec<f64> {
         let mut buffer = vec![0u8; 256];
         let written = unsafe { aim_session_composition_edits(self.session, buffer.as_mut_ptr(), buffer.len()) };
@@ -325,6 +340,20 @@ impl Host {
         view
     }
 
+    /// Reads the page after a model decision, preserving the key event's result.
+    fn current_page(&mut self, original: View) -> View {
+        let mut result = std::mem::MaybeUninit::<AimResult>::uninit();
+        if unsafe { aim_session_current_page(self.session, result.as_mut_ptr()) } != 0 {
+            return original;
+        }
+        let mut result = unsafe { result.assume_init() };
+        let mut view = view_from(&result);
+        unsafe { aim_result_free(&mut result) };
+        view.consumed = original.consumed;
+        view.commit = original.commit;
+        view
+    }
+
     fn after_core(&mut self, key: &Key, view: View, context: String, secure: bool) -> View {
         if !view.commit.is_empty() && !secure {
             self.note_committed(&view.commit);
@@ -357,6 +386,7 @@ impl Host {
 
     fn rank(&mut self, view: View, context: String) -> View {
         self.last_composition = CompositionTrace::default();
+        self.last_group = GroupTrace::default();
         if self.worker.is_none() {
             self.observation = ModelObservation { outcome: "unavailable", ..Default::default() };
             return view;
@@ -457,7 +487,7 @@ impl Host {
             Ablation::JoinOnly => done.group_scores = None,
         }
         let latency_ms = Some((done.elapsed.as_secs_f64() * 100_000.0).round() / 100.0);
-        let mut view = pending.view;
+        let view = pending.view;
         let mut offer: Option<String> = None;
         // C3: a whole-reading composition that clearly beats the decoder's first,
         // scored as P(text | context) x P(keys | text): the model's log probability
@@ -475,22 +505,13 @@ impl Host {
             if let Some(best) = ranking::composition_lead(&pending.composition, scores, &edits, pending.guessed) {
                 let text = &pending.composition[best];
                 if unsafe { aim_session_lead_with_composition(self.session, text.as_ptr(), text.len()) } == 0 {
-                    let lead = Candidate { text: text.clone(), comment: COMPOSITION_COMMENT.into() };
-                    // A three-letter English word in the last slot (mac, key, env) keeps it.
-                    let english = view.candidates.get(4).filter(|c| c.comment == "英文 · 原样" && c.text.len() == 3).cloned();
-                    view.candidates = std::iter::once(lead)
-                        .chain(view.candidates.into_iter().filter(|c| &c.text != text && Some(c) != english.as_ref()))
-                        .take(if english.is_some() { 4 } else { 5 })
-                        .chain(english.clone())
-                        .collect();
-                    view.highlighted = 0;
                     self.observation = ModelObservation {
                         outcome: "composed",
                         group_size: pending.composition.len(),
                         latency_ms,
                         late,
                     };
-                    return view;
+                    return self.current_page(view);
                 }
             }
         }
@@ -500,6 +521,7 @@ impl Host {
             return self.offer_composition(view, offer);
         };
         let texts: Vec<String> = pending.slots.iter().map(|&slot| view.candidates[slot].text.clone()).collect();
+        self.last_group = GroupTrace { texts: texts.clone(), scores: scores.clone(), homophone: pending.homophone.clone() };
         let group_order = ranking::group_order(&texts, &scores, &pending.homophone);
         let mut order: Vec<usize> = (0..view.candidates.len()).collect();
         for (rank, &slot) in pending.slots.iter().enumerate() {
@@ -512,14 +534,14 @@ impl Host {
             self.observation = ModelObservation { outcome: "unchanged", group_size: pending.slots.len(), latency_ms, late };
             return self.offer_composition(view, offer);
         }
-        view.candidates = order.iter().map(|&i| view.candidates[i].clone()).collect();
+        let view = self.current_page(view);
         self.observation = ModelObservation { outcome: "reordered", group_size: pending.slots.len(), latency_ms, late };
         self.offer_composition(view, offer)
     }
 
     /// No composition leads: the best one still takes the last first-page slot when it
     /// is close (`ranking::composition_offer`), as the core's own page has it.
-    fn offer_composition(&mut self, mut view: View, offer: Option<String>) -> View {
+    fn offer_composition(&mut self, view: View, offer: Option<String>) -> View {
         let Some(text) = offer else { return view };
         if view.page != 0 || view.candidates.iter().take(5).any(|candidate| candidate.text == text) {
             return view;
@@ -527,10 +549,7 @@ impl Host {
         if unsafe { aim_session_offer_composition(self.session, text.as_ptr(), text.len()) } != 0 {
             return view;
         }
-        let slot = 4.min(view.candidates.len());
-        view.candidates.insert(slot, Candidate { text, comment: COMPOSITION_OFFER_COMMENT.into() });
-        view.candidates.truncate(5);
-        view
+        self.current_page(view)
     }
 
     /// The candidates of the next `pages` pages without moving the core's page (the
@@ -682,6 +701,7 @@ mod context_tests {
             pending: None,
             observation: ModelObservation::default(),
             last_composition: CompositionTrace::default(),
+            last_group: GroupTrace::default(),
             ablation: Ablation::None,
             recorder: None,
             app_id: String::new(),
@@ -704,7 +724,9 @@ mod context_tests {
 mod page_texts_tests {
     use super::*;
 
-    /// The same minimal tables the core FFI tests deploy: enough for `ni` → 你.
+    static SESSIONS: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// Small, public test words for page reads and forced model decisions.
     fn minimal_directories(name: &str) -> (PathBuf, PathBuf, PathBuf) {
         let root = std::env::temp_dir().join(format!(
             "zhizi-host-page-{name}-{}",
@@ -722,7 +744,13 @@ mod page_texts_tests {
         .unwrap();
         std::fs::write(
             shared.join("pinyin_simp.dict.yaml"),
-            "---\nname: pinyin_simp\nsort: by_weight\n...\n你\tni\t100\n好\thao\t80\n",
+            concat!(
+                "---\nname: pinyin_simp\nsort: by_weight\n...\n你\tni\t100\n好\thao\t80\n",
+                "在\tzai\t1000\n再\tzai\t900\n等\tdeng\t1000\n我\two\t1000\n一下\tyi xia\t1000\n",
+                "泥\tni\t90\n拟\tni\t80\n逆\tni\t70\n腻\tni\t60\n",
+                "跑\tpao\t1000\n泡\tpao\t900\n抛\tpao\t800\n炮\tpao\t700\n",
+                "到\tdao\t1000\n道\tdao\t900\n发\tfa\t1000\n法\tfa\t900\n",
+            ),
         )
         .unwrap();
         (root, shared, user)
@@ -730,6 +758,7 @@ mod page_texts_tests {
 
     #[test]
     fn core_page_texts_is_empty_then_matches_the_process_page() {
+        let _serial = SESSIONS.lock().unwrap_or_else(|error| error.into_inner());
         let (root, shared, user) = minimal_directories("texts");
         let mut host = Host::open(&HostConfig {
             shared_dir: shared,
@@ -747,5 +776,157 @@ mod page_texts_tests {
         assert_eq!(&core[..count], &shown[..count], "core={core:?} shown={shown:?}");
         drop(host);
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    fn with_input(name: &str, input: &str, check: impl FnOnce(&mut Host, View)) {
+        let _serial = SESSIONS.lock().unwrap_or_else(|error| error.into_inner());
+        let (root, shared, user) = minimal_directories(name);
+        let mut host = Host::open(&HostConfig {
+            shared_dir: shared,
+            user_dir: user,
+            app_id: format!("zhizi.page-{name}-test"),
+        }).expect("open");
+        host.set_context("现在这个");
+        let mut view = View::default();
+        for character in input.chars() {
+            view = host.process(Key::Text(character.to_string()), 0, false);
+        }
+        assert!(!view.candidates.is_empty(), "{input}");
+        check(&mut host, view);
+        drop(host);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    fn apply_scores(host: &mut Host, view: View, preferred: Option<(&str, f64)>, group_first: Option<usize>) -> View {
+        let mask = unsafe { aim_session_context_complete_mask(host.session) | aim_session_context_group_mask(host.session) };
+        let homophone_mask = unsafe { aim_session_context_group_mask(host.session) };
+        let slots: Vec<usize> = (0..view.candidates.len()).filter(|i| mask & (1 << i) != 0).collect();
+        let homophone = slots.iter().map(|i| homophone_mask & (1 << i) != 0).collect();
+        let composition: Vec<String> = std::iter::once(view.candidates[0].text.clone())
+            .chain(host.composition_alternatives()).collect();
+        let composition_scores = preferred.map(|(text, margin)| {
+            assert!(composition.iter().skip(1).any(|candidate| candidate == text), "{composition:?}");
+            composition.iter().map(|candidate| if candidate == text { 0.0 } else { -margin }).collect()
+        });
+        let group_scores = group_first.map(|first| {
+            assert!(slots.len() >= 2, "{slots:?}");
+            (0..slots.len()).map(|index| if index == first { 0.0 } else { -400.0 }).collect()
+        });
+        let pending = Pending {
+            generation: host.generation,
+            view,
+            slots,
+            homophone,
+            composition,
+            edits: host.composition_edits(),
+            guessed: unsafe { aim_session_composition_guessed(host.session) } != 0,
+        };
+        host.apply_ranking(pending, Done {
+            generation: host.generation,
+            composition_scores,
+            group_scores,
+            elapsed: Duration::from_millis(1),
+        }, false)
+    }
+
+    fn assert_core_page(host: &Host, view: &View) {
+        let shown: Vec<_> = view.candidates.iter().map(|candidate| candidate.text.clone()).collect();
+        assert_eq!(shown, host.core_page_texts());
+        let mut result = AimResult::default();
+        assert_eq!(unsafe { agent_ime_core::aim_session_current_page(host.session, &mut result) }, 0);
+        let core = view_from(&result);
+        unsafe { aim_result_free(&mut result) };
+        assert_eq!(view.candidates, core.candidates);
+        assert_eq!(view.preedit, core.preedit);
+        assert_eq!(view.cursor_utf8, core.cursor_utf8);
+        assert_eq!(view.highlighted, core.highlighted);
+        assert_eq!(view.page, core.page);
+        assert_eq!(view.is_last_page, core.is_last_page);
+        assert_eq!(view.english_mode, core.english_mode);
+        assert!(view.consumed, "reading the page preserves the consumed key");
+    }
+
+    #[test]
+    fn model_led_sentence_matches_the_core_page() {
+        with_input("lead", "zaidengwoyixia", |host, view| {
+            let view = apply_scores(host, view, Some(("再等我一下", 40.0)), None);
+            assert_eq!(host.observation.outcome, "composed");
+            assert_eq!(view.candidates[0].text, "再等我一下");
+            assert_eq!(view.candidates[0].comment, "备选 · 顺手·知序");
+            assert_core_page(host, &view);
+        });
+    }
+
+    #[test]
+    fn offered_sentence_matches_the_core_page() {
+        with_input("offer", "paodaofa", |host, mut view| {
+            let target = host.composition_alternatives().into_iter()
+                .find(|text| !view.candidates.iter().any(|candidate| candidate.text == *text))
+                .expect("a composed alternative outside the page");
+            view.preedit = "stale".into();
+            for candidate in &mut view.candidates { candidate.comment = "stale".into(); }
+            let view = apply_scores(host, view, Some((&target, 3.0)), None);
+            assert_eq!(host.observation.outcome, "no_group");
+            assert_ne!(view.candidates[0].text, target);
+            assert_eq!(view.candidates.last().unwrap().text, target);
+            assert_eq!(view.candidates.last().unwrap().comment, "整句 · 备选");
+            assert_core_page(host, &view);
+        });
+    }
+
+    #[test]
+    fn reordered_candidates_match_the_core_page() {
+        with_input("reorder", "ni", |host, mut view| {
+            let preferred = view.candidates[1].text.clone();
+            view.preedit = "stale".into();
+            for candidate in &mut view.candidates { candidate.comment = "stale".into(); }
+            let view = apply_scores(host, view, None, Some(1));
+            assert_eq!(host.observation.outcome, "reordered");
+            assert_eq!(view.candidates[0].text, preferred);
+            assert_core_page(host, &view);
+        });
+    }
+
+    #[test]
+    fn an_identity_ranking_keeps_the_unchanged_observation() {
+        with_input("identity", "ni", |host, view| {
+            let original = view.clone();
+            let view = apply_scores(host, view, None, Some(0));
+            assert_eq!(host.observation.outcome, "unchanged");
+            assert_eq!(view, original);
+            assert_core_page(host, &view);
+        });
+    }
+
+    #[test]
+    fn three_letter_english_stays_on_the_core_page_after_a_sentence_leads() {
+        with_input("english", "pdf", |host, view| {
+            assert_eq!(view.candidates[4].text, "pdf");
+            let target = host.composition_alternatives().into_iter()
+                .find(|text| !view.candidates.iter().any(|candidate| candidate.text == *text))
+                .expect("a composed alternative outside the page");
+            let view = apply_scores(host, view, Some((&target, 40.0)), None);
+            assert_eq!(host.observation.outcome, "composed");
+            assert_eq!(view.candidates[0].text, target);
+            assert_eq!(view.candidates[4].text, "pdf");
+            assert_eq!(view.candidates[4].comment, "英文 · 原样");
+            assert_core_page(host, &view);
+        });
+    }
+
+    #[test]
+    fn a_model_decision_refreshes_page_fields_and_preserves_the_key_result() {
+        with_input("refresh", "zaidengwoyixia", |host, mut view| {
+            // A previous shell view must not supply any page fields after the core applies an intent.
+            view.preedit = "stale".into();
+            view.cursor_utf8 = 1;
+            view.is_last_page = !view.is_last_page;
+            view.commit = "先前提交".into();
+            for candidate in &mut view.candidates { candidate.comment = "stale".into(); }
+            let view = apply_scores(host, view, Some(("再等我一下", 40.0)), None);
+            assert_eq!(host.observation.outcome, "composed");
+            assert_eq!(view.commit, "先前提交");
+            assert_core_page(host, &view);
+        });
     }
 }

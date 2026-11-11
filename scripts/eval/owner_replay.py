@@ -191,6 +191,19 @@ def group_rows(pairs, key):
     return groups
 
 
+def page_metrics(cases, outputs):
+    metrics = dict(cases=0, weight=0, top1=0, top5=0, top1Weighted=0, top5Weighted=0)
+    for case in cases:
+        page = (outputs[case["id"]].get("page") or [])[:5]
+        metrics["cases"] += 1
+        metrics["weight"] += case["weight"]
+        for name, hit in (("top1", bool(page) and page[0] == case["target"]),
+                          ("top5", case["target"] in page)):
+            metrics[name] += int(hit)
+            metrics[name + "Weighted"] += case["weight"] * int(hit)
+    return metrics
+
+
 def cmd_compare(args):
     cases = {c["id"]: c for c in load_jsonl(os.path.join(args.cases, "cases.jsonl"))}
     with open(os.path.join(args.cases, "manifest.json"), encoding="utf-8") as fh:
@@ -199,10 +212,17 @@ def cmd_compare(args):
     old = {r["id"]: r for r in load_jsonl(args.old)}
     new = {r["id"]: r for r in load_jsonl(args.new)}
     stats = {"fixed": [], "broke": [], "silent": [], "hot": [], "prefix_lost": [],
-             "both": 0, "neither": 0, "missing": []}
+             "both": 0, "neither": 0, "missing": [], "firstChanges": [], "hotPageLost": []}
     verdicts = []
     stats["deleted"] = []
     for cid, case in cases.items():
+        if cid in old and cid in new:
+            old_page, new_page = old[cid].get("page") or [], new[cid].get("page") or []
+            changed = dict(case, oldFirst=(old_page or [""])[0], newFirst=(new_page or [""])[0])
+            if changed["oldFirst"] != changed["newFirst"]:
+                stats["firstChanges"].append(changed)
+            if case["target"] in frequent and case["target"] in old_page[:5] and case["target"] not in new_page[:5]:
+                stats["hotPageLost"].append(changed)
         if case.get("deleted") and case["kind"] == "hit":
             # a "hit" the owner deleted or retyped is no evidence its first was right: listed, not judged
             if cid in old and cid in new and (old[cid].get("page") or [""])[0] != (new[cid].get("page") or [""])[0]:
@@ -215,7 +235,13 @@ def cmd_compare(args):
         verdicts.append((case, assess(case, old[cid], new[cid], frequent, stats)))
     stats["fixedWeighted"] = sum(c["weight"] for c in stats["fixed"])
     stats["brokeWeighted"] = sum(c["weight"] for c in stats["broke"])
-    stats["pass"] = stats["fixedWeighted"] >= 3 * stats["brokeWeighted"] and not stats["hot"]
+    paired = [case for cid, case in cases.items() if cid in old and cid in new]
+    judged_cases = [case for case in paired if not (case.get("deleted") and case["kind"] == "hit")]
+    stats["metrics"] = {name: page_metrics(judged_cases, outputs) for name, outputs in (("old", old), ("new", new))}
+    stats["redoRisk"] = {name: page_metrics([case for case in paired if case.get("deleted")], outputs)
+                         for name, outputs in (("old", old), ("new", new))}
+    stats["pass"] = (stats["fixedWeighted"] >= 3 * stats["brokeWeighted"] and not stats["hot"]
+                     and not stats["hotPageLost"] and not stats["missing"])
     stats["byBucket"] = group_rows(verdicts, "bucket")
     stats["byKind"] = group_rows(verdicts, "kind")
     print(f"fixed {len(stats['fixed'])} (weighted {stats['fixedWeighted']}), "
@@ -228,7 +254,11 @@ def cmd_compare(args):
         print(f"  PIECE-LOST {case['id']} {case['keys']} -> {case['target']} (was {case['oldFirst']}, now {case['newFirst']})")
     verdict = "PASS" if stats["pass"] else "FAIL"
     print(f"G1 {verdict}: fixed weighted {stats['fixedWeighted']} vs 3 x broke weighted "
-          f"{3 * stats['brokeWeighted']}; high-frequency breaks {len(stats['hot'])}")
+          f"{3 * stats['brokeWeighted']}; high-frequency breaks {len(stats['hot'])}; "
+          f"high-frequency first-page losses {len(stats['hotPageLost'])}; first changes {len(stats['firstChanges'])}")
+    for name, metrics in stats["metrics"].items():
+        print(f"{name}: cases {metrics['cases']}, top1 {metrics['top1']}, top5 {metrics['top5']}, "
+              f"weighted {metrics['top1Weighted']}/{metrics['weight']}, {metrics['top5Weighted']}/{metrics['weight']}")
     for case in stats["hot"]:
         print(f"  HOT {case['id']} {case['keys']} -> {case['target']} (now {case['newFirst']})")
     for title, groups in (("bucket", stats["byBucket"]), ("kind", stats["byKind"])):
@@ -254,7 +284,7 @@ def md_group_table(groups, title):
 def write_report(path, stats):
     verdict = "PASS" if stats["pass"] else "FAIL"
     lines = ["# owner 重放对比（G1）", "",
-             f"- 判定：**{verdict}**。门：修好加权 ≥ 3 × 弄坏加权，且高频词弄坏为 0。",
+             f"- 判定：**{verdict}**。门：修好加权 ≥ 3 × 弄坏加权，高频词首位回退和掉出前五均为 0，且输出完整。",
              f"- 修好 {len(stats['fixed'])} 条（加权 {stats['fixedWeighted']}），"
              f"弄坏 {len(stats['broke'])} 条（加权 {stats['brokeWeighted']}）；"
              f"都对 {stats['both']}，都错 {stats['neither']}，"
@@ -264,7 +294,24 @@ def write_report(path, stats):
              "旧首选对、新首选错且与目标等长（看起来像对的）。",
              "", "## 按输入长度（bucket）", "", md_group_table(stats["byBucket"], "bucket"),
              "", "## 按样本类别（kind）", "", md_group_table(stats["byKind"], "kind")]
+    for title, group in (("首位与前五位命中", stats["metrics"]),
+                         ("原记录删后重打子集的候选覆盖", stats["redoRisk"])):
+        lines += ["", "## " + title, "", "| 版本 | 条数 | 首位 | 前五 | 加权首位 | 加权前五 |",
+                  "|---|---:|---:|---:|---:|---:|"]
+        for name, row in group.items():
+            def rate(key, denominator):
+                return f"{row[key]}/{row[denominator]} ({100 * row[key] / row[denominator]:.3f}%)" if row[denominator] else "无样本"
+            lines.append(f"| {name} | {row['cases']} | {rate('top1', 'cases')} | {rate('top5', 'cases')}"
+                         f" | {rate('top1Weighted', 'weight')} | {rate('top5Weighted', 'weight')} |")
+    lines += ["", "删后重打子集来自原日志；候选覆盖只是操作负担的代理，不能当作修改后的真实重打率。",
+              "", "## 全部首位翻转（含两边均错和原记录删除的命中）", "",
+              "| id | kind | keys | 目标 | 旧首选 | 新首选 |", "|---|---|---|---|---|---|"]
+    lines += [f"| {c['id']} | {c['kind']} | {c['keys']} | {c['target']} | {c['oldFirst']} | {c['newFirst']} |"
+              for c in stats["firstChanges"]]
+    if not stats["firstChanges"]:
+        lines.append("无首位翻转。")
     for title, rows in (("高频词弄坏（目标在 owner 最常上屏 500 词内）", stats["hot"]),
+                        ("高频词掉出前五", stats["hotPageLost"]),
                         ("静默错字（旧对、新错、等长）", stats["silent"])):
         lines += ["", f"## {title}", "",
                   "| id | bucket | kind | keys | 目标 | 旧首选 | 新首选 | weight |",

@@ -75,11 +75,9 @@ export const BUILT_IN_MODES: Mode[] = [
   },
   {
     id: "hotword-candidates",
-    // 名称从「热词候选生成」改为本名（2026-07-25）：这个动作产出的是围绕 owner 给定
-    // 主题生成的个人词/术语，不是互联网热词热梗——后者需要在线词源，见
-    // docs/current/tasks/HOTWORD-SOURCE-SERVER.md。id 保持不变以免影响已落库的记录。
-    name: "个人词/术语生成",
-    description: "围绕 owner 明确给出的主题生成带拼音和简短释义的个人词/术语，进审核队列。不是互联网热词热梗。",
+    // 围绕 owner 给定的主题生成个人词/术语；id 保持不变以兼容已落库的记录。
+    name: "个人词/术语候选生成",
+    description: "围绕 owner 明确给出的主题生成带拼音和简短释义的个人词/术语候选，进审核队列。",
     category: "lexicon",
     actionLabel: "生成待审词条",
     appliesDevGuardrails: false,

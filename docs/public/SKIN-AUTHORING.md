@@ -74,8 +74,8 @@ Optional fields may be omitted. Layout dimensions are in points; PNG dimensions 
 | `shadowEnabled` | no | Whether to enable the panel shadow. | boolean |
 | `preeditRow` | no | Whether to show composing pinyin above the candidates. | boolean |
 | `indexSuffix` | no | Suffix appended to candidate numbers. | `""`, `"."` |
-| `decorations` | no | Data-only decorations; no executable code is needed. | array 1–4; `spriteDecoration` / `twinkleDecoration` / `petalsDecoration` / `gradientDecoration` / `shimmerDecoration` / `shootingStarDecoration` / `frameDecoration` |
-| `overflow` | no | Extra transparent margins around the panel; the boolean inside a decoration controls drawing outside the card. | {top: 0–64, left: 0–64, bottom: 0–64, right: 0–64} |
+| `decorations` | no | Data-only decorations; no executable code is needed. | array 1–8; `spriteDecoration` / `twinkleDecoration` / `petalsDecoration` / `gradientDecoration` / `shimmerDecoration` / `shootingStarDecoration` / `frameDecoration` |
+| `overflow` | no | Extra transparent margins around the panel; the boolean inside a decoration controls drawing outside the card. | {top: 0–120, left: 0–120, bottom: 0–120, right: 0–120} |
 | `slotColors` | no | Separate colors for five unhighlighted first-row candidates and their numbers; importing requires light/dark objects. | array 5–5; `lightDarkColor` (schema also permits semantic colors, but importing rejects them) |
 
 ## Colors, fonts and compound values
@@ -136,9 +136,9 @@ This is a field fragment to merge into a complete package. Supported semantic co
 
 PNG filenames must match `^[a-z0-9][a-z0-9._-]{0,62}\.png$`: a 1–63 character stem beginning with a lowercase letter or digit, followed only by lowercase letters, digits, dots, underscores or hyphens, with a lowercase `.png` extension. Assets must be actual single-image PNGs. Every image must be referenced by `decorations`, and every referenced image must exist.
 
-A sheet may be at most 4096 × 1536 pixels. Its width must divide evenly by the sprite's `frames`, with at least one pixel per cell horizontally. A plain sprite uses one horizontal strip of equal cells; a static image uses `frames: 1`. An action sequence uses rows of equal cells, one action per row, counted from 0 at the top. Cell aspect ratio must match display `size`: the parser infers row height from sheet width/columns and the `size` ratio, allows at most 3% error in the resulting sheet height, and requires every referenced `row` to exist. Display width and height are each 1–256 points; image pixels and display points are different units.
+A sheet may be at most 4096 × 1536 pixels. Its width must divide evenly by the sprite's `frames`, with at least one pixel per cell horizontally. A plain sprite uses one horizontal strip of equal cells; a static image uses `frames: 1`. An action sequence uses rows of equal cells, one action per row, counted from 0 at the top. Cell aspect ratio must match display `size`: the parser infers row height from sheet width/columns and the `size` ratio, allows at most 3% error in the resulting sheet height, and requires every referenced `row` to exist. Display width is 1–300 points and height is 1–256 points; image pixels and display points are different units.
 
-Each clip's `frames` is 1 through the sheet column count, `fps` is 1–30, and `seconds` is 0.2–30. A sequence has at most 16 clips, with the sum of `seconds × fps` across all clips no greater than 1200. Do not combine `clips` and `travel`; `zone` is only supported with `clips`. With the system Reduce Motion setting enabled, sprites stop moving and show `staticFrame` (on image row 0 for a sequence).
+Each clip's `frames` is 1 through the sheet column count, `fps` is 1–30, and `seconds` is 0.2–30. A sequence has at most 16 clips, with the sum of `seconds × fps` across all clips no greater than 1200. Do not combine `clips` and `travel`; `zone` is only supported with `clips`. With the system Reduce Motion setting enabled, sprites stop moving and show `staticFrame` (on image row 0 for a sequence), keeping the first clip's `flip` direction. A single one-frame clip with `flip: true` mirrors a still image without another PNG.
 
 ### Shiba Inu example
 
@@ -283,7 +283,7 @@ Each table's `type` is a fixed value. `layer` defaults to `below` and a decorati
 | `sheet` | yes | Filename of a PNG in this package. | `^[a-z0-9][a-z0-9._-]{0,62}\.png$` |
 | `frames` | yes | Sheet column count; inside a clip, the number of leading columns used by that action. | integer 1–24 |
 | `fps` | no | Frames per second, default 8; each clip independently defaults to 8. | 1–30 |
-| `size` | yes | Displayed cell size in points; sequences must match the image cell aspect ratio. | {width: 1–256, height: 1–256} |
+| `size` | yes | Displayed cell size in points; sequences must match the image cell aspect ratio. | {width: 1–300, height: 1–256} |
 | `anchor` | no | Normalized position in available card space; (0,0) is bottom left and is the default. | {x: 0–1, y: 0–1} |
 | `offset` | no | Position offset in points, default (0,0). | {x: -256–256, y: -256–256} |
 | `travel` | no | Looping horizontal travel; cannot be combined with clips. | {from: -1–2, to: -1–2, duration: 1–120} |
@@ -418,7 +418,7 @@ Do not fill in every `motion` field at once. Each item requires `kind` and `peri
 | Item | Import limit |
 |---|---|
 | Directory contents | Flat directory with only regular `skin.json` and valid PNG files; no subdirectories, symlinks, special files or extra documentation files |
-| File count | At most 8 including `skin.json`; at most 4 decorations, with every PNG referenced |
+| File count | At most 8 including `skin.json`; at most 8 decorations, with every PNG referenced |
 | Total size | At most 512 KiB (524288 bytes, displayed as 512 KB), counting JSON and every PNG |
 | JSON size | At most 256 KiB (262144 bytes) |
 | Individual PNG | External file reads allow at most 512 KiB; the entire package must still fit within 512 KiB |

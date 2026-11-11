@@ -93,7 +93,7 @@ function composeCompactPrompt({ rawInput, mode, userRules }: ComposeInput): stri
       return `请翻译以下原文：中文自动译为英文，其他语言自动译为中文；保留专有名词、代码、路径、数字和原有格式：\n\n${idea}${rules}\n\n只输出译文。`;
 
     case "hotword-candidates":
-      return `请围绕这个主题生成待审热词：${idea}${rules}\n\n每行严格使用“词<TAB>拼音<TAB>简短释义”；拼音使用空格分隔的无声调小写音节。不要标题、序号、Markdown 或解释。\n\n本地手填模板：\n<词>\t<拼音>\t<简短释义>`;
+      return `请围绕这个主题生成待审个人词/术语候选：${idea}${rules}\n\n每行严格使用“词<TAB>拼音<TAB>简短释义”；拼音使用空格分隔的无声调小写音节。不要标题、序号、Markdown 或解释。\n\n本地手填模板：\n<词>\t<拼音>\t<简短释义>`;
   }
 }
 
@@ -135,6 +135,6 @@ export function composePrompt({ rawInput, mode, userRules, compact = false }: Co
       return `请翻译下面的原文。中文自动译为英文，其他语言自动译为中文。\n\n【原文】\n${idea}\n${rules}\n【要求】\n1. 保留专有名词、代码、路径、数字和原有格式；\n2. 语义准确、表达自然；\n3. 不添加解释；\n4. 只输出译文。`;
 
     case "hotword-candidates":
-      return `请围绕 owner 明确给出的主题生成一组可供人工审核的中文热词候选。\n\n【主题】\n${idea}\n${rules}\n【唯一输出格式】\n每行严格输出：词<TAB>拼音<TAB>简短释义\n\n【要求】\n1. 拼音由本次生成一并给出，使用空格分隔的无声调小写音节；\n2. 不抓取、引用或声称来自任何站点；\n3. 不输出标题、序号、Markdown 表格、代码围栏或解释；\n4. 一行只放一个候选。\n\n【无 Provider 时的本地手填模板】\n<词>\t<拼音>\t<简短释义>`;
+      return `请围绕 owner 明确给出的主题生成一组可供人工审核的中文个人词/术语候选。\n\n【主题】\n${idea}\n${rules}\n【唯一输出格式】\n每行严格输出：词<TAB>拼音<TAB>简短释义\n\n【要求】\n1. 拼音由本次生成一并给出，使用空格分隔的无声调小写音节；\n2. 不抓取、引用或声称来自任何站点；\n3. 不输出标题、序号、Markdown 表格、代码围栏或解释；\n4. 一行只放一个候选。\n\n【无 Provider 时的本地手填模板】\n<词>\t<拼音>\t<简短释义>`;
   }
 }

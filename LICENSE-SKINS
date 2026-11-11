@@ -62,5 +62,68 @@ songxue、system、xuanmo、youzi、yueye。
 授权方保留一切未明示授权的权利。部分插画由 AI 图像工具生成。授权方仅
 授予自己对这些素材享有的权利，不保证素材可受版权保护或具有独占性。
 
+2026-11-10 试点素材来源：luoying/sakura-top.png 与 denglong/lantern.png
+由 Codex 原生图像生成，分别采用本仓库 skin-m2-pilot-art 中的落樱 A 版与
+灯笼 A 版透明成品，在本仓库内作为上述免费内置皮肤使用；右灯笼在绘制时
+镜像同一张图片。原图、提示词与处理记录见
+docs/current/evidence/skin-m2-pilot-art/。落樱旧 sakura.png 已由新素材替换。
+待办：付费前需核对生成工具条款；本记录不表示已完成该项核对，也不增加
+收费使用授权。
+
+2026-11-10 批 B 素材来源：shuitun/capybara-blink.png、
+youzi/capybara-bath.png、leaf.png、steam.png、ripple.png，以及
+juzimao/cat-rest.png、cat-tail.png 由 Codex 原生图像生成，采用本仓库
+docs/current/evidence/skin-m3-art-b/keyed/ 中的水豚 B、柚子水豚 B、
+橘猫 A 与尾巴 A，以及对应的眼睛差分、叶片、热气和水波。
+三张角色精灵表只将选定主图与眼睛差分原像素纵向拼成两行，其余小件原样
+复制；水面渐变、面板半透明底和阴影由代码绘制，未画入图片。原图、提示词
+与处理记录见上述 evidence 目录，本批接入参数见
+docs/current/evidence/skin-m3-int-b/REPORT.md。旧水豚小跑图、柚子坐姿图与
+橘猫动作图已由新素材替换。本批仍用于上述免费内置皮肤。
+待办：付费前需核对生成工具条款；本记录不表示已完成该项核对，也不增加
+收费使用授权。
+
+2026-11-10 素材批 A 来源：songxue/songxue-branch-a.png、
+songxue/songxue-snow.png、fenghong/fenghong-branch-a.png、
+fenghong/fenghong-leaf.png、yueye/yueye-mooncloud-a.png、
+yueye/yueye-star.png 与 yueye/yueye-meteor.png 均由 Codex 原生图像生成，
+原样采用 docs/current/evidence/skin-m3-art-a/keyed/ 中的 A 版主件及独立
+粒子成品，在本仓库内作为上述免费内置皮肤使用。原图、提示词及处理记录
+见 docs/current/evidence/skin-m3-art-a/。旧 pine.png、maple.png、moon.png
+已由这批素材替换；未采用 B 版。待办：付费前需核对生成工具条款；
+本记录不表示已完成该项核对，也不增加收费使用授权。
+
+2026-11-10 素材批 C 接入来源：柴犬曾采用 skin-m3-art-c 的头爪 B 与 B 闭眼帧，
+该版 chaiquan/shiba-blink.png 已由下述 2026-11-11 探头图替换；白兔采用 B 版
+左耳、右耳、冠毛与云 A，分别原样复制为 baitu/left-ear.png、right-ear.png、
+crown.png、cloud.png。
+上述素材由 Codex 原生图像生成，在本仓库内作为上述免费内置皮肤使用。
+原图、提示词与处理记录见 docs/current/evidence/skin-m3-art-c/。
+旧 shiba-actions.png 和 rabbit-actions.png 已由新素材替换。
+待办：付费前需核对生成工具条款；本记录不表示已完成该项核对，也不增加
+收费使用授权。
+
+2026-11-10 玄墨卷轴接入来源：xuanmo/scroll-frame.png 采用本仓库
+docs/current/evidence/skin-m3-art-c/keyed/xuanmo-frame-b.png，源图由 Codex
+原生图像生成。保留 512×144 像素及 alpha，两端各 40 像素固定带不改，
+仅将中段纸面调为浅宣纸，以满足深色候选字的对比度；九宫格切边为左 / 右
+40、上 / 下 34 像素。xuanmo/mark.png 原样复制同批飞白 A
+（xuanmo-drybrush-a.png），两件均静态，用于上述免费内置皮肤。
+旧 mark.png 水印内容已替换，沿用文件名以保留已有测试的 PNG 夹具路径。
+原图、提示词与处理记录见 skin-m3-art-c；接入参数、
+纸面处理脚本及验证见 docs/current/evidence/skin-m3-int-xuanmo/。
+待办：付费前需核对生成工具条款；本记录不表示已完成该项核对，也不增加
+收费使用授权。
+
+2026-11-11 柴犬自然探头替换来源：chaiquan/shiba-blink.png 由 Codex 原生
+image_gen 生成，采用 docs/current/evidence/skin-chaiquan-peek/keyed/ 中的
+chaiquan-peek-b.png 与 chaiquan-peek-b-blink.png，无损纵向拼为睁眼、闭眼
+两行。闭眼帧仅合成原生闭眼输出的眼部，其余像素及 alpha 沿用睁眼帧。
+原生透明输出、A/B/C 三种构图、完整提示词、Swift 抠图与边缘处理记录见
+docs/current/evidence/skin-chaiquan-peek/。旧孤立头爪图已被替换，沿用
+shiba-blink.png 文件名；候选条由应用绘制，未烘焙进图片。
+本批仍用于上述免费内置皮肤。待办：付费前需核对生成工具条款；本记录
+不表示已完成该项核对，也不增加收费使用授权。
+
 5. 无担保
 素材按现状提供，不附带任何担保。

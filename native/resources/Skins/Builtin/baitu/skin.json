@@ -6,10 +6,10 @@
   },
   "formatVersion": 1,
   "author": "Agent Input Method",
-  "description": "淡粉紫底，白兔在右侧：招手、坐、走来走去、奔跑、蹦一下，一套动作循环着演；开启「减弱动态效果」时静止。",
+  "description": "白兔从候选条上沿探出耳朵，轻轻起伏、轮流抖耳，一只耳朵缓缓侧摆；开启「减弱动态效果」时静止。",
   "candidateFont": {
     "family": "Yuanti SC",
-    "size": 17,
+    "size": 19,
     "weight": "medium"
   },
   "indexFont": {
@@ -18,29 +18,29 @@
     "weight": "medium"
   },
   "candidateColor": {
-    "light": "#4B3550",
-    "dark": "#4B3550"
+    "light": "#4B2F52",
+    "dark": "#F9ECFF"
   },
   "secondaryCandidateColor": {
-    "light": "#8C7490",
-    "dark": "#8C7490"
+    "light": "#68496F",
+    "dark": "#D5B8DF"
   },
   "indexColor": {
-    "light": "#8C7490",
-    "dark": "#8C7490"
+    "light": "#68496F",
+    "dark": "#D5B8DF"
   },
   "highlightedCandidateColor": {
-    "light": "#B0508A",
-    "dark": "#B0508A"
+    "light": "#63336E",
+    "dark": "#FFF7FF"
   },
   "highlightFillColor": {
-    "light": "#D88BB830",
-    "dark": "#D88BB830"
+    "light": "#E3C5ECE6",
+    "dark": "#593C67E6"
   },
   "highlightFillOpacity": 1,
   "highlightBorderColor": {
-    "light": "#9A7AA066",
-    "dark": "#9A7AA066"
+    "light": "#9E7BAA88",
+    "dark": "#AF8BC580"
   },
   "highlightBorderOpacity": 1,
   "rowHeight": 36,
@@ -52,158 +52,198 @@
   "capsuleCornerRadius": 12,
   "panelCornerRadius": 12,
   "edgeInsets": {
-    "top": 11,
+    "top": 14,
     "left": 13,
     "bottom": 11,
-    "right": 150
+    "right": 13
   },
   "material": "popover",
   "minimumPanelSize": {
-    "width": 120,
-    "height": 56
+    "width": 220,
+    "height": 90
   },
   "maximumPanelWidth": 760,
   "widthQuantization": 20,
   "panelBackground": {
-    "light": "#FAF1F7",
-    "dark": "#FAF1F7"
+    "light": "#F7EEFACC",
+    "dark": "#2F2336CC"
   },
   "panelBorderColor": {
-    "light": "#E6CFE0",
-    "dark": "#E6CFE0"
+    "light": "#CDB2DB99",
+    "dark": "#A582B899"
   },
   "panelBorderWidth": 0.5,
-  "shadowEnabled": false,
+  "shadowEnabled": true,
+  "overflow": {
+    "top": 88,
+    "left": 0,
+    "bottom": 0,
+    "right": 0
+  },
   "decorations": [
     {
       "type": "gradient",
       "from": {
-        "light": "#FDF6FA",
-        "dark": "#FDF6FA"
+        "light": "#FBF4FCE6",
+        "dark": "#3A2943E6"
       },
       "to": {
-        "light": "#EED9EA",
-        "dark": "#EED9EA"
+        "light": "#E5D0EFE6",
+        "dark": "#251D2BE6"
       },
       "angle": 0,
+      "opacity": 0.75,
       "layer": "below"
     },
     {
       "type": "sprite",
-      "sheet": "rabbit-actions.png",
-      "frames": 8,
+      "sheet": "cloud.png",
+      "frames": 1,
       "size": {
-        "width": 23.5,
-        "height": 31.8
+        "width": 68,
+        "height": 44
       },
       "anchor": {
-        "x": 1,
-        "y": 0
+        "x": 0.25,
+        "y": 1
       },
       "offset": {
-        "x": -6,
-        "y": 4
+        "x": 0,
+        "y": 36
       },
       "layer": "below",
-      "zone": {
-        "width": 140
-      },
+      "overflow": true,
       "clips": [
         {
-          "row": 1,
-          "frames": 6,
-          "fps": 7,
-          "seconds": 4.0,
+          "row": 0,
+          "frames": 1,
+          "fps": 1,
+          "seconds": 14,
           "move": {
-            "from": 0.85,
-            "to": 0.85
+            "from": 0.25,
+            "to": 0.75
           }
         },
         {
           "row": 0,
-          "frames": 4,
-          "fps": 4,
-          "seconds": 1.5,
+          "frames": 1,
+          "fps": 1,
+          "seconds": 14,
           "move": {
-            "from": 0.85,
-            "to": 0.85
-          }
-        },
-        {
-          "row": 5,
-          "frames": 6,
-          "fps": 4,
-          "seconds": 3.5,
-          "move": {
-            "from": 0.85,
-            "to": 0.85
-          }
-        },
-        {
-          "row": 2,
-          "frames": 8,
-          "fps": 9,
-          "seconds": 3.5,
-          "move": {
-            "from": 0.85,
-            "to": 0.45
-          },
-          "flip": true
-        },
-        {
-          "row": 6,
-          "frames": 6,
-          "fps": 7,
-          "seconds": 2.5,
-          "move": {
-            "from": 0.45,
-            "to": 0.2
-          },
-          "flip": true
-        },
-        {
-          "row": 0,
-          "frames": 4,
-          "fps": 4,
-          "seconds": 2.0,
-          "move": {
-            "from": 0.2,
-            "to": 0.2
-          },
-          "flip": true
-        },
-        {
-          "row": 3,
-          "frames": 8,
-          "fps": 13,
-          "seconds": 2.5,
-          "move": {
-            "from": 0.2,
-            "to": 0.85
-          }
-        },
-        {
-          "row": 4,
-          "frames": 8,
-          "fps": 9,
-          "seconds": 2.0,
-          "move": {
-            "from": 0.85,
-            "to": 0.85
+            "from": 0.75,
+            "to": 0.25
           }
         }
       ]
     },
     {
-      "type": "shimmer",
-      "color": {
-        "light": "#FFFFFF66",
-        "dark": "#FFFFFF66"
+      "type": "sprite",
+      "sheet": "left-ear.png",
+      "frames": 1,
+      "size": {
+        "width": 108,
+        "height": 92
       },
-      "period": 9,
-      "width": 0.18,
-      "angle": 16,
-      "layer": "above"
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "offset": {
+        "x": 18,
+        "y": 80
+      },
+      "layer": "below",
+      "overflow": true,
+      "pivot": {
+        "x": 0.32407407407407407,
+        "y": 0.2282608695652174
+      },
+      "motion": [
+        {
+          "kind": "float",
+          "amplitude": 2,
+          "period": 4.2
+        },
+        {
+          "kind": "twitch",
+          "degrees": 9,
+          "period": 5.6,
+          "delay": 1.35,
+          "duration": 0.4
+        }
+      ]
+    },
+    {
+      "type": "sprite",
+      "sheet": "right-ear.png",
+      "frames": 1,
+      "size": {
+        "width": 108,
+        "height": 92
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "offset": {
+        "x": 18,
+        "y": 80
+      },
+      "layer": "below",
+      "overflow": true,
+      "pivot": {
+        "x": 0.5740740740740741,
+        "y": 0.2282608695652174
+      },
+      "motion": [
+        {
+          "kind": "float",
+          "amplitude": 2,
+          "period": 4.2
+        },
+        {
+          "kind": "sway",
+          "degrees": 4,
+          "period": 7.8
+        },
+        {
+          "kind": "twitch",
+          "degrees": 7,
+          "period": 6.8,
+          "delay": 2.15,
+          "duration": 0.45
+        }
+      ]
+    },
+    {
+      "type": "sprite",
+      "sheet": "crown.png",
+      "frames": 1,
+      "size": {
+        "width": 108,
+        "height": 92
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "offset": {
+        "x": 18,
+        "y": 80
+      },
+      "layer": "below",
+      "overflow": true,
+      "pivot": {
+        "x": 0.5,
+        "y": 0.1
+      },
+      "motion": [
+        {
+          "kind": "float",
+          "amplitude": 2,
+          "period": 4.2
+        }
+      ]
     }
   ]
 }

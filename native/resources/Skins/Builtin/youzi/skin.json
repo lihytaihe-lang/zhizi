@@ -6,10 +6,10 @@
   },
   "formatVersion": 1,
   "author": "Agent Input Method",
-  "description": "淡青米色底，顶着柚子的水豚坐在右侧，轻轻呼吸；开启「减弱动态效果」时静止。",
+  "description": "柚子水豚泡在候选条下沿，呼吸时轻沉水面、偶尔睁眼，水波缓缓舒展；开启「减弱动态效果」时静止。",
   "candidateFont": {
     "family": "Yuanti SC",
-    "size": 17,
+    "size": 19,
     "weight": "medium"
   },
   "indexFont": {
@@ -18,29 +18,29 @@
     "weight": "medium"
   },
   "candidateColor": {
-    "light": "#34402B",
-    "dark": "#34402B"
+    "light": "#183F38",
+    "dark": "#E6F3E7"
   },
   "secondaryCandidateColor": {
-    "light": "#6F7C5B",
-    "dark": "#6F7C5B"
+    "light": "#34534A",
+    "dark": "#D4E5D8"
   },
   "indexColor": {
-    "light": "#6F7C5B",
-    "dark": "#6F7C5B"
+    "light": "#34534A",
+    "dark": "#D4E5D8"
   },
   "highlightedCandidateColor": {
-    "light": "#C76A10",
-    "dark": "#C76A10"
+    "light": "#60451F",
+    "dark": "#35311B"
   },
   "highlightFillColor": {
-    "light": "#9DB87A30",
-    "dark": "#9DB87A30"
+    "light": "#FFF0BD",
+    "dark": "#E7CF7A"
   },
   "highlightFillOpacity": 1,
   "highlightBorderColor": {
-    "light": "#8C6F4E66",
-    "dark": "#8C6F4E66"
+    "light": "#C7AE6299",
+    "dark": "#EFDF9E99"
   },
   "highlightBorderOpacity": 1,
   "rowHeight": 36,
@@ -50,87 +50,264 @@
   "candidateSpacing": 10,
   "rowSpacing": 7,
   "capsuleCornerRadius": 12,
-  "panelCornerRadius": 12,
+  "panelCornerRadius": 14,
   "edgeInsets": {
     "top": 11,
     "left": 13,
-    "bottom": 11,
-    "right": 70
+    "bottom": 31,
+    "right": 13
   },
   "material": "popover",
   "minimumPanelSize": {
-    "width": 120,
-    "height": 56
+    "width": 300,
+    "height": 96
   },
   "maximumPanelWidth": 760,
   "widthQuantization": 20,
   "panelBackground": {
-    "light": "#EEF2DF",
-    "dark": "#EEF2DF"
+    "light": "#E9F1E2E6",
+    "dark": "#1C3530E6"
   },
   "panelBorderColor": {
-    "light": "#C9D6AC",
-    "dark": "#C9D6AC"
+    "light": "#A3C7B6CC",
+    "dark": "#7B9D8D99"
   },
-  "panelBorderWidth": 0.5,
-  "shadowEnabled": false,
+  "panelBorderWidth": 0.75,
+  "shadowEnabled": true,
   "overflow": {
-    "top": 22,
+    "top": 0,
     "left": 0,
-    "bottom": 0,
-    "right": 6
+    "bottom": 44,
+    "right": 0
   },
   "decorations": [
     {
       "type": "gradient",
       "from": {
-        "light": "#F1F5E4",
-        "dark": "#F1F5E4"
+        "light": "#F1F4E4",
+        "dark": "#213D33"
       },
       "to": {
-        "light": "#D9E5C1",
-        "dark": "#D9E5C1"
+        "light": "#CDE1D4",
+        "dark": "#1B3933"
       },
-      "angle": 0,
+      "angle": 90,
+      "opacity": 0.65,
       "layer": "below"
     },
     {
       "type": "sprite",
-      "sheet": "capy-sit.png",
+      "sheet": "capybara-bath.png",
       "frames": 1,
       "size": {
-        "width": 56,
-        "height": 72
+        "width": 104,
+        "height": 88
       },
       "anchor": {
         "x": 1,
         "y": 0
       },
       "offset": {
-        "x": 2,
-        "y": -2
+        "x": -4,
+        "y": -52
       },
+      "layer": "below",
       "overflow": true,
+      "clips": [
+        {
+          "row": 0,
+          "frames": 1,
+          "fps": 1,
+          "seconds": 2.7
+        },
+        {
+          "row": 1,
+          "frames": 1,
+          "fps": 1,
+          "seconds": 0.35
+        },
+        {
+          "row": 0,
+          "frames": 1,
+          "fps": 1,
+          "seconds": 4.15
+        }
+      ],
       "pivot": {
         "x": 0.5,
-        "y": 0.05
+        "y": 0.18
       },
       "motion": [
         {
-          "kind": "hop",
-          "height": 4,
-          "squash": 0.05,
+          "kind": "breathe",
+          "scale": 0.03,
+          "period": 4.2
+        },
+        {
+          "kind": "float",
+          "amplitude": 2,
+          "period": 3.4
+        }
+      ]
+    },
+    {
+      "type": "water",
+      "depth": 44,
+      "poolWidth": 128,
+      "from": {
+        "light": "#67BFADE6",
+        "dark": "#1D625BE6"
+      },
+      "to": {
+        "light": "#A6E0CDAD",
+        "dark": "#59A898B8"
+      },
+      "highlight": {
+        "light": "#E6FFF1ED",
+        "dark": "#B6EED7D9"
+      },
+      "period": 5,
+      "layer": "below",
+      "overflow": true
+    },
+    {
+      "type": "sprite",
+      "sheet": "ripple.png",
+      "frames": 1,
+      "size": {
+        "width": 120,
+        "height": 20
+      },
+      "anchor": {
+        "x": 1,
+        "y": 0
+      },
+      "offset": {
+        "x": -4,
+        "y": -30
+      },
+      "layer": "below",
+      "overflow": true,
+      "opacity": 0.75,
+      "motion": [
+        {
+          "kind": "breathe",
+          "scale": 0.04,
           "period": 3.4
         },
         {
-          "kind": "breathe",
-          "scale": 0.022,
-          "period": 4.4
+          "kind": "fade",
+          "minimum": 0.55,
+          "period": 4.9
+        }
+      ]
+    },
+    {
+      "type": "sprite",
+      "sheet": "steam.png",
+      "frames": 1,
+      "size": {
+        "width": 12,
+        "height": 28.5
+      },
+      "anchor": {
+        "x": 1,
+        "y": 0
+      },
+      "offset": {
+        "x": -8,
+        "y": -3
+      },
+      "layer": "below",
+      "overflow": true,
+      "opacity": 0.8,
+      "motion": [
+        {
+          "kind": "float",
+          "amplitude": 3,
+          "period": 4.6
+        },
+        {
+          "kind": "fade",
+          "minimum": 0.1,
+          "period": 4.6
+        }
+      ]
+    },
+    {
+      "type": "sprite",
+      "sheet": "steam.png",
+      "frames": 1,
+      "size": {
+        "width": 12,
+        "height": 28.5
+      },
+      "anchor": {
+        "x": 1,
+        "y": 0
+      },
+      "offset": {
+        "x": -29,
+        "y": -7
+      },
+      "layer": "below",
+      "overflow": true,
+      "opacity": 0.65,
+      "clips": [
+        {
+          "row": 0,
+          "frames": 1,
+          "fps": 1,
+          "seconds": 5.8,
+          "flip": true
+        }
+      ],
+      "motion": [
+        {
+          "kind": "float",
+          "amplitude": 3,
+          "period": 5.8
+        },
+        {
+          "kind": "fade",
+          "minimum": 0.1,
+          "period": 5.8
+        }
+      ]
+    },
+    {
+      "type": "sprite",
+      "sheet": "leaf.png",
+      "frames": 1,
+      "size": {
+        "width": 20,
+        "height": 12
+      },
+      "anchor": {
+        "x": 1,
+        "y": 0
+      },
+      "offset": {
+        "x": -95,
+        "y": -27
+      },
+      "layer": "below",
+      "overflow": true,
+      "pivot": {
+        "x": 0.1,
+        "y": 0.5
+      },
+      "motion": [
+        {
+          "kind": "fall",
+          "height": 34,
+          "drift": 12,
+          "period": 12
         },
         {
           "kind": "sway",
-          "degrees": 1.1,
-          "period": 7
+          "degrees": 3,
+          "period": 4
         }
       ]
     }

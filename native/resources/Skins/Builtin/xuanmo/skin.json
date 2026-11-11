@@ -6,107 +6,100 @@
   },
   "formatVersion": 1,
   "author": "Agent Input Method",
-  "description": "深色皮肤：墨色底带细亮边，青玉色首选，右侧带知字水印；明暗外观下都保持深色。",
+  "description": "水墨卷轴：宣纸卷边框配墨色字，笔触飞白点缀；明暗外观下都保持宣纸色。",
   "candidateFont": {
-    "family": "PingFang SC",
-    "size": 16,
+    "family": "Kaiti SC",
+    "size": 19,
     "weight": "regular"
   },
   "indexFont": {
     "family": "systemMonospacedDigit",
-    "size": 10,
+    "size": 12,
     "weight": "regular"
   },
   "candidateColor": {
-    "light": "#EDEFF2",
-    "dark": "#EDEFF2"
+    "light": "#242822",
+    "dark": "#242822"
   },
   "secondaryCandidateColor": {
-    "light": "#8B95A5",
-    "dark": "#8B95A5"
+    "light": "#3D4038",
+    "dark": "#3D4038"
   },
   "indexColor": {
-    "light": "#6C7686",
-    "dark": "#6C7686"
+    "light": "#3D4038",
+    "dark": "#3D4038"
   },
   "highlightedCandidateColor": {
-    "light": "#5CF0C4",
-    "dark": "#5CF0C4"
+    "light": "#272A22",
+    "dark": "#272A22"
   },
   "highlightFillColor": {
-    "light": "#5CF0C4",
-    "dark": "#5CF0C4"
+    "light": "#F7E7BE",
+    "dark": "#F7E7BE"
   },
-  "highlightFillOpacity": 0.0,
+  "highlightFillOpacity": 0.9,
   "highlightBorderColor": {
-    "light": "#5CF0C4",
-    "dark": "#5CF0C4"
+    "light": "#9D8963",
+    "dark": "#9D8963"
   },
-  "highlightBorderOpacity": 0.0,
-  "rowHeight": 28,
-  "horizontalPadding": 4,
-  "verticalPadding": 3,
-  "indexCandidateSpacing": 2,
-  "candidateSpacing": 12,
-  "rowSpacing": 6,
-  "capsuleCornerRadius": 6,
-  "panelCornerRadius": 12,
+  "highlightBorderOpacity": 0.5,
+  "rowHeight": 32,
+  "horizontalPadding": 6,
+  "verticalPadding": 4,
+  "indexCandidateSpacing": 3,
+  "candidateSpacing": 16,
+  "rowSpacing": 8,
+  "capsuleCornerRadius": 12,
+  "panelCornerRadius": 0,
   "edgeInsets": {
-    "top": 8,
-    "left": 12,
-    "bottom": 8,
-    "right": 46
+    "top": 25,
+    "left": 72,
+    "bottom": 22,
+    "right": 64
   },
-  "material": "popover",
+  "material": "none",
   "minimumPanelSize": {
-    "width": 160,
-    "height": 48
+    "width": 256,
+    "height": 126
   },
   "maximumPanelWidth": 760,
   "widthQuantization": 20,
-  "panelBackground": {
-    "light": "#15171C",
-    "dark": "#15171C"
-  },
-  "panelBorderColor": {
-    "light": "#FFFFFF24",
-    "dark": "#FFFFFF24"
-  },
-  "panelBorderWidth": 0.5,
-  "shadowEnabled": true,
+  "panelBackground": null,
+  "panelBorderColor": null,
+  "panelBorderWidth": null,
+  "shadowEnabled": false,
   "preeditRow": true,
-  "indexSuffix": ".",
+  "indexSuffix": "",
   "decorations": [
     {
-      "type": "gradient",
-      "from": {
-        "light": "#1E2128",
-        "dark": "#1E2128"
+      "type": "frame",
+      "sheet": "scroll-frame.png",
+      "slice": {
+        "left": 40,
+        "right": 40,
+        "top": 34,
+        "bottom": 34
       },
-      "to": {
-        "light": "#121418",
-        "dark": "#121418"
-      },
-      "angle": 90,
-      "layer": "below"
+      "opacity": 1
     },
     {
       "type": "sprite",
       "sheet": "mark.png",
       "frames": 1,
       "size": {
-        "width": 36,
-        "height": 36
+        "width": 64,
+        "height": 40
       },
       "anchor": {
-        "x": 1,
-        "y": 0.5
-      },
-      "offset": {
-        "x": -6,
+        "x": 0,
         "y": 0
       },
-      "layer": "below"
+      "offset": {
+        "x": 4,
+        "y": 8
+      },
+      "layer": "below",
+      "opacity": 0.9
     }
   ]
 }

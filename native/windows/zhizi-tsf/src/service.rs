@@ -334,20 +334,12 @@ fn begin_load(state: &Rc<RefCell<State>>) {
             let (mut host, model_error) = initialize_host(
                 || {
                     let _gate = CORE_GATE.lock().unwrap_or_else(|e| e.into_inner());
-                    unsafe {
-                        LoadLibraryExW(
-                            PCWSTR(wide(&root.join("rime.dll").to_string_lossy()).as_ptr()),
-                            None,
-                            LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS,
-                        )
-                        .map_err(|_| "rime DLL load failed")?;
-                    }
                     let host = Host::open(&HostConfig {
                         shared_dir: root.join("Rime"),
                         user_dir: data.join("Rime"),
                         app_id: app,
                     })?;
-                    diagnostic("Rime initialized");
+                    diagnostic("Core initialized");
                     Ok(host)
                 },
                 || {
@@ -1182,14 +1174,6 @@ mod tests {
         let testdir =
             std::path::PathBuf::from(std::env::var("ZHIZI_TEST_DATA").expect("ZHIZI_TEST_DATA"));
         assert!(testdir.starts_with("H:\\zhizi"));
-        unsafe {
-            LoadLibraryExW(
-                PCWSTR(wide(&root.join("rime.dll").to_string_lossy()).as_ptr()),
-                None,
-                LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS,
-            )
-            .unwrap();
-        }
         for failed_stage in ["runtime unavailable", "model damaged", "vocabulary invalid"] {
             let opened = Cell::new(false);
             let (mut host, model_error) = initialize_host(

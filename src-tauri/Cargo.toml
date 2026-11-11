@@ -1,6 +1,6 @@
 [package]
 name = "agent-input-layer"
-version = "0.3.23"
+version = "0.3.31"
 description = "A task input layer for AI agents"
 authors = ["Agent Input Layer contributors"]
 edition = "2021"
@@ -41,4 +41,6 @@ tauri-plugin-clipboard-manager = "2.3.2"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 sha2 = "=0.10.9"
+ring = "=0.17.14"
+chrono = { version = "=0.4.44", default-features = false, features = ["std"] }
 tauri-plugin-dialog = "2"

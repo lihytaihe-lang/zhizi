@@ -31,6 +31,10 @@ fn main() {
         let scorer = zhizi_host::ranking::onnx::OnnxScorer::load(model.as_ref(), itos.as_ref(), 4).expect("model");
         host.enable_model(Box::new(scorer), None);
     }
+    // Optional preceding text: ZHIZI_CONTEXT="..." (what the host would read before the caret)
+    if let Ok(context) = std::env::var("ZHIZI_CONTEXT") {
+        host.set_context(&context);
+    }
     for word in arguments {
         let keys: Vec<Key> = match word.as_str() {
             "space" => vec![Key::Space],
@@ -68,6 +72,10 @@ fn main() {
             .collect();
         if std::env::var("ZHIZI_ALTS").is_ok() && !view.preedit.is_empty() {
             println!("            alternatives: {:?}", host.composition_alternatives());
+            let trace = host.last_composition();
+            for (i, text) in trace.texts.iter().enumerate() {
+                println!("            C3 {text}: score={:?} edit={:?}", trace.scores.get(i), trace.edits.get(i));
+            }
         }
         let o = host.model_observation();
         println!(

@@ -1,5 +1,6 @@
 pub const MOD_SHIFT: u32 = 1 << 0;
 /// The expanded panel shows the current page plus at most three more rows.
+/// `ZX_PEEK_PAGES` widens that cap for local measurement.
 pub const MAX_PEEK_PAGES: usize = 3;
 pub const MOD_CONTROL: u32 = 1 << 1;
 pub const MOD_OPTION: u32 = 1 << 2;
@@ -760,6 +761,15 @@ fn page_has_chinese_candidate(snapshot: &DecoderSnapshot) -> bool {
         .any(|candidate| contains_han(&candidate.text))
 }
 
+/// `ZX_PEEK_PAGES` overrides [`MAX_PEEK_PAGES`]. Unset, zero, or unparseable keeps the default.
+fn max_peek_pages() -> usize {
+    std::env::var("ZX_PEEK_PAGES")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(MAX_PEEK_PAGES)
+}
+
 impl Session {
     pub fn configure_zhixu_whole(&mut self, on: bool) -> Result<(), i32> {
         if self.composing() { return Err(-10); }
@@ -945,7 +955,7 @@ impl Session {
         if !self.composing() || !self.inline_ascii.is_empty() {
             return Vec::new();
         }
-        self.decoder.peek_following_pages(count.min(MAX_PEEK_PAGES))
+        self.decoder.peek_following_pages(count.min(max_peek_pages()))
     }
 
     pub fn reorder_context_candidates(&mut self, order: &[usize]) -> Result<(), i32> {
@@ -1060,6 +1070,8 @@ impl Session {
         commit_text: String,
         status: i32,
     ) -> ResultModel {
+        #[cfg(test)]
+        let _profile = crate::zhixu::key_latency_profile::span(crate::zhixu::key_latency_profile::Stage::PagingClone);
         let mut result = ResultModel {
             status,
             consumed,
@@ -1495,6 +1507,26 @@ mod tests {
 
     static NEXT_APP: AtomicUsize = AtomicUsize::new(1);
     thread_local! { static ZHIXU_KEY_TEST: Cell<bool> = const { Cell::new(false) }; }
+
+    /// `ZX_PEEK_PAGES` is process-wide. Tests that assert the default cap and the
+    /// one that overrides it take this lock for the whole body.
+    fn peek_pages_env_lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        LOCK.lock().unwrap_or_else(|poison| poison.into_inner())
+    }
+
+    struct PeekPagesEnv;
+    impl PeekPagesEnv {
+        fn set(value: &str) -> Self {
+            unsafe { std::env::set_var("ZX_PEEK_PAGES", value) };
+            Self
+        }
+    }
+    impl Drop for PeekPagesEnv {
+        fn drop(&mut self) {
+            unsafe { std::env::remove_var("ZX_PEEK_PAGES") };
+        }
+    }
 
     #[test]
     fn whole_native_prefix_preserves_sequence_last_flag_and_pager() {
@@ -3240,6 +3272,7 @@ mod tests {
 
         #[test]
         fn paging_preserves_column_and_peek_does_not_change_the_selection() {
+            let _guard = super::peek_pages_env_lock();
             fixture(|| {
                 let mut value = session();
                 type_text(&mut value, "shi");
@@ -3257,6 +3290,31 @@ mod tests {
                 value.process(event(KeyKind::PageUp, ""));
                 let back = value.process(event(KeyKind::PageUp, ""));
                 assert_menu_matches(&back, &first);
+            });
+        }
+
+        #[test]
+        fn peek_page_cap_stays_three_unless_zx_peek_pages_widens_it() {
+            let _guard = super::peek_pages_env_lock();
+            fixture(|| {
+                let mut value = session();
+                type_text(&mut value, "shi");
+                let page = value.decoder.snapshot().candidates;
+                assert_eq!(value.peek_following_pages(99).len(), MAX_PEEK_PAGES);
+                let _env = super::PeekPagesEnv::set("40");
+                let widened = value.peek_following_pages(99);
+                assert!(widened.len() > MAX_PEEK_PAGES, "ZX_PEEK_PAGES=40 still returned {}", widened.len());
+                assert!(widened.len() <= 40, "cap ignored: {}", widened.len());
+                assert_eq!(value.decoder.snapshot().candidates, page);
+                drop(_env);
+                let _env = super::PeekPagesEnv::set("1");
+                assert_eq!(value.peek_following_pages(99).len(), 1);
+                drop(_env);
+                let _env = super::PeekPagesEnv::set("nope");
+                assert_eq!(value.peek_following_pages(99).len(), MAX_PEEK_PAGES);
+                drop(_env);
+                assert_eq!(value.peek_following_pages(99).len(), MAX_PEEK_PAGES);
+                assert_eq!(value.decoder.snapshot().candidates, page);
             });
         }
 

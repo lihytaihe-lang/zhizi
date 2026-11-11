@@ -531,7 +531,7 @@ enum CandidateSkinPackageLoader {
             guard let number = table[key] as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else {
                 throw CandidateSkinPackageError.invalid("overflow.\(key) 必须是数字")
             }
-            return try bounded(CGFloat(truncating: number), "overflow.\(key)", 0...64)
+            return try bounded(CGFloat(truncating: number), "overflow.\(key)", 0...120)
         }
         return NSEdgeInsets(top: try edge("top"), left: try edge("left"), bottom: try edge("bottom"), right: try edge("right"))
     }
@@ -749,7 +749,7 @@ struct SkinGalleryPackages {
         var issues: [String] = []
     }
     let root: URL
-    static let maximumExternalBytes = 512 * 1024
+    static let maximumExternalBytes = 1_536 * 1024
 
     init(root: URL? = nil) {
         self.root = root ?? CandidateSkinPackageLoader.defaultExternalRoot()
@@ -798,7 +798,7 @@ struct SkinGalleryPackages {
             let limit = name == "skin.json" ? CandidateSkinPackageLimits.maximumSkinJSONBytes : min(CandidateDecorationLimits.maximumAssetBytes, maximumExternalBytes)
             let data = try directory.readRegular(name, maximumBytes: limit).0
             total += data.count
-            guard total <= maximumExternalBytes else { throw CandidateSkinPackageError.tooLarge("总大小不得超过 512 KB") }
+            guard total <= maximumExternalBytes else { throw CandidateSkinPackageError.tooLarge("总大小不得超过 1.5 MB") }
             files[name] = data
         }
         let data = files["skin.json"]!

@@ -1,0 +1,8 @@
+{
+  "full": 0.5,
+  "abbrev": 0.25,
+  "mixed": 0.1,
+  "typo": 0.1,
+  "english": 0.025,
+  "name": 0.025
+}

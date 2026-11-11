@@ -9,7 +9,7 @@
   "description": "深蓝夜空，金色弯月微微漂浮发光，星星闪烁，偶尔有流星划过；开启「减弱动态效果」时静止。",
   "candidateFont": {
     "family": "Songti SC",
-    "size": 17,
+    "size": 19,
     "weight": "medium"
   },
   "indexFont": {
@@ -22,12 +22,12 @@
     "dark": "#F2EEE3"
   },
   "secondaryCandidateColor": {
-    "light": "#9AA3C7",
-    "dark": "#9AA3C7"
+    "light": "#C1C9EB",
+    "dark": "#C1C9EB"
   },
   "indexColor": {
-    "light": "#8A93B8",
-    "dark": "#8A93B8"
+    "light": "#BAC3E6",
+    "dark": "#BAC3E6"
   },
   "highlightedCandidateColor": {
     "light": "#FFD978",
@@ -50,35 +50,35 @@
   "candidateSpacing": 11,
   "rowSpacing": 8,
   "capsuleCornerRadius": 14,
-  "panelCornerRadius": 14,
+  "panelCornerRadius": 8,
   "edgeInsets": {
-    "top": 11,
+    "top": 52,
     "left": 13,
     "bottom": 11,
-    "right": 70
+    "right": 13
   },
   "material": "hudWindow",
   "minimumPanelSize": {
-    "width": 120,
+    "width": 300,
     "height": 60
   },
   "maximumPanelWidth": 760,
   "widthQuantization": 20,
   "panelBackground": {
-    "light": "#0F1433",
-    "dark": "#0F1433"
+    "light": "#0F1433D9",
+    "dark": "#0F1433D9"
   },
   "panelBorderColor": {
     "light": "#3A4580",
     "dark": "#3A4580"
   },
-  "panelBorderWidth": 0.5,
+  "panelBorderWidth": 1,
   "shadowEnabled": true,
   "overflow": {
-    "top": 18,
+    "top": 40,
     "left": 0,
     "bottom": 0,
-    "right": 6
+    "right": 8
   },
   "decorations": [
     {
@@ -92,81 +92,171 @@
         "dark": "#252E63"
       },
       "angle": 20,
-      "layer": "below"
-    },
-    {
-      "type": "twinkle",
-      "count": 9,
-      "size": {
-        "min": 3,
-        "max": 7
-      },
-      "color": {
-        "light": "#FFEFC2",
-        "dark": "#FFEFC2"
-      },
-      "period": {
-        "min": 1.6,
-        "max": 3.8
-      },
-      "seed": 7,
       "layer": "below",
-      "region": {
-        "x": 0.55,
-        "y": 0.08,
-        "width": 0.43,
-        "height": 0.84
-      }
-    },
-    {
-      "type": "shootingStar",
-      "color": {
-        "light": "#FFFFFF",
-        "dark": "#FFFFFF"
-      },
-      "period": 9,
-      "length": 64,
-      "angle": 205,
-      "seed": 5,
-      "layer": "below",
-      "region": {
-        "x": 0.45,
-        "y": 0.55,
-        "width": 0.4,
-        "height": 0.4
-      }
+      "opacity": 0.78
     },
     {
       "type": "sprite",
-      "sheet": "moon.png",
+      "sheet": "yueye-mooncloud-a.png",
       "frames": 1,
       "size": {
-        "width": 52,
-        "height": 64
+        "width": 120,
+        "height": 88
       },
       "anchor": {
         "x": 1,
         "y": 1
       },
       "offset": {
-        "x": -10,
-        "y": 14
+        "x": 4,
+        "y": 38
       },
       "overflow": true,
       "motion": [
-        {
-          "kind": "float",
-          "amplitude": 2.4,
-          "period": 6
-        },
         {
           "kind": "glow",
           "color": {
             "light": "#FFD978",
             "dark": "#FFD978"
           },
-          "radius": 14,
+          "radius": 6,
+          "period": 8
+        }
+      ]
+    },
+    {
+      "type": "sprite",
+      "sheet": "yueye-star.png",
+      "frames": 1,
+      "size": {
+        "width": 4.2,
+        "height": 4.2
+      },
+      "anchor": {
+        "x": 0.25,
+        "y": 1
+      },
+      "offset": {
+        "x": 0,
+        "y": -16
+      },
+      "layer": "below",
+      "opacity": 0.55,
+      "motion": [
+        {
+          "kind": "fade",
+          "minimum": 0.15,
           "period": 4.2
+        }
+      ]
+    },
+    {
+      "type": "sprite",
+      "sheet": "yueye-star.png",
+      "frames": 1,
+      "size": {
+        "width": 6,
+        "height": 6
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "offset": {
+        "x": 0,
+        "y": -9
+      },
+      "layer": "below",
+      "opacity": 0.65,
+      "motion": [
+        {
+          "kind": "fade",
+          "minimum": 0.15,
+          "period": 6.6
+        }
+      ]
+    },
+    {
+      "type": "sprite",
+      "sheet": "yueye-star.png",
+      "frames": 1,
+      "size": {
+        "width": 2.6,
+        "height": 2.6
+      },
+      "anchor": {
+        "x": 0.34,
+        "y": 1
+      },
+      "offset": {
+        "x": 0,
+        "y": -29
+      },
+      "layer": "below",
+      "opacity": 0.4,
+      "motion": [
+        {
+          "kind": "fade",
+          "minimum": 0.15,
+          "period": 5.2
+        }
+      ]
+    },
+    {
+      "type": "sprite",
+      "sheet": "yueye-meteor.png",
+      "frames": 1,
+      "size": {
+        "width": 44.8,
+        "height": 16
+      },
+      "anchor": {
+        "x": 0.68,
+        "y": 1
+      },
+      "offset": {
+        "x": 0,
+        "y": -10
+      },
+      "layer": "below",
+      "opacity": 0.26,
+      "motion": [
+        {
+          "kind": "float",
+          "amplitude": 6,
+          "period": 15
+        }
+      ],
+      "clips": [
+        {
+          "row": 0,
+          "frames": 1,
+          "fps": 1,
+          "seconds": 13,
+          "move": {
+            "from": 1.2,
+            "to": 1.2
+          }
+        },
+        {
+          "row": 0,
+          "frames": 1,
+          "fps": 1,
+          "seconds": 1.6,
+          "move": {
+            "from": 1.2,
+            "to": -0.3
+          }
+        },
+        {
+          "row": 0,
+          "frames": 1,
+          "fps": 1,
+          "seconds": 15.4,
+          "move": {
+            "from": -0.3,
+            "to": -0.3
+          }
         }
       ]
     }

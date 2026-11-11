@@ -2,6 +2,7 @@ mod context_model;
 #[cfg(target_os = "macos")]
 mod friend_install;
 mod hotword;
+mod hotword_pack;
 mod ime_preferences;
 mod keychain;
 mod knowledge;
@@ -14,7 +15,19 @@ mod native_integration;
 mod profile_introspection;
 mod replay_gate;
 mod skin_catalog;
-mod skin_packages;
+mod skin_packages {
+    include!("skin_packages.rs");
+
+    #[cfg(test)]
+    pub(crate) fn install_for_store_test(
+        source: &std::path::Path,
+        root: &std::path::Path,
+    ) -> Result<CandidateSkinCatalogSnapshot, String> {
+        install_at(source, root)?;
+        catalog_snapshot_at(root, None)
+    }
+}
+mod skin_store;
 mod snapshot;
 mod storage;
 #[cfg(feature = "test-upload")]
@@ -908,6 +921,28 @@ fn refresh_hotword_exposure(
 }
 
 #[tauri::command]
+fn get_hotword_pack_settings(
+    storage: State<'_, AppStorage>,
+) -> Result<hotword::HotwordPackSettings, String> {
+    storage.get_hotword_pack_settings()
+}
+
+#[tauri::command]
+fn save_hotword_pack_url(
+    storage: State<'_, AppStorage>,
+    url: String,
+) -> Result<hotword::HotwordPackSettings, String> {
+    storage.save_hotword_pack_url(&url)
+}
+
+#[tauri::command]
+async fn update_hotword_pack(
+    storage: State<'_, AppStorage>,
+) -> Result<hotword::HotwordPackUpdateResult, String> {
+    hotword::update_hotword_pack(&storage, current_time_ms()?).await
+}
+
+#[tauri::command]
 fn ingest_local_hotword_source(
     storage: State<'_, AppStorage>,
     id: String,
@@ -1683,6 +1718,83 @@ fn list_candidate_skins(
 }
 
 #[tauri::command]
+fn skin_store_get_settings(
+    storage: State<'_, AppStorage>,
+    backend: State<'_, skin_store::StoreBackend>,
+) -> Result<skin_store::SkinStoreSettings, String> {
+    backend.settings(&storage)
+}
+
+#[tauri::command]
+fn skin_store_set_url(
+    storage: State<'_, AppStorage>,
+    backend: State<'_, skin_store::StoreBackend>,
+    url: String,
+) -> Result<skin_store::SkinStoreSettings, String> {
+    backend.set_url(&storage, &url)
+}
+
+#[tauri::command]
+async fn skin_store_refresh(
+    storage: State<'_, AppStorage>,
+    backend: State<'_, skin_store::StoreBackend>,
+    entitlements: State<'_, skin_store::Entitlements>,
+) -> Result<skin_store::StoreSnapshot, String> {
+    backend
+        .refresh(
+            &storage,
+            current_time_ms()?,
+            skin_packages::catalog_snapshot(None)?,
+            entitlements.as_ref(),
+        )
+        .await
+}
+
+#[tauri::command]
+fn skin_store_list(
+    storage: State<'_, AppStorage>,
+    backend: State<'_, skin_store::StoreBackend>,
+    entitlements: State<'_, skin_store::Entitlements>,
+) -> Result<skin_store::StoreSnapshot, String> {
+    backend.list(
+        &storage,
+        skin_packages::catalog_snapshot(None)?,
+        entitlements.as_ref(),
+    )
+}
+
+#[tauri::command]
+async fn skin_store_preview(
+    storage: State<'_, AppStorage>,
+    backend: State<'_, skin_store::StoreBackend>,
+    id: String,
+) -> Result<String, String> {
+    backend.preview(&storage, &id).await
+}
+
+#[tauri::command]
+async fn skin_store_install(
+    storage: State<'_, AppStorage>,
+    backend: State<'_, skin_store::StoreBackend>,
+    entitlements: State<'_, skin_store::Entitlements>,
+    id: String,
+) -> Result<CandidateSkinCatalogSnapshot, String> {
+    backend
+        .install(&storage, entitlements.as_ref(), &id)
+        .await
+}
+
+#[tauri::command]
+fn skin_store_purchase(
+    storage: State<'_, AppStorage>,
+    backend: State<'_, skin_store::StoreBackend>,
+    entitlements: State<'_, skin_store::Entitlements>,
+    id: String,
+) -> Result<skin_store::PurchaseResult, String> {
+    backend.purchase(&storage, entitlements.as_ref(), &id)
+}
+
+#[tauri::command]
 fn install_candidate_skin(
     storage: State<'_, AppStorage>,
     source_path: String,
@@ -2120,6 +2232,9 @@ pub fn run() {
             set_dynamic_source_enabled,
             clear_dynamic_source,
             list_hotword_items,
+            get_hotword_pack_settings,
+            save_hotword_pack_url,
+            update_hotword_pack,
             refresh_hotword_exposure,
             ingest_local_hotword_source,
             refresh_dynamic_source,
@@ -2134,6 +2249,13 @@ pub fn run() {
             context_model_availability,
             set_candidate_theme,
             list_candidate_skins,
+            skin_store_get_settings,
+            skin_store_set_url,
+            skin_store_refresh,
+            skin_store_list,
+            skin_store_preview,
+            skin_store_install,
+            skin_store_purchase,
             install_candidate_skin,
             uninstall_candidate_skin,
             lexicon_download::lexicon_packs_available,
@@ -2216,6 +2338,13 @@ lexicon_download::lexicon_packs_installed,
 
             app.manage(native_integration::NativeIntegrationState::default());
             app.manage(mcp::McpServerState::default());
+            app.manage(skin_store::StoreBackend::new(
+                app_handle.path().app_data_dir()?,
+                skin_packages::default_skins_root().map_err(std::io::Error::other)?,
+            ));
+            let skin_entitlements: skin_store::Entitlements =
+                std::sync::Arc::new(skin_store::NotConfiguredEntitlements);
+            app.manage(skin_entitlements);
 
             install_tray(&app_handle)?;
 

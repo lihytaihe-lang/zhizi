@@ -251,6 +251,8 @@ impl LearningSession {
 
     pub(crate) fn entries(&self) -> Arc<Vec<Entry>> {
         #[cfg(test)]
+        let _profile = super::key_latency_profile::span(super::key_latency_profile::Stage::Learning);
+        #[cfg(test)]
         let _timing = crate::mixer::WholeLearningTiming::start();
         if self.mode != LearningMode::Zhixu {
             return Arc::default();
@@ -262,6 +264,8 @@ impl LearningSession {
     }
 
     pub(crate) fn use_rime_order(&self, raw: &str) -> bool {
+        #[cfg(test)]
+        let _profile = super::key_latency_profile::span(super::key_latency_profile::Stage::Learning);
         #[cfg(test)]
         let _timing = crate::mixer::WholeLearningTiming::start();
         self.mode == LearningMode::Zhixu && self.knowledge.lock()
@@ -276,6 +280,8 @@ impl LearningSession {
 
     pub(crate) fn choices(&self) -> Vec<Choice> {
         #[cfg(test)]
+        let _profile = super::key_latency_profile::span(super::key_latency_profile::Stage::Learning);
+        #[cfg(test)]
         let _timing = crate::mixer::WholeLearningTiming::start();
         if self.mode != LearningMode::Zhixu {
             return Vec::new();
@@ -288,6 +294,8 @@ impl LearningSession {
 
     pub(crate) fn overlay(&self) -> Option<Arc<Index>> {
         #[cfg(test)]
+        let _profile = super::key_latency_profile::span(super::key_latency_profile::Stage::Learning);
+        #[cfg(test)]
         let _timing = crate::mixer::WholeLearningTiming::start();
         if self.mode != LearningMode::Zhixu {
             return None;
@@ -299,6 +307,8 @@ impl LearningSession {
     }
 
     pub(crate) fn whole_overlay(&self) -> Option<Arc<Index>> {
+        #[cfg(test)]
+        let _profile = super::key_latency_profile::span(super::key_latency_profile::Stage::Learning);
         #[cfg(test)]
         let _timing = crate::mixer::WholeLearningTiming::start();
         if self.mode != LearningMode::Zhixu { return None; }

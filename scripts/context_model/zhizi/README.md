@@ -4,7 +4,7 @@ Training, evaluation, and export code for **Shunshou-Zhizi** (`shunshou-zhizi-30
 
 - The model itself is published separately: <https://huggingface.co/DabbleCove/shunshou-zhizi-30m> (CC BY-SA 4.0).
 - The **model card on that page is the authoritative source for training data, evaluation numbers, and licensing**; this README explains the code and links there instead of restating those details.
-- How the input method uses the model (three build-time tiers): [docs/public/MODEL.md](../../../docs/public/MODEL.md). Project overview: [docs/public/README.md](../../../docs/public/README.md).
+- How the input method uses the model (three build-time tiers): [docs/public/MODEL.md](../../../docs/public/MODEL.md). Project overview: [docs/public/README.md](../../../README.md).
 
 ## Work directory
 
@@ -70,7 +70,7 @@ To *use* the model rather than train it: the input method fetches the published 
 
 - This repository contains neither corpora nor checkpoints; reproducing training starts with data preparation (the model card lists what the released model was trained on).
 - Synthetic data is AI-generated text, labeled as such; generating it calls LLM backends (local CLIs or an HTTPS API) and may incur cost.
-- Compiled Core ML artifacts embed a compiler-generated conversion timestamp and UUIDs, so they are not byte-reproducible (see [docs/public/README.md](../../../docs/public/README.md)).
+- Compiled Core ML artifacts embed a compiler-generated conversion timestamp and UUIDs, so they are not byte-reproducible (see [docs/public/README.md](../../../README.md)).
 - The homophone-set builder defaults to the Rime resources of an installed IME; point `--rime` at another dictionary directory to work without one.
 
 ---
@@ -81,7 +81,7 @@ To *use* the model rather than train it: the input method fetches the published 
 
 - 模型单独发布：<https://huggingface.co/DabbleCove/shunshou-zhizi-30m>（CC BY-SA 4.0）。
 - 该页面的**模型卡是训练数据、评测数字与授权的权威来源**；本 README 只解释代码，细节链接到模型卡，不复述。
-- 输入法如何接入模型（三种构建档位）：[docs/public/MODEL.md](../../../docs/public/MODEL.md)。项目总览：[docs/public/README.md](../../../docs/public/README.md)。
+- 输入法如何接入模型（三种构建档位）：[docs/public/MODEL.md](../../../docs/public/MODEL.md)。项目总览：[docs/public/README.md](../../../README.md)。
 
 ## 工作目录
 
@@ -147,5 +147,5 @@ To *use* the model rather than train it: the input method fetches the published 
 
 - 仓库不含语料和 checkpoint；复现训练从准备数据开始（发布模型用了哪些数据见模型卡）。
 - 合成数据是 AI 生成文本，已有标注；生成需要调用大模型后端（本地 CLI 或 HTTPS API），可能产生费用。
-- 编译出的 Core ML 产物内嵌编译器生成的转换时间戳与 UUID，无法逐字节复现（见 [docs/public/README.md](../../../docs/public/README.md)）。
+- 编译出的 Core ML 产物内嵌编译器生成的转换时间戳与 UUID，无法逐字节复现（见 [docs/public/README.md](../../../README.md)）。
 - 同音题集默认读已安装输入法的 Rime 资源目录；用 `--rime` 指向其他词典目录即可脱离安装环境工作。

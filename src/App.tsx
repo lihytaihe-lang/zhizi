@@ -628,7 +628,7 @@ function App() {
                 <div className="panel-heading">
                   <div>
                     <h2 id="composer-title">生成工作台</h2>
-                    <p>个人词/术语生成、改写、总结等动作都在这里；日常输入请用快捷键唤起 Compact Input Panel</p>
+                    <p>个人词/术语候选生成、改写、总结等动作都在这里；日常输入请用快捷键唤起 Compact Input Panel</p>
                   </div>
                 </div>
 

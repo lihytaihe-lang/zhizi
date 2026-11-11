@@ -5,7 +5,7 @@ import ImageIO
 /// procedurally twinkling stars); it never carries code. Animations are Core Animation layers that run on the render server and
 /// exist only while the panel is on screen.
 public enum CandidateDecorationLimits {
-    public static let maximumCount = 4
+    public static let maximumCount = 8
     public static let maximumFrames = 24
     public static let maximumSheetWidth = 4_096
     public static let maximumSheetHeight = 1_536
@@ -24,12 +24,16 @@ public enum CandidateMotion: Equatable {
     case breathe(scale: CGFloat, period: CFTimeInterval)
     /// Rocks by `degrees` either way about the pivot.
     case sway(degrees: CGFloat, period: CFTimeInterval)
+    /// Rests for `delay` seconds, gives one short shake, then rests for the remainder of the period.
+    case twitch(degrees: CGFloat, period: CFTimeInterval, delay: CFTimeInterval, duration: CFTimeInterval)
     /// A halo that pulses.
     case glow(color: NSColor, radius: CGFloat, period: CFTimeInterval)
     /// Fades to `minimum` opacity and back.
     case fade(minimum: CGFloat, period: CFTimeInterval)
     /// A small hop: crouch, leap `height` points, land with a squash of `squash` (0.1 = 10 %), settle, rest until the period is over.
     case hop(height: CGFloat, squash: CGFloat, period: CFTimeInterval)
+    /// Waits, drifts down to the model position, rests briefly, then fades before the next fall.
+    case fall(height: CGFloat, drift: CGFloat, period: CFTimeInterval)
 }
 
 public struct CandidateSpriteDecoration: Equatable {
@@ -100,6 +104,18 @@ public struct CandidateGradientDecoration: Equatable {
     public let angle: CGFloat
     public let opacity: CGFloat
     public let above: Bool
+}
+
+/// A thin water ribbon along the lower edge, widening into a trailing pool. Placed after a sprite, it tints only its submerged part.
+public struct CandidateWaterDecoration: Equatable {
+    public let depth: CGFloat
+    public let poolWidth: CGFloat
+    public let from: NSColor
+    public let to: NSColor
+    public let highlight: NSColor
+    public let period: CFTimeInterval
+    public let above: Bool
+    public let overflows: Bool
 }
 
 /// A soft band of light that sweeps across the card now and then.
@@ -174,6 +190,7 @@ public enum CandidateDecoration: Equatable {
     case twinkle(CandidateTwinkleDecoration)
     case petals(CandidatePetalsDecoration)
     case gradient(CandidateGradientDecoration)
+    case water(CandidateWaterDecoration)
     case shimmer(CandidateShimmerDecoration)
     case shootingStar(CandidateShootingStarDecoration)
 
@@ -183,6 +200,7 @@ public enum CandidateDecoration: Equatable {
         switch self {
         case .frame: false
         case let .gradient(value): value.above
+        case let .water(value): value.above
         case let .shimmer(value): value.above
         case let .shootingStar(value): value.above
         case let .sprite(sprite): sprite.above
@@ -195,6 +213,7 @@ public enum CandidateDecoration: Equatable {
         switch self {
         case .gradient, .shimmer, .frame: false
         case let .shootingStar(value): value.overflows
+        case let .water(value): value.overflows
         case let .sprite(sprite): sprite.overflows
         case let .twinkle(twinkle): twinkle.overflows
         case let .petals(petals): petals.overflows
@@ -252,7 +271,8 @@ enum CandidateDecorationParser {
                 used.insert(name)
                 let frames = try integer(object["frames"], "\(label).frames", 1...CandidateDecorationLimits.maximumFrames)
                 let fps = try number(object["fps"] ?? 8, "\(label).fps", 1...30)
-                let size = try point(object["size"], "\(label).size", ["width", "height"], 1...256)
+                let size = try point(object["size"], "\(label).size", ["width", "height"], 1...300)
+                guard size.y <= 256 else { throw CandidateDecorationError.invalid("\(label).size.height 超出 1...256") }
                 let clips = try clipList(object["clips"], columns: frames, label: label)
                 if !clips.isEmpty, object["travel"] != nil {
                     throw CandidateDecorationError.invalid("\(label) 有 clips 时不能再写 travel（位移写在每个 clip 的 move 里）")
@@ -359,6 +379,16 @@ enum CandidateDecorationParser {
                     angle: try number(object["angle"] ?? 90, "\(label).angle", 0...360),
                     opacity: try number(object["opacity"] ?? 1, "\(label).opacity", 0...1), above: above
                 )))
+            case "water":
+                try onlyKeys(object, ["type", "depth", "poolWidth", "from", "to", "highlight", "period", "layer", "overflow"], label)
+                result.append(.water(CandidateWaterDecoration(
+                    depth: try number(object["depth"], "\(label).depth", 8...120),
+                    poolWidth: try number(object["poolWidth"], "\(label).poolWidth", 32...300),
+                    from: try color(object["from"], "\(label).from"), to: try color(object["to"], "\(label).to"),
+                    highlight: try color(object["highlight"], "\(label).highlight"),
+                    period: try number(object["period"] ?? 5, "\(label).period", 1...20),
+                    above: above, overflows: overflows
+                )))
             case "shimmer":
                 try onlyKeys(object, ["type", "color", "period", "width", "angle", "layer"], label)
                 result.append(.shimmer(CandidateShimmerDecoration(
@@ -409,12 +439,23 @@ enum CandidateDecorationParser {
             case "sway":
                 try onlyKeys(table, ["kind", "degrees", "period"], at)
                 return .sway(degrees: try number(table["degrees"], "\(at).degrees", 0.3...12), period: period)
+            case "twitch":
+                try onlyKeys(table, ["kind", "degrees", "period", "delay", "duration"], at)
+                let delay = try number(table["delay"], "\(at).delay", 0...20)
+                let duration = try number(table["duration"], "\(at).duration", 0.3...0.5)
+                guard delay + duration <= period else { throw CandidateDecorationError.invalid("\(at) 抖动必须在周期内结束") }
+                return .twitch(degrees: try number(table["degrees"], "\(at).degrees", 0.3...12),
+                               period: period, delay: delay, duration: duration)
             case "glow":
                 try onlyKeys(table, ["kind", "color", "radius", "period"], at)
                 return .glow(color: try color(table["color"], "\(at).color"), radius: try number(table["radius"], "\(at).radius", 2...30), period: period)
             case "hop":
                 try onlyKeys(table, ["kind", "height", "squash", "period"], at)
                 return .hop(height: try number(table["height"], "\(at).height", 1...16), squash: try number(table["squash"], "\(at).squash", 0...0.25), period: period)
+            case "fall":
+                try onlyKeys(table, ["kind", "height", "drift", "period"], at)
+                return .fall(height: try number(table["height"], "\(at).height", 1...120),
+                             drift: try number(table["drift"] ?? 0, "\(at).drift", -40...40), period: period)
             case "fade":
                 try onlyKeys(table, ["kind", "minimum", "period"], at)
                 return .fade(minimum: try number(table["minimum"], "\(at).minimum", 0.1...0.95), period: period)
@@ -543,6 +584,15 @@ final class CandidateDecorationHostView: NSView {
         let spec: CandidateSpriteDecoration
     }
 
+    private struct WaterLayers {
+        let container: CALayer
+        let fill: CAGradientLayer
+        let mask: CAShapeLayer
+        let highlight: CAShapeLayer
+        let wave: CAShapeLayer
+        let spec: CandidateWaterDecoration
+    }
+
     private var decorations: [CandidateDecoration] = []
     private var running = false
     private var reduceMotion = false
@@ -551,12 +601,16 @@ final class CandidateDecorationHostView: NSView {
     private var petals: [CandidatePetalsDecoration] = []
     private var emitters: [(layer: CAEmitterLayer, spec: CandidatePetalsDecoration)] = []
     private var gradients: [(layer: CAGradientLayer, spec: CandidateGradientDecoration)] = []
+    private var waters: [WaterLayers] = []
     private var frames: [(layer: CALayer, spec: CandidateFrameDecoration)] = []
     private var shimmers: [(layer: CAGradientLayer, spec: CandidateShimmerDecoration)] = []
     private var streaks: [(layer: CAGradientLayer, spec: CandidateShootingStarDecoration, unit: CGPoint, phase: CGFloat)] = []
     /// The card inside this host (the host covers the card plus the skin's overflow margin); anchors are relative to it.
     var cardInsets = NSEdgeInsets() {
         didSet { needsLayout = true }
+    }
+    var reduceMotionOverrideForTesting: Bool? {
+        didSet { if running { restartAnimations() } }
     }
 
     override init(frame: NSRect) {
@@ -572,7 +626,7 @@ final class CandidateDecorationHostView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
     override var isFlipped: Bool { false }
 
-    var layerCountForTesting: Int { sprites.count + stars.count + petals.count + gradients.count + shimmers.count + streaks.count + frames.count }
+    var layerCountForTesting: Int { sprites.count + stars.count + petals.count + gradients.count + waters.count + shimmers.count + streaks.count + frames.count }
     var emitterCountForTesting: Int { emitters.count }
     var animationKeysForTesting: [String] {
         var keys: [String] = []
@@ -584,6 +638,7 @@ final class CandidateDecorationHostView: NSView {
         keys += stars.flatMap { $0.layer.animationKeys() ?? [] }
         keys += shimmers.flatMap { $0.layer.animationKeys() ?? [] }
         keys += streaks.flatMap { $0.layer.animationKeys() ?? [] }
+        keys += waters.flatMap { $0.wave.animationKeys() ?? [] }
         return keys
     }
 
@@ -596,6 +651,7 @@ final class CandidateDecorationHostView: NSView {
         stars = []
         petals = []
         gradients = []
+        waters = []
         frames = []
         shimmers = []
         streaks = []
@@ -642,6 +698,24 @@ final class CandidateDecorationHostView: NSView {
                 gradient.opacity = Float(spec.opacity)
                 layer?.addSublayer(gradient)
                 gradients.append((gradient, spec))
+            case let .water(spec):
+                let container = CALayer(), fill = CAGradientLayer(), mask = CAShapeLayer()
+                let highlight = CAShapeLayer(), wave = CAShapeLayer()
+                fill.startPoint = CGPoint(x: 0.5, y: 0)
+                fill.endPoint = CGPoint(x: 0.5, y: 1)
+                fill.mask = mask
+                container.addSublayer(fill)
+                for line in [highlight, wave] {
+                    line.fillColor = nil
+                    line.lineWidth = 0.75
+                    line.lineCap = .round
+                    line.contentsScale = scale
+                    container.addSublayer(line)
+                }
+                wave.opacity = 0.55
+                layer?.addSublayer(container)
+                waters.append(WaterLayers(container: container, fill: fill, mask: mask,
+                                          highlight: highlight, wave: wave, spec: spec))
             case let .shimmer(spec):
                 let band = CAGradientLayer()
                 band.startPoint = CGPoint(x: 0, y: 0.5)
@@ -678,7 +752,7 @@ final class CandidateDecorationHostView: NSView {
         var wrappers: [(layer: CALayer, motion: CandidateMotion)] = []
         for motion in spec.motions {
             switch motion {
-            case .float, .breathe, .sway, .hop:
+            case .float, .breathe, .sway, .twitch, .hop, .fall:
                 let wrapper = CALayer()
                 wrapper.bounds = bounds
                 wrapper.anchorPoint = spec.pivot
@@ -700,6 +774,10 @@ final class CandidateDecorationHostView: NSView {
         content.magnificationFilter = spec.pixelated ? .nearest : .linear
         content.minificationFilter = spec.pixelated ? .nearest : .trilinear
         content.contentsRect = Self.frameRect(spec.staticFrame, of: spec.frames, row: 0, of: spec.rows)
+        // Keep the initial facing direction in still previews and with Reduce Motion, too.
+        if spec.clips.first?.flip == true {
+            content.transform = CATransform3DConcat(CATransform3DMakeScale(-1, 1, 1), CATransform3DMakeTranslation(spec.size.width, 0, 0))
+        }
         parent.addSublayer(content)
         layer?.addSublayer(container)
         sprites.append(SpriteLayers(container: container, wrappers: wrappers, content: content, spec: spec))
@@ -742,6 +820,11 @@ final class CandidateDecorationHostView: NSView {
             let radians = item.spec.angle * .pi / 180
             item.layer.startPoint = CGPoint(x: 0.5 - cos(radians) / 2, y: 0.5 - sin(radians) / 2)
             item.layer.endPoint = CGPoint(x: 0.5 + cos(radians) / 2, y: 0.5 + sin(radians) / 2)
+        }
+        for item in waters {
+            item.fill.colors = [resolved(item.spec.from).cgColor, resolved(item.spec.to).cgColor]
+            item.highlight.strokeColor = resolved(item.spec.highlight).cgColor
+            item.wave.strokeColor = resolved(item.spec.highlight).cgColor
         }
         for item in shimmers {
             let color = resolved(item.spec.color)
@@ -791,6 +874,7 @@ final class CandidateDecorationHostView: NSView {
             )
         }
         for item in gradients { item.layer.frame = card }
+        for item in waters { placeWater(item, card: card) }
         for item in frames { item.layer.frame = bounds }   // the whole window, margins included
         for item in shimmers {
             let band = width * item.spec.width
@@ -809,7 +893,7 @@ final class CandidateDecorationHostView: NSView {
 
     private func restartAnimations() {
         stopAnimations()
-        reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        reduceMotion = reduceMotionOverrideForTesting ?? NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         startPetals()
         for item in sprites {
             let spec = item.spec
@@ -851,8 +935,12 @@ final class CandidateDecorationHostView: NSView {
                 case let .sway(degrees, period):
                     let radians = degrees * .pi / 180
                     wrapper.add(Self.loop("transform.rotation.z", from: -radians, to: radians, period: period), forKey: "sway")
+                case let .twitch(degrees, period, delay, duration):
+                    wrapper.add(Self.twitch(degrees: degrees, period: period, delay: delay, duration: duration), forKey: "twitch")
                 case let .hop(height, squash, period):
                     wrapper.add(Self.hop(height: height, squash: squash, period: period), forKey: "hop")
+                case let .fall(height, drift, period):
+                    wrapper.add(Self.fall(height: height, drift: drift, period: period), forKey: "fall")
                 case .glow, .fade:
                     break
                 }
@@ -896,6 +984,65 @@ final class CandidateDecorationHostView: NSView {
         for item in streaks where !reduceMotion {
             addStreak(item.layer, spec: item.spec, unit: item.unit, phase: item.phase, keepingPhase: false)
         }
+        for item in waters where !reduceMotion {
+            item.wave.add(Self.loop("transform.translation.x", from: -1, to: 1, period: item.spec.period), forKey: "waterWave")
+        }
+    }
+
+    private func placeWater(_ item: WaterLayers, card: CGRect) {
+        let depth = item.spec.depth, width = card.width, pool = min(width, item.spec.poolWidth)
+        item.container.frame = CGRect(x: card.minX, y: card.minY - depth, width: width, height: depth + 6)
+        let bounds = item.container.bounds
+        item.fill.frame = bounds
+        item.mask.frame = bounds
+        item.highlight.frame = bounds
+        item.wave.frame = bounds
+        let edge = CGMutablePath()
+        edge.move(to: CGPoint(x: 1, y: depth + 2))
+        edge.addCurve(to: CGPoint(x: width - pool, y: depth + 2),
+                      control1: CGPoint(x: (width - pool) * 0.35, y: depth + 6),
+                      control2: CGPoint(x: (width - pool) * 0.7, y: depth - 2))
+        edge.addCurve(to: CGPoint(x: width - pool * 0.5, y: depth * 0.55),
+                      control1: CGPoint(x: width - pool * 0.8, y: depth + 2),
+                      control2: CGPoint(x: width - pool * 0.75, y: depth * 0.55))
+        edge.addCurve(to: CGPoint(x: width - 1, y: depth * 0.62),
+                      control1: CGPoint(x: width - pool * 0.25, y: depth * 0.52),
+                      control2: CGPoint(x: width - 1, y: depth * 0.8))
+        item.highlight.path = edge
+        let surface = edge.mutableCopy()!
+        surface.addCurve(to: CGPoint(x: width - pool * 0.5, y: 1),
+                         control1: CGPoint(x: width - 1, y: 1), control2: CGPoint(x: width - pool * 0.2, y: 1))
+        surface.addCurve(to: CGPoint(x: width - pool, y: depth - 4),
+                         control1: CGPoint(x: width - pool * 0.9, y: 1), control2: CGPoint(x: width - pool * 0.85, y: depth - 4))
+        surface.addCurve(to: CGPoint(x: 1, y: depth - 4),
+                         control1: CGPoint(x: (width - pool) * 0.65, y: depth - 8),
+                         control2: CGPoint(x: (width - pool) * 0.3, y: depth))
+        surface.closeSubpath()
+        item.mask.path = surface
+        let wave = CGMutablePath()
+        wave.move(to: CGPoint(x: width - pool * 0.85, y: depth * 0.3))
+        wave.addCurve(to: CGPoint(x: width - pool * 0.12, y: depth * 0.32),
+                      control1: CGPoint(x: width - pool * 0.65, y: depth * 0.13),
+                      control2: CGPoint(x: width - pool * 0.3, y: depth * 0.16))
+        item.wave.path = wave
+    }
+
+    private static func fall(height: CGFloat, drift: CGFloat, period: CFTimeInterval) -> CAAnimationGroup {
+        let move = CAKeyframeAnimation(keyPath: "transform")
+        move.values = [CGPoint(x: -drift, y: height), CGPoint(x: -drift, y: height), .zero, .zero].map {
+            NSValue(caTransform3D: CATransform3DMakeTranslation($0.x, $0.y, 0))
+        }
+        move.keyTimes = [0, 0.6, 0.85, 1]
+        move.timingFunctions = [CAMediaTimingFunction(name: .linear), CAMediaTimingFunction(name: .easeInEaseOut), CAMediaTimingFunction(name: .linear)]
+        let opacity = CAKeyframeAnimation(keyPath: "opacity")
+        opacity.values = [0, 0, 1, 1, 0, 0]
+        opacity.keyTimes = [0, 0.6, 0.64, 0.9, 0.96, 1]
+        let group = CAAnimationGroup()
+        group.animations = [move, opacity]
+        group.duration = period
+        group.repeatCount = .infinity
+        group.isRemovedOnCompletion = false
+        return group
     }
 
     /// Crouch, leap, land with a squash, settle, rest: one transform animation (translation and squash together, about the pivot).
@@ -914,6 +1061,23 @@ final class CandidateDecorationHostView: NSView {
         // Up eases out, down eases in; the rest is linear.
         let ease = CAMediaTimingFunction(name: .easeInEaseOut), out = CAMediaTimingFunction(name: .easeOut), into = CAMediaTimingFunction(name: .easeIn)
         animation.timingFunctions = [ease, out, out, into, ease, ease, ease, ease]
+        animation.duration = period
+        animation.repeatCount = .infinity
+        animation.isRemovedOnCompletion = false
+        return animation
+    }
+
+    private static func twitch(degrees: CGFloat, period: CFTimeInterval, delay: CFTimeInterval, duration: CFTimeInterval) -> CAKeyframeAnimation {
+        let radians = degrees * .pi / 180
+        var frames: [(Double, CGFloat)] = [(0, 0)]
+        if delay > 0 { frames.append((delay, 0)) }
+        frames += [(delay + duration * 0.22, radians), (delay + duration * 0.50, -radians * 0.65),
+                   (delay + duration * 0.76, radians * 0.25), (delay + duration, 0)]
+        if delay + duration < period { frames.append((period, 0)) }
+        let animation = CAKeyframeAnimation(keyPath: "transform.rotation.z")
+        animation.values = frames.map { $0.1 }
+        animation.keyTimes = frames.map { NSNumber(value: $0.0 / period) }
+        animation.timingFunctions = (1..<frames.count).map { _ in CAMediaTimingFunction(name: .easeInEaseOut) }
         animation.duration = period
         animation.repeatCount = .infinity
         animation.isRemovedOnCompletion = false
@@ -1166,6 +1330,7 @@ final class CandidateDecorationHostView: NSView {
         stars.forEach { $0.layer.removeAllAnimations() }
         shimmers.forEach { $0.layer.removeAllAnimations() }
         streaks.forEach { $0.layer.removeAllAnimations() }
+        waters.forEach { $0.wave.removeAllAnimations() }
     }
 
     /// A cell of the sheet; `row` counts from the top of the picture (Core Animation's contents rect starts at the bottom).

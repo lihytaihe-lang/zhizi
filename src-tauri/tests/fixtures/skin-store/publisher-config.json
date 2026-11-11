@@ -1,0 +1,29 @@
+{
+  "schema": "agent-ime-skin-index/1",
+  "generatedAt": "2026-11-08T04:00:00Z",
+  "producer": "agent-ime-skin-publisher/1.0.0",
+  "skins": [
+    {
+      "id": "teststore",
+      "name": {
+        "zh": "测试简洁",
+        "en": "Test Clean"
+      },
+      "author": "Agent Input Method",
+      "description": "从内置简洁皮肤派生的公开测试夹具，不用于上架。",
+      "version": "1.0.0",
+      "tier": "free",
+      "priceCents": 0,
+      "productId": "skin.teststore",
+      "animated": false,
+      "previewUrl": "https://example.invalid/skins/preview.png",
+      "previewPath": "preview.png",
+      "bundleUrl": "https://example.invalid/skins/teststore-1.0.0.zhskin.json",
+      "bundlePath": "teststore-1.0.0.zhskin.json",
+      "minAppVersion": "0.3.24",
+      "updatedAt": "2026-11-08",
+      "license": "Agent Input Method 自制，仅供测试",
+      "changelog": "首次测试夹具。"
+    }
+  ]
+}

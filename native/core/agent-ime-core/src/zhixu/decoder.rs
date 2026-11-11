@@ -53,6 +53,8 @@ fn generate_candidates(raw: &str, entries: &[learning::Entry], tick: u64, inheri
 fn generate_candidates_cached(raw: &str, entries: &[learning::Entry], tick: u64, inherited_order: bool, whole: bool,
     lattice: Option<(&mut Option<crate::mixer::WholeLattice>, u64)>, prefixes: &[PrefixCandidates]) -> GeneratedCandidates {
     #[cfg(test)]
+    let _profile = super::key_latency_profile::span(super::key_latency_profile::Stage::Generation);
+    #[cfg(test)]
     let _timer = InnerTimer(0, std::time::Instant::now());
     use std::collections::HashSet;
     if raw.is_empty() || raw.len() > 120 || raw.starts_with('\'')
@@ -65,6 +67,8 @@ fn generate_candidates_cached(raw: &str, entries: &[learning::Entry], tick: u64,
     // Like the whole-word source, inherited Rime scores rank matching words
     // ahead of static weights. A reading match keeps homographs independent.
     let mut learned = std::collections::HashMap::new();
+    #[cfg(test)]
+    let learning_profile = super::key_latency_profile::span(super::key_latency_profile::Stage::Learning);
     if inherited_order {
         for entry in entries.iter().filter(|entry| !entry.is_learned() && entry.text.chars().count() >= 2) {
             let score = entry.score(tick);
@@ -72,6 +76,8 @@ fn generate_candidates_cached(raw: &str, entries: &[learning::Entry], tick: u64,
                 .and_modify(|kept: &mut f64| *kept = kept.max(score)).or_insert(score);
         }
     }
+    #[cfg(test)]
+    drop(learning_profile);
     let learned_score = |text: &str, reading: &str| learned.get(&(text, reading)).copied();
     let compare_words = |a: &(usize, u32, &str, &str), b: &(usize, u32, &str, &str)|
         b.0.cmp(&a.0)
@@ -79,6 +85,8 @@ fn generate_candidates_cached(raw: &str, entries: &[learning::Entry], tick: u64,
                 .unwrap_or(std::cmp::Ordering::Equal))
             .then(b.1.cmp(&a.1)).then(a.2.cmp(&b.2)).then(a.3.cmp(&b.3));
     let mut words = Vec::new();
+    #[cfg(test)]
+    let dictionary_profile = super::key_latency_profile::span(super::key_latency_profile::Stage::Dictionary);
     for dictionary in &dictionaries {
         dictionary.visit_words_for_prefixes(raw, |end, text, reading, weight| {
             if reading.split_whitespace().all(|syllable| !matches!(syllable, "m" | "n" | "ng" | "hm" | "hng"))
@@ -185,6 +193,10 @@ fn generate_candidates_cached(raw: &str, entries: &[learning::Entry], tick: u64,
     }
     words.retain(|word| (word.0 == raw.len() || boundaries.contains(&word.0))
         && word.3.split_whitespace().all(|syllable| !matches!(syllable, "m" | "n" | "ng" | "hm" | "hng")));
+    #[cfg(test)]
+    drop(dictionary_profile);
+    #[cfg(test)]
+    let sort_profile = super::key_latency_profile::span(super::key_latency_profile::Stage::SortDedup);
     words.sort_by(compare_words);
     let mut seen = HashSet::new();
     // Duplicate dictionary paths need no owned text merely to discard it.
@@ -195,16 +207,22 @@ fn generate_candidates_cached(raw: &str, entries: &[learning::Entry], tick: u64,
         candidate: Candidate { text: text.to_string(), reading_key: reading_key.to_string(), ..Candidate::default() }, consumed,
     }).collect();
     #[cfg(test)]
+    drop(sort_profile);
+    #[cfg(test)]
     let start = std::time::Instant::now();
     let generated = crate::mixer::decoder_whole_candidates_cached(raw, entries, tick, inherited_order, lattice);
     #[cfg(test)]
     INNER_TIMING.with(|timing| timing.borrow_mut()[2] += start.elapsed().as_nanos());
     let repair_jqx = super::fuzzy::has_jqx_spelling_error(raw);
+    // shijain -> shijian: once the swap reads a whole word, nothing typed is left over.
+    let swap_spellings = if repair_jqx { super::fuzzy::jqx_swap_spellings(raw) } else { Vec::new() };
     for candidate in generated.iter().filter(|candidate| candidate.comment == "整串 · 顺手·知序") {
         // A malformed xang can already offer 想 for the prefix x. Upgrade that
         // single character to the repaired whole reading. Multi-character native
         // pieces (ganj + e, shangj + ai) retain their original suffix ownership.
-        if repair_jqx && candidate.text.chars().count() == 1
+        if repair_jqx && (candidate.text.chars().count() == 1
+            || swap_spellings.iter().any(|spelling| dictionaries.iter().any(|dictionary|
+                dictionary.all_words_for_compact_reading(spelling).any(|(text, _, _)| text == candidate.text))))
             && let Some(position) = result.iter().position(|item|
             item.consumed < raw.len() && item.candidate.text == candidate.text)
         {
@@ -317,18 +335,107 @@ fn generate_candidates_cached(raw: &str, entries: &[learning::Entry], tick: u64,
             }
         }
     }
-    if whole { word_boundary_ladder(&index, raw.len(), &mut result); }
+    if whole {
+        word_boundary_ladder(&index, raw.len(), &mut result);
+        sentence_prefix_ladder(raw, entries, tick, inherited_order, &mut result);
+    }
     GeneratedCandidates { candidates: result, has_standalone_full }
 }
 
-/// Slots 3-5 of the first page are shorter prefixes of the input. A prefix that ends inside a word
-/// (就是这 for jiu shi zhe zhong: a learned or composed cut, no entry of the public dictionary)
-/// reads as noise in what should be a ladder of whole sentence, shorter sentence, then word prefixes
-/// (Q22A; Sogou's short prefixes always end on word boundaries). A candidate that consumes less than
-/// the whole input and is a multi-character text the public dictionary does not know yields its
-/// place in those slots to the next candidates that are words (or cover everything): it moves behind
-/// them and stays reachable on the following pages. Slots 1-2 (the whole sentence and the longest
-/// composed prefix) and everything else keep their order.
+/// Keep the chosen head, then reserve a sentence alternative and a composed
+/// prefix ending at a word edge. With no composed prefix, a second alternative
+/// can use its slot. Q22A still keeps cuts inside words out of the other slots.
+fn sentence_prefix_ladder(raw: &str, entries: &[learning::Entry], tick: u64, inherited_order: bool,
+    result: &mut Vec<GeneratedCandidate>) {
+    let Some(head) = result.first().filter(|item| item.consumed == raw.len()
+        && item.candidate.text.chars().count() >= 3
+        && item.candidate.comment == "整句 · 顺手·知序") else { return; };
+    let words = crate::mixer::decoder_sentence_words(raw, &head.candidate.text, entries, tick);
+    if words.len() < 2 { return; }
+    let mut composed = Vec::new();
+    let mut text = String::new();
+    let mut reading = String::new();
+    for (i, (word, consumed)) in words.iter().enumerate() {
+        text.push_str(&word.text);
+        if !reading.is_empty() { reading.push(' '); }
+        reading.push_str(&word.reading_key);
+        if i > 0 && i + 1 < words.len() {
+            composed.push(GeneratedCandidate { candidate: Candidate { text: text.clone(),
+                reading_key: reading.clone(), comment: "短语 · 顺手·知序".into(), source_index: None }, consumed: *consumed });
+        }
+    }
+    composed.reverse();
+    let mut corrected = Vec::new();
+    if !super::fuzzy::spelling_matches(raw, &reading, super::fuzzy::mask()) {
+        // Only prefix slots follow the winning repair. The original spelling's
+        // words remain on later pages, and the chosen whole sentence is untouched.
+        let spelling = reading.replace(' ', "");
+        let syllables: Vec<_> = reading.split_whitespace().collect();
+        for mut item in generate_candidates_cached(&spelling, entries, tick, inherited_order, false, None, &[]).candidates {
+            let prefix: Vec<_> = item.candidate.reading_key.split_whitespace().collect();
+            if item.consumed >= spelling.len() || prefix.is_empty() || !syllables.starts_with(&prefix) { continue; }
+            if let Some(consumed) = sentence_prefix_consumed(raw, &words, prefix.len()) {
+                item.consumed = consumed;
+                corrected.push(item);
+            }
+        }
+    }
+    let alternatives = if composed.is_empty() { 2 } else { 1 };
+    let mut old = std::mem::take(result).into_iter();
+    let head = old.next().unwrap();
+    let mut rest: Vec<_> = old.collect();
+    result.push(head);
+    for _ in 0..alternatives {
+        let Some(at) = rest.iter().position(|item| item.consumed == raw.len()
+            && matches!(item.candidate.comment.as_str(), "整句 · 顺手·知序" | "备选 · 顺手·知序")) else { break; };
+        let mut item = rest.remove(at);
+        item.candidate.comment = "备选 · 顺手·知序".into();
+        result.push(item);
+    }
+    if !composed.is_empty() { result.push(composed.remove(0)); }
+    result.extend(corrected);
+    let mut seen = std::collections::HashSet::new();
+    result.retain(|item| seen.insert(item.candidate.text.clone()));
+    result.extend(rest.into_iter().filter(|item| seen.insert(item.candidate.text.clone())));
+    // Shorter composed prefixes stay reachable without crowding dictionary words
+    // out of the remaining first-page slots.
+    let tail = result.split_off(result.len().min(PAGE_SIZE));
+    result.extend(composed.into_iter().filter(|item| seen.insert(item.candidate.text.clone())));
+    result.extend(tail);
+}
+
+fn sentence_prefix_consumed(raw: &str, words: &[(Candidate, usize)], mut syllables: usize) -> Option<usize> {
+    let mut start = 0;
+    for (word, end) in words {
+        let count = word.reading_key.split_whitespace().count();
+        if syllables == count { return Some(*end); }
+        if syllables < count {
+            let candidate = Candidate { text: word.text.chars().take(syllables).collect(),
+                reading_key: word.reading_key.split_whitespace().take(syllables).collect::<Vec<_>>().join(" "),
+                ..Candidate::default() };
+            let suffix = raw[start..*end].trim_start_matches('\'');
+            let start = *end - suffix.len();
+            let mask = super::fuzzy::mask();
+            let consumed = if super::fuzzy::spelling_matches(suffix, &word.reading_key, mask) {
+                candidate_coverage(suffix, &candidate)
+            } else {
+                super::fuzzy::jqx_spelling_repairs(suffix).into_iter().find_map(|repair| {
+                    if !super::fuzzy::spelling_matches(&repair.spelling, &word.reading_key, mask) { return None; }
+                    repair.raw_end(candidate_coverage(&repair.spelling, &candidate)?)
+                })
+            };
+            return consumed.map(|end| start + end);
+        }
+        syllables -= count;
+        start = *end;
+    }
+    None
+}
+
+/// Q22A prepass: move learned cuts inside words (就是这 inside 就是这种)
+/// behind dictionary words in the legacy prefix slots, retaining their reachability.
+/// The first two entries retain their order here; sentence_prefix_ladder then
+/// reserves the final sentence-alternative and composed-word-boundary slots.
 fn word_boundary_ladder(index: &Index, raw_len: usize, result: &mut Vec<GeneratedCandidate>) {
     const FIRST: usize = 2;
     if result.len() <= PAGE_SIZE || raw_len == 0 { return; }
@@ -748,6 +855,100 @@ mod candidate_tests {
     }
 
     #[test]
+    fn phrase_ladder_keeps_head_and_offers_sentence_then_composed_prefix() {
+        let index = Arc::new(Index::from_data(DictionaryData { entries: [
+            ("简介", "jian jie", 9000), ("间接", "jian jie", 8000), ("简洁", "jian jie", 7000),
+            ("不要", "bu yao", 9000), ("旧爱", "jiu ai", 9000), ("就爱", "jiu ai", 8000),
+            ("就", "jiu", 9000), ("酒", "jiu", 8000), ("你", "ni", 9000), ("接", "jie", 9000),
+        ].into_iter().map(|(text, reading, weight)| Entry {
+            text: text.into(), reading: reading.into(), weight, layer: "public-test".into(),
+        }).collect() }));
+        super::super::with_index(index, || {
+            for raw in ["jianjiebuyao", "jiuainijiebuyao"] {
+                let standalone = generate_candidates(raw, &[], 0, true, false);
+                let candidates = generate_candidates(raw, &[], 0, true, true);
+                assert_eq!(candidates[0].candidate.text, standalone[0].candidate.text);
+                assert_eq!(candidates[1].consumed, raw.len(), "{raw}: {candidates:?}");
+                assert_eq!(candidates[1].candidate.comment, "备选 · 顺手·知序");
+                if raw == "jianjiebuyao" {
+                    assert_eq!(candidates[1].candidate.text, "间接不要");
+                    assert!(candidates.iter().any(|item| item.candidate.text == "简洁不要"));
+                } else {
+                    assert_eq!(candidates[2].candidate.text, "旧爱你接");
+                    assert_eq!(candidates[2].consumed, "jiuainijie".len());
+                    assert!(candidates.iter().any(|item| item.candidate.text == "旧爱你"));
+                    let mut decoder = ZhixuDecoder::from_ready_dictionary(super::super::current());
+                    decoder.input(raw).unwrap();
+                    assert_eq!(decoder.select_candidate(2, 0, LearningIntent::NoLearn).unwrap(), "");
+                    assert_eq!(decoder.confirmed_text(), "旧爱你接");
+                    assert_eq!(&decoder.raw[decoder.confirmed_end()..], "buyao");
+                    assert_eq!(decoder.select_candidate(0, 0, LearningIntent::NoLearn).unwrap(), standalone[0].candidate.text);
+                }
+            }
+        });
+    }
+
+    #[test]
+    fn phrase_ladder_repairs_keep_original_key_ownership_on_selection() {
+        let index = Arc::new(Index::from_data(DictionaryData { entries: [
+            ("简介", "jian jie", 9000), ("简", "jian", 8000), ("不要", "bu yao", 9000),
+            ("前面", "qian mian", 9000), ("前", "qian", 8000),
+        ].into_iter().map(|(text, reading, weight)| Entry {
+            text: text.into(), reading: reading.into(), weight, layer: "public-test".into(),
+        }).collect() }));
+        super::super::with_index(index.clone(), || {
+            for (raw, first, word, end, single, single_end) in [
+                ("jainjiebuyao", "简介不要", "简介", 7, "简", 4),
+                ("qanmianbuyao", "前面不要", "前面", 7, "前", 3),
+            ] {
+                let mut decoder = ZhixuDecoder::from_ready_dictionary(index.clone());
+                decoder.input(raw).unwrap();
+                assert_eq!(decoder.candidates[0].candidate.text, first);
+                for (text, consumed) in [(word, end), (single, single_end)] {
+                    let item = decoder.candidates.iter().find(|item| item.candidate.text == text).unwrap();
+                    assert_eq!(item.consumed, consumed, "{raw}: {item:?}");
+                }
+                let at = decoder.candidates.iter().position(|item| item.candidate.text == word).unwrap();
+                assert_eq!(decoder.select_candidate(at, 0, LearningIntent::DeliberateSelection).unwrap(), "");
+                assert_eq!(decoder.confirmed_text(), word);
+                assert_eq!(&decoder.raw[decoder.confirmed_end()..], "buyao");
+                assert_eq!(decoder.select_candidate(0, 0, LearningIntent::DeliberateSelection).unwrap(), first);
+            }
+        });
+    }
+
+    #[test]
+    #[ignore = "set ZHIXU_PHRASE_SHARED to the public Rime resources"]
+    fn phrase_ladder_public_dictionary_pages() {
+        let shared = std::env::var("ZHIXU_PHRASE_SHARED").unwrap();
+        let user = std::env::temp_dir().join(format!("phrase-ladder-{}", std::process::id()));
+        std::fs::create_dir_all(&user).unwrap();
+        let index = Arc::new(Index::from_data(super::super::loader::load(
+            std::path::Path::new(&shared), &user).unwrap()));
+        std::fs::remove_dir_all(user).unwrap();
+        super::super::with_index(index, || {
+            for (raw, expected) in [
+                ("jainjiebuyao", ["简介不要", "间接不要", "简洁不要", "简介", "间接"]),
+                ("jiuainijiebuyao", ["就爱你接不要", "就爱你借不要", "就爱你接", "旧爱", "就爱"]),
+                ("jianjiebuyao", ["简介不要", "间接不要", "简洁不要", "简介", "间接"]),
+            ] {
+                let candidates = generate_candidates(raw, &[], 0, true, true);
+                println!("PHRASE_LADDER {raw}: {:?}", &candidates[..candidates.len().min(15)]);
+                assert_eq!(ladder_texts(&candidates[..PAGE_SIZE]), expected);
+                assert_eq!(candidates[1].consumed, raw.len());
+                assert_eq!(candidates[1].candidate.comment, "备选 · 顺手·知序");
+                if raw != "jiuainijiebuyao" {
+                    assert!(candidates.iter().take(PAGE_SIZE).any(|item| item.candidate.text == "简洁不要"));
+                    assert!(candidates.iter().take(PAGE_SIZE).skip(1).any(|item| item.candidate.text == "简介"));
+                } else {
+                    assert_eq!(candidates[2].candidate.text, "就爱你接");
+                    assert!(candidates.iter().any(|item| item.candidate.text == "就爱你"));
+                }
+            }
+        });
+    }
+
+    #[test]
     fn q22a_ladder_moves_cut_off_prefixes_behind_dictionary_words() {
         let index = Index::from_data(DictionaryData { entries: [
             ("就是", "jiu shi"), ("救世", "jiu shi"), ("这种", "zhe zhong"), ("就", "jiu"), ("鋝", "lue"),
@@ -777,7 +978,7 @@ mod candidate_tests {
     }
 
     #[test]
-    fn q22a_learned_segments_cut_mid_word_leave_slots_three_to_five_in_whole_mode_only() {
+    fn q22a_ladder_allows_composed_word_edges_but_keeps_mid_word_cuts_in_tail() {
         let public = Arc::new(Index::from_data(DictionaryData { entries: [
             ("就是", "jiu shi"), ("救世", "jiu shi"), ("救市", "jiu shi"), ("九世", "jiu shi"), ("就", "jiu"),
             ("这", "zhe"), ("种", "zhong"), ("这种", "zhe zhong"),
@@ -797,7 +998,11 @@ mod candidate_tests {
             let reach = |whole| generate_candidates(raw, &[], 0, true, whole).into_iter().map(|item| item.candidate.text).collect::<Vec<_>>();
             for cut in ["就是这种", "就是这"] {
                 assert!(page(false).iter().any(|text| text == cut), "without whole mode {cut} keeps its place: {:?}", page(false));
-                assert!(!page(true).iter().skip(2).any(|text| text == cut), "{cut} in slots 3-5: {:?}", page(true));
+                if cut == "就是这" {
+                    assert!(!page(true).iter().skip(2).any(|text| text == cut), "{cut} cuts inside 这种: {:?}", page(true));
+                } else {
+                    assert!(page(true).iter().skip(2).any(|text| text == cut), "就是 + 这种 is a composed word boundary: {:?}", page(true));
+                }
                 assert!(reach(true).iter().any(|text| text == cut), "{cut} stays reachable");
             }
         });
@@ -891,7 +1096,7 @@ mod candidate_tests {
     #[test]
     fn y3c_abbreviated_first_pieces_keep_exact_consumption() {
         let cases = [
-            ("shangjai", "上架", "shang jia", 6), ("yigng", "义工", "yi gong", 3),
+            ("yigng", "义工", "yi gong", 3),
             ("shoukkuan", "收款", "shou kuan", 5), ("kuaije", "快捷", "kuai jie", 5),
             ("ganje", "感觉", "gan jue", 4), ("leiss", "类似", "lei si", 4),
             ("wozenmy", "我怎么", "wo zen me", 6), ("read", "热爱", "re ai", 3),
@@ -918,7 +1123,7 @@ mod candidate_tests {
             ("wozenmy", "我怎么", "wo zen me", 6), ("ganje", "感觉", "gan jue", 4),
             ("renkd", "认可", "ren ke", 4), ("houmm", "后妈", "hou ma", 4),
             ("yigng", "义工", "yi gong", 3), ("app", "阿婆", "a po", 2),
-            ("shangjai", "上架", "shang jia", 6), ("zgr", "中国人", "zhong guo ren", 3),
+            ("zgr", "中国人", "zhong guo ren", 3),
             ("shengc", "生成", "sheng cheng", 6), ("henkyi", "很可以", "hen ke yi", 6),
             ("clo", "丑陋", "chou lou", 2), ("sheng'c", "生成", "sheng cheng", 7),
             ("sheng'c'", "生成", "sheng cheng", 8), ("jv", "局", "ju", 2),
@@ -948,7 +1153,6 @@ mod candidate_tests {
             ("houmm", "后妈", "hou ma", 4, "没", "mei"),
             ("yigng", "义工", "yi gong", 3, "那个", "na ge"),
             ("app", "阿婆", "a po", 2, "怕", "pa"),
-            ("shangjai", "上架", "shang jia", 6, "爱", "ai"),
         ] {
             let index = Arc::new(Index::from_data(DictionaryData { entries: [
                 (text, reading, 5000), (tail, tail_reading, 1000),
@@ -1194,6 +1398,10 @@ impl ZhixuDecoder {
     }
 
     fn refresh(&mut self) {
+        #[cfg(test)]
+        let _profile = super::key_latency_profile::span(super::key_latency_profile::Stage::Generation);
+        #[cfg(test)]
+        let learning_profile = super::key_latency_profile::span(super::key_latency_profile::Stage::Learning);
         let dictionary = self.dictionary.clone().unwrap_or_else(super::current);
         let personal = self.learning.whole_overlay().or_else(super::learning_index);
         let generation = (dictionary.generation, personal.as_ref().map_or(0, |index| index.generation),
@@ -1207,6 +1415,8 @@ impl ZhixuDecoder {
             self.prefix_generation = Some(generation);
             self.prefix_bonuses = bonuses;
         }
+        #[cfg(test)]
+        drop(learning_profile);
         let raw = &self.raw[self.confirmed_end()..];
         // Retain a bounded LRU across edits and composition boundaries. Short
         // prefixes recur often, but remain valid only under the generation above.
@@ -1380,6 +1590,8 @@ impl ZhixuDecoder {
     }
 
     fn snapshot_range(&self, start: usize, maximum: usize, global: bool) -> DecoderSnapshot {
+        #[cfg(test)]
+        let _profile = super::key_latency_profile::span(super::key_latency_profile::Stage::PagingClone);
         let end = start.saturating_add(maximum).min(self.candidates.len());
         DecoderSnapshot {
             raw_input: self.raw.clone(), preedit: self.preedit.clone(), cursor_utf8: self.cursor_utf8,
@@ -2285,7 +2497,7 @@ mod state_tests {
     #[test]
     fn y3c_first_piece_selection_retains_the_remaining_suffix() {
         let cases = [
-            ("shangjai", "上架", "shang jia", "ai"), ("yigng", "义工", "yi gong", "ng"),
+            ("yigng", "义工", "yi gong", "ng"),
             ("shoukkuan", "收款", "shou kuan", "kuan"), ("kuaije", "快捷", "kuai jie", "e"),
             ("ganje", "感觉", "gan jue", "e"), ("leiss", "类似", "lei si", "s"),
             ("wozenmy", "我怎么", "wo zen me", "y"), ("read", "热爱", "re ai", "d"),

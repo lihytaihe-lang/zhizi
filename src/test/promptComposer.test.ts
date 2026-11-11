@@ -37,10 +37,17 @@ test("only enabled non-empty rules enter generated prompts", () => {
   assert.match(output, /执行边界/);
 });
 
-test("hotword generation local fallback includes the exact TSV contract and pinyin", () => {
+test("personal terminology generation keeps its TSV contract without claiming to generate hotwords", () => {
   const mode = BUILT_IN_MODES.find((item) => item.id === "hotword-candidates")!;
+  assert.equal(mode.name, "个人词/术语候选生成");
+  assert.doesNotMatch(mode.description, /热词|热梗/);
   const output = composePrompt({ rawInput: "近期产品讨论", mode, userRules: [] });
   assert.match(output, /词<TAB>拼音<TAB>简短释义/);
   assert.match(output, /<词>\t<拼音>\t<简短释义>/);
   assert.match(output, /拼音由本次生成一并给出/);
+  for (const compact of [false, true]) {
+    const prompt = composePrompt({ rawInput: "近期产品讨论", mode, userRules: [], compact });
+    assert.match(prompt, /个人词\/术语/);
+    assert.doesNotMatch(prompt, /热词|热梗/);
+  }
 });

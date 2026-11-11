@@ -2,16 +2,20 @@ import { useEffect, useMemo, useState } from "react";
 import { Database, Loader2, Pause, Play, RefreshCw, Trash2 } from "lucide-react";
 import {
   clearDynamicSource,
+  getHotwordPackSettings,
   ingestLocalHotwordSource,
   listDynamicSources,
   listHotwordItems,
   refreshHotwordExposure,
   refreshDynamicSource,
   saveDynamicSource,
+  saveHotwordPackUrl,
   setDynamicSourceEnabled,
+  updateHotwordPack,
   type DynamicSource,
   type DynamicSourceInput,
   type HotwordItem,
+  type HotwordPackSettings,
 } from "../lib/hotwords";
 import {
   compileSecondaryPredictionSnapshot,
@@ -51,7 +55,12 @@ export function DataSourceManager() {
   const [message, setMessage] = useState("");
   const [quality, setQuality] = useState<HotwordQualityReport | null>(null);
   const [rollbackVersion, setRollbackVersion] = useState("");
+  const [packUrl, setPackUrl] = useState("");
+  const [packSettings, setPackSettings] = useState<HotwordPackSettings>({ url: "", lastPackId: null, lastUpdatedAtMs: null });
   const reviewCount = useMemo(() => items.filter((item) => item.reviewRequired).length, [items]);
+  const packAgeDays = packSettings.lastUpdatedAtMs === null
+    ? null
+    : Math.max(0, Math.floor((Date.now() - packSettings.lastUpdatedAtMs) / (24 * 60 * 60 * 1000)));
 
   async function reload() {
     // Recompute 曝光/误选 before reading, otherwise the panel renders the stale stored
@@ -62,12 +71,14 @@ export function DataSourceManager() {
     } catch {
       // deliberately ignored; the list below still loads
     }
-    const [nextSources, nextItems] = await Promise.all([listDynamicSources(), listHotwordItems()]);
+    const [nextSources, nextItems, nextPackSettings] = await Promise.all([listDynamicSources(), listHotwordItems(), getHotwordPackSettings()]);
     setSources(nextSources);
     setItems(nextItems);
+    setPackSettings(nextPackSettings);
+    setPackUrl(nextPackSettings.url);
   }
 
-  useEffect(() => { void reload(); }, []);
+  useEffect(() => { void reload().catch((error) => setMessage(errorText(error))); }, []);
 
   async function run(key: string, action: () => Promise<void>) {
     setBusy(key);
@@ -90,6 +101,27 @@ export function DataSourceManager() {
           <p>管理 App 侧取网；输入法核心无网络。所有来源默认关闭且必须登记授权、条款与许可证。</p>
         </div>
         <span className="status-pill">{sources.length} 个来源 · {items.length} 个暂存词 · {reviewCount} 个待审</span>
+      </div>
+
+      <div className="data-source-form">
+        <h3>签名热词包</h3>
+        <label htmlFor="hotword-pack-url">热词包地址（latest.json）
+          <input id="hotword-pack-url" type="url" value={packUrl} disabled={busy !== ""} onChange={(event) => setPackUrl(event.currentTarget.value)} />
+        </label>
+        <small>仅在点击「更新热词」时下载；验签通过后进入现有审核队列，未审核不进候选。</small>
+        {!packUrl.trim() ? <p className="validation">未配置热词包地址</p> : null}
+        <p>{packAgeDays === null ? "尚未更新热词" : `热词更新于 ${packAgeDays} 天前`}{packAgeDays !== null && packAgeDays > 14 ? "；超过 14 天，建议更新热词。" : ""}</p>
+        <div className="inline-actions">
+          <button type="button" disabled={busy !== ""} onClick={() => void run("save-pack-url", async () => {
+            await saveHotwordPackUrl(packUrl.trim());
+            setMessage("热词包地址已保存。");
+          })}>保存热词包地址</button>
+          <button type="button" disabled={busy !== "" || !packUrl.trim()} onClick={() => void run("update-pack", async () => {
+            await saveHotwordPackUrl(packUrl.trim());
+            const result = await updateHotwordPack();
+            setMessage(result.message);
+          })}><RefreshCw size={14} />更新热词</button>
+        </div>
       </div>
 
       <div className="data-source-grid">
@@ -134,7 +166,7 @@ export function DataSourceManager() {
                 <button type="button" onClick={() => void run(`toggle-${source.id}`, async () => { await setDynamicSourceEnabled(source.id, !source.enabled); })}>
                   {source.enabled ? <Pause size={14} /> : <Play size={14} />}{source.enabled ? "暂停" : "启用"}
                 </button>
-                <button disabled={!source.enabled || source.sourceType === "local_text"} type="button" onClick={() => void run(`refresh-${source.id}`, async () => { await refreshDynamicSource(source.id); })}><RefreshCw size={14} />刷新</button>
+                <button disabled={!source.enabled || source.sourceType === "local_text" || source.id.startsWith("pack:")} type="button" onClick={() => void run(`refresh-${source.id}`, async () => { await refreshDynamicSource(source.id); })}><RefreshCw size={14} />刷新</button>
                 <button type="button" onClick={() => void run(`clear-${source.id}`, async () => { await clearDynamicSource(source.id); })}><Trash2 size={14} />清除派生数据</button>
               </div>
               {source.sourceType === "local_text" && source.enabled ? (
@@ -179,6 +211,7 @@ export function DataSourceManager() {
           <div className="hotword-row" key={item.id}>
             <strong>{item.text}</strong><span>{item.pinyin || "读音待审核"}</span>
             <small>{item.sourceIds.join(" + ")} · 可信 {item.confidenceMillis / 10}% · {item.state} · 曝光 {item.exposureCount} · 误选 {item.misselectionCount}</small>
+            {item.pinyinWarning ? <small className="validation">{item.pinyinWarning}</small> : null}
           </div>
         ))}
       </div>

@@ -6,10 +6,10 @@
   },
   "formatVersion": 1,
   "author": "Agent Input Method",
-  "description": "暖奶油底，橘猫在右侧：招手、坐、走来走去、奔跑、蹦一下，一套动作循环着演；开启「减弱动态效果」时静止。",
+  "description": "橘猫趴在候选条上沿，肚子轻轻起伏、尾巴慢摆，偶尔睁眼看看；开启「减弱动态效果」时静止。",
   "candidateFont": {
     "family": "Yuanti SC",
-    "size": 17,
+    "size": 19,
     "weight": "medium"
   },
   "indexFont": {
@@ -18,29 +18,29 @@
     "weight": "medium"
   },
   "candidateColor": {
-    "light": "#4A3626",
-    "dark": "#4A3626"
+    "light": "#492F20",
+    "dark": "#F7E3C8"
   },
   "secondaryCandidateColor": {
-    "light": "#8A7258",
-    "dark": "#8A7258"
+    "light": "#664A32",
+    "dark": "#E3C4A0"
   },
   "indexColor": {
-    "light": "#8A7258",
-    "dark": "#8A7258"
+    "light": "#664A32",
+    "dark": "#E3C4A0"
   },
   "highlightedCandidateColor": {
-    "light": "#B5651D",
-    "dark": "#B5651D"
+    "light": "#FFFFFF",
+    "dark": "#2F261A"
   },
   "highlightFillColor": {
-    "light": "#C98B4A30",
-    "dark": "#C98B4A30"
+    "light": "#934311",
+    "dark": "#DCAA63"
   },
   "highlightFillOpacity": 1,
   "highlightBorderColor": {
-    "light": "#8C6F4E66",
-    "dark": "#8C6F4E66"
+    "light": "#B3753D99",
+    "dark": "#E5BA7C99"
   },
   "highlightBorderOpacity": 1,
   "rowHeight": 36,
@@ -50,160 +50,135 @@
   "candidateSpacing": 10,
   "rowSpacing": 7,
   "capsuleCornerRadius": 12,
-  "panelCornerRadius": 12,
+  "panelCornerRadius": 14,
   "edgeInsets": {
-    "top": 11,
+    "top": 31,
     "left": 13,
     "bottom": 11,
-    "right": 150
+    "right": 13
   },
   "material": "popover",
   "minimumPanelSize": {
-    "width": 120,
-    "height": 56
+    "width": 300,
+    "height": 90
   },
   "maximumPanelWidth": 760,
   "widthQuantization": 20,
   "panelBackground": {
-    "light": "#FBF3E4",
-    "dark": "#FBF3E4"
+    "light": "#FBEDDAE6",
+    "dark": "#362A23E6"
   },
   "panelBorderColor": {
-    "light": "#E3D2B2",
-    "dark": "#E3D2B2"
+    "light": "#DEBA88CC",
+    "dark": "#B3895599"
   },
-  "panelBorderWidth": 0.5,
-  "shadowEnabled": false,
+  "panelBorderWidth": 0.75,
+  "shadowEnabled": true,
   "decorations": [
     {
       "type": "gradient",
       "from": {
-        "light": "#FCF5E8",
-        "dark": "#FCF5E8"
+        "light": "#FFF2D9",
+        "dark": "#49311D"
       },
       "to": {
-        "light": "#F0DDBF",
-        "dark": "#F0DDBF"
+        "light": "#F0D6AC",
+        "dark": "#322A22"
       },
       "angle": 0,
+      "opacity": 0.65,
       "layer": "below"
     },
     {
       "type": "sprite",
-      "sheet": "cat-actions.png",
-      "frames": 8,
+      "sheet": "cat-tail.png",
+      "frames": 1,
       "size": {
-        "width": 56.6,
-        "height": 44.3
+        "width": 70,
+        "height": 88
       },
       "anchor": {
-        "x": 1,
-        "y": 0
+        "x": 0.7,
+        "y": 1
       },
       "offset": {
-        "x": -6,
-        "y": 4
+        "x": 75.2,
+        "y": 79
       },
       "layer": "below",
-      "zone": {
-        "width": 140
+      "overflow": true,
+      "pivot": {
+        "x": 0.2571428571428571,
+        "y": 0.17045454545454544
       },
-      "clips": [
+      "motion": [
         {
-          "row": 1,
-          "frames": 6,
-          "fps": 7,
-          "seconds": 4.0,
-          "move": {
-            "from": 0.85,
-            "to": 0.85
-          }
+          "kind": "breathe",
+          "scale": 0.025,
+          "period": 3.8
         },
         {
-          "row": 0,
-          "frames": 4,
-          "fps": 4,
-          "seconds": 1.5,
-          "move": {
-            "from": 0.85,
-            "to": 0.85
-          }
-        },
-        {
-          "row": 5,
-          "frames": 8,
-          "fps": 4,
-          "seconds": 3.5,
-          "move": {
-            "from": 0.85,
-            "to": 0.85
-          }
-        },
-        {
-          "row": 2,
-          "frames": 8,
-          "fps": 9,
-          "seconds": 3.5,
-          "move": {
-            "from": 0.85,
-            "to": 0.45
-          },
-          "flip": true
-        },
-        {
-          "row": 6,
-          "frames": 6,
-          "fps": 7,
-          "seconds": 2.5,
-          "move": {
-            "from": 0.45,
-            "to": 0.2
-          },
-          "flip": true
-        },
-        {
-          "row": 0,
-          "frames": 4,
-          "fps": 4,
-          "seconds": 2.0,
-          "move": {
-            "from": 0.2,
-            "to": 0.2
-          },
-          "flip": true
-        },
-        {
-          "row": 3,
-          "frames": 8,
-          "fps": 13,
-          "seconds": 2.5,
-          "move": {
-            "from": 0.2,
-            "to": 0.85
-          }
-        },
-        {
-          "row": 4,
-          "frames": 8,
-          "fps": 9,
-          "seconds": 2.0,
-          "move": {
-            "from": 0.85,
-            "to": 0.85
-          }
+          "kind": "sway",
+          "degrees": 12,
+          "period": 4.6
         }
       ]
     },
     {
-      "type": "shimmer",
-      "color": {
-        "light": "#FFFFFF66",
-        "dark": "#FFFFFF66"
+      "type": "sprite",
+      "sheet": "cat-rest.png",
+      "frames": 1,
+      "size": {
+        "width": 244,
+        "height": 108
       },
-      "period": 9,
-      "width": 0.18,
-      "angle": 16,
-      "layer": "above"
+      "anchor": {
+        "x": 0.7,
+        "y": 1
+      },
+      "offset": {
+        "x": 0,
+        "y": 78
+      },
+      "layer": "below",
+      "overflow": true,
+      "clips": [
+        {
+          "row": 0,
+          "frames": 1,
+          "fps": 1,
+          "seconds": 2.5
+        },
+        {
+          "row": 1,
+          "frames": 1,
+          "fps": 1,
+          "seconds": 0.45
+        },
+        {
+          "row": 0,
+          "frames": 1,
+          "fps": 1,
+          "seconds": 3.65
+        }
+      ],
+      "pivot": {
+        "x": 0.8811475409836066,
+        "y": 0.14814814814814814
+      },
+      "motion": [
+        {
+          "kind": "breathe",
+          "scale": 0.025,
+          "period": 3.8
+        }
+      ]
     }
-  ]
+  ],
+  "overflow": {
+    "top": 84,
+    "left": 0,
+    "bottom": 0,
+    "right": 12
+  }
 }

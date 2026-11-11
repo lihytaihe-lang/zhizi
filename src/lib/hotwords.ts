@@ -38,6 +38,21 @@ export type HotwordItem = {
   exposureCount: number;
   misselectionCount: number;
   updatedAtMs: number;
+  pinyinWarning?: string | null;
+};
+
+export type HotwordPackSettings = {
+  url: string;
+  lastPackId: string | null;
+  lastUpdatedAtMs: number | null;
+};
+
+export type HotwordPackUpdateResult = {
+  alreadyLatest: boolean;
+  packId: string;
+  receivedCount: number;
+  pinyinConflictCount: number;
+  message: string;
 };
 
 async function invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
@@ -74,6 +89,23 @@ export async function ingestLocalHotwordSource(id: string, document: string): Pr
 
 export async function listHotwordItems(): Promise<HotwordItem[]> {
   return isTauriRuntime() ? invoke("list_hotword_items") : [];
+}
+
+export async function getHotwordPackSettings(): Promise<HotwordPackSettings> {
+  return isTauriRuntime()
+    ? invoke("get_hotword_pack_settings")
+    : { url: "", lastPackId: null, lastUpdatedAtMs: null };
+}
+
+export async function saveHotwordPackUrl(url: string): Promise<HotwordPackSettings> {
+  if (!isTauriRuntime()) throw new Error("请在管理台 App 中配置热词包地址。");
+  return invoke("save_hotword_pack_url", { url });
+}
+
+// 仅由 owner 点击「更新热词」调用；读取设置和打开面板不会触发取包。
+export async function updateHotwordPack(): Promise<HotwordPackUpdateResult> {
+  if (!isTauriRuntime()) throw new Error("请在管理台 App 中更新热词。");
+  return invoke("update_hotword_pack");
 }
 
 export type HotwordExposureReport = {

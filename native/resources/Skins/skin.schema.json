@@ -152,7 +152,7 @@
     "decorations": {
       "type": "array",
       "minItems": 1,
-      "maxItems": 4,
+      "maxItems": 8,
       "items": {
         "oneOf": [
           {
@@ -175,6 +175,9 @@
           },
           {
             "$ref": "#/$defs/frameDecoration"
+          },
+          {
+            "$ref": "#/$defs/waterDecoration"
           }
         ]
       },
@@ -193,22 +196,22 @@
         "top": {
           "type": "number",
           "minimum": 0,
-          "maximum": 64
+          "maximum": 120
         },
         "left": {
           "type": "number",
           "minimum": 0,
-          "maximum": 64
+          "maximum": 120
         },
         "bottom": {
           "type": "number",
           "minimum": 0,
-          "maximum": 64
+          "maximum": 120
         },
         "right": {
           "type": "number",
           "minimum": 0,
-          "maximum": 64
+          "maximum": 120
         }
       },
       "description": "Transparent margin around the card (points) where decorations may reach past the card edge."
@@ -412,7 +415,7 @@
             "width": {
               "type": "number",
               "minimum": 1,
-              "maximum": 256
+              "maximum": 300
             },
             "height": {
               "type": "number",
@@ -834,9 +837,11 @@
             "float",
             "breathe",
             "sway",
+            "twitch",
             "glow",
             "fade",
-            "hop"
+            "hop",
+            "fall"
           ]
         },
         "period": {
@@ -872,7 +877,7 @@
         "height": {
           "type": "number",
           "minimum": 1,
-          "maximum": 16
+          "maximum": 120
         },
         "squash": {
           "type": "number",
@@ -881,9 +886,83 @@
         },
         "color": {
           "$ref": "#/$defs/color"
+        },
+        "drift": {
+          "type": "number",
+          "minimum": -40,
+          "maximum": 40
+        },
+        "delay": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 20
+        },
+        "duration": {
+          "type": "number",
+          "minimum": 0.3,
+          "maximum": 0.5
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "hop"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "height": {
+                "maximum": 16
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "twitch"
+              }
+            }
+          },
+          "then": {
+            "description": "Rest, shake for duration seconds, settle. delay + duration must not exceed period (checked by loaders).",
+            "required": [
+              "degrees",
+              "delay",
+              "duration"
+            ],
+            "properties": {
+              "kind": true,
+              "degrees": true,
+              "period": true,
+              "delay": true,
+              "duration": true
+            },
+            "additionalProperties": false
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "delay"
+                  ]
+                },
+                {
+                  "required": [
+                    "duration"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
     },
     "gradientDecoration": {
       "type": "object",
@@ -1088,6 +1167,56 @@
           "type": "number",
           "minimum": 0,
           "maximum": 1
+        }
+      }
+    },
+    "waterDecoration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "depth",
+        "poolWidth",
+        "from",
+        "to",
+        "highlight"
+      ],
+      "properties": {
+        "type": {
+          "const": "water"
+        },
+        "depth": {
+          "type": "number",
+          "minimum": 8,
+          "maximum": 120
+        },
+        "poolWidth": {
+          "type": "number",
+          "minimum": 32,
+          "maximum": 300
+        },
+        "from": {
+          "$ref": "#/$defs/color"
+        },
+        "to": {
+          "$ref": "#/$defs/color"
+        },
+        "highlight": {
+          "$ref": "#/$defs/color"
+        },
+        "period": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 20
+        },
+        "layer": {
+          "enum": [
+            "below",
+            "above"
+          ]
+        },
+        "overflow": {
+          "type": "boolean"
         }
       }
     }

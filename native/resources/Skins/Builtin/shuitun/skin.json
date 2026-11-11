@@ -6,10 +6,10 @@
   },
   "formatVersion": 1,
   "author": "Agent Input Method",
-  "description": "暖米色底，水豚在右侧小跑着轻轻颠簸；开启「减弱动态效果」时静止。",
+  "description": "水豚趴在候选条上沿，轻轻呼吸、偶尔歪头眨眼；开启「减弱动态效果」时静止。",
   "candidateFont": {
     "family": "Yuanti SC",
-    "size": 17,
+    "size": 19,
     "weight": "medium"
   },
   "indexFont": {
@@ -18,29 +18,29 @@
     "weight": "medium"
   },
   "candidateColor": {
-    "light": "#4A3626",
-    "dark": "#4A3626"
+    "light": "#3F3023",
+    "dark": "#F1E8D9"
   },
   "secondaryCandidateColor": {
-    "light": "#8A7258",
-    "dark": "#8A7258"
+    "light": "#5B4B38",
+    "dark": "#D7C4A9"
   },
   "indexColor": {
-    "light": "#8A7258",
-    "dark": "#8A7258"
+    "light": "#5B4B38",
+    "dark": "#D7C4A9"
   },
   "highlightedCandidateColor": {
-    "light": "#B5651D",
-    "dark": "#B5651D"
+    "light": "#FFFFFF",
+    "dark": "#242B1F"
   },
   "highlightFillColor": {
-    "light": "#C98B4A30",
-    "dark": "#C98B4A30"
+    "light": "#596125",
+    "dark": "#BAC88D"
   },
   "highlightFillOpacity": 1,
   "highlightBorderColor": {
-    "light": "#8C6F4E66",
-    "dark": "#8C6F4E66"
+    "light": "#73794E99",
+    "dark": "#D5DFB199"
   },
   "highlightBorderOpacity": 1,
   "rowHeight": 36,
@@ -50,89 +50,107 @@
   "candidateSpacing": 10,
   "rowSpacing": 7,
   "capsuleCornerRadius": 12,
-  "panelCornerRadius": 12,
+  "panelCornerRadius": 14,
   "edgeInsets": {
-    "top": 11,
+    "top": 31,
     "left": 13,
     "bottom": 11,
-    "right": 76
+    "right": 13
   },
   "material": "popover",
   "minimumPanelSize": {
-    "width": 120,
-    "height": 56
+    "width": 300,
+    "height": 90
   },
   "maximumPanelWidth": 760,
   "widthQuantization": 20,
   "panelBackground": {
-    "light": "#FBF3E4",
-    "dark": "#FBF3E4"
+    "light": "#F7EEDDE6",
+    "dark": "#332D26E6"
   },
   "panelBorderColor": {
-    "light": "#E3D2B2",
-    "dark": "#E3D2B2"
+    "light": "#D7C79FCC",
+    "dark": "#9B956C99"
   },
-  "panelBorderWidth": 0.5,
-  "shadowEnabled": false,
+  "panelBorderWidth": 0.75,
+  "shadowEnabled": true,
   "decorations": [
     {
       "type": "gradient",
       "from": {
         "light": "#FCF5E8",
-        "dark": "#FCF5E8"
+        "dark": "#41392E"
       },
       "to": {
-        "light": "#F0DDBF",
-        "dark": "#F0DDBF"
+        "light": "#E8E4BD",
+        "dark": "#272B20"
       },
       "angle": 0,
+      "opacity": 0.65,
       "layer": "below"
     },
     {
       "type": "sprite",
-      "sheet": "capybara-trot.png",
+      "sheet": "capybara-blink.png",
       "frames": 1,
       "size": {
-        "width": 64,
-        "height": 49
+        "width": 112,
+        "height": 96
       },
       "anchor": {
-        "x": 1,
-        "y": 0
+        "x": 0.3333333333333333,
+        "y": 1
       },
       "offset": {
-        "x": -10,
-        "y": 5
+        "x": -18.666666666666668,
+        "y": 84
       },
       "layer": "below",
+      "overflow": true,
+      "clips": [
+        {
+          "row": 0,
+          "frames": 1,
+          "fps": 1,
+          "seconds": 2.2
+        },
+        {
+          "row": 1,
+          "frames": 1,
+          "fps": 1,
+          "seconds": 0.2
+        },
+        {
+          "row": 0,
+          "frames": 1,
+          "fps": 1,
+          "seconds": 3.6
+        }
+      ],
       "pivot": {
         "x": 0.5,
-        "y": 0.02
+        "y": 0.1
       },
       "motion": [
         {
-          "kind": "hop",
-          "height": 3,
-          "squash": 0.03,
-          "period": 1.5
+          "kind": "breathe",
+          "scale": 0.03,
+          "period": 3.6
         },
         {
-          "kind": "sway",
-          "degrees": 1.2,
-          "period": 5.2
+          "kind": "twitch",
+          "degrees": 3,
+          "period": 7.6,
+          "delay": 1.3,
+          "duration": 0.4
         }
       ]
-    },
-    {
-      "type": "shimmer",
-      "color": {
-        "light": "#FFFFFF66",
-        "dark": "#FFFFFF66"
-      },
-      "period": 9,
-      "width": 0.18,
-      "angle": 16,
-      "layer": "above"
     }
-  ]
+  ],
+  "overflow": {
+    "top": 84,
+    "left": 0,
+    "bottom": 0,
+    "right": 0
+  }
 }

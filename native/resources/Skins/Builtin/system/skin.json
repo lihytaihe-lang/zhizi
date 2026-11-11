@@ -24,7 +24,7 @@
   },
   "indexColor": "system:tertiaryLabelColor",
   "highlightedCandidateColor": {
-    "light": "#FF7A3D",
+    "light": "#B8480C",
     "dark": "#3DDBB0"
   },
   "highlightFillColor": {
