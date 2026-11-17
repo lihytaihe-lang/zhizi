@@ -278,6 +278,18 @@ impl LearningSession {
         self.knowledge.lock().map_or(0, |knowledge| knowledge.store.rime_tick)
     }
 
+    /// Read first-choice evidence in place; do not clone the application's full
+    /// choice history while the host owns its runtime lock.
+    pub(crate) fn first_has_preference(&self, app: &str, raw: &str, text: &str,
+        reading_matches: impl Fn(&Entry) -> bool) -> bool {
+        if self.mode != LearningMode::Zhixu { return false; }
+        let Ok(mut knowledge) = self.knowledge.lock() else { return true; };
+        knowledge.load();
+        knowledge.store.entries().iter().any(|entry| entry.count > 0 && entry.text == text && reading_matches(entry))
+            || knowledge.store.choices().iter().any(|choice| choice.count > 0 && choice.target == 0
+                && choice.app == app && choice.raw == raw && choice.text == text)
+    }
+
     pub(crate) fn choices(&self) -> Vec<Choice> {
         #[cfg(test)]
         let _profile = super::key_latency_profile::span(super::key_latency_profile::Stage::Learning);
@@ -647,6 +659,23 @@ mod tests {
     use crate::state::{KeyKind, SecurityState};
     use std::fs;
     use std::sync::atomic::{AtomicU64, Ordering};
+
+    #[test]
+    fn first_preference_matches_app_raw_and_text_without_creating_a_global_entry() {
+        let session = LearningSession { mode: LearningMode::Zhixu, ..LearningSession::default() };
+        {
+            let mut knowledge = session.knowledge.lock().unwrap();
+            knowledge.load();
+            knowledge.store.record_choice(Choice { app: "public039".into(), raw: "jishi".into(),
+                reading: "ji shi".into(), text: "几十".into(), target: 0, count: 1,
+                last_ms: personal_picks::now_ms(), alternatives: vec!["及时".into()] });
+            assert!(knowledge.store.entries().is_empty());
+        }
+        assert!(session.first_has_preference("public039", "jishi", "几十", |_| false));
+        assert!(!session.first_has_preference("another-app", "jishi", "几十", |_| false));
+        assert!(!session.first_has_preference("public039", "shi", "几十", |_| false));
+        assert!(!session.first_has_preference("public039", "jishi", "及时", |_| false));
+    }
 
     fn index() -> Index {
         Index::from_data(DictionaryData::default())

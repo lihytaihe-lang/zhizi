@@ -8,6 +8,7 @@ public extension Notification.Name {
     static let agentFuzzyConfigurationDidChange = Notification.Name(
         "AgentInputMethodFuzzyConfigurationDidChange"
     )
+    static let agentZhijuConfigurationDidChange = Notification.Name("AgentInputMethodZhijuConfigurationDidChange")
 }
 
 internal enum RuntimeRecoveryTransactionPhase: Equatable, Sendable {

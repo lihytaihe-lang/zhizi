@@ -213,6 +213,7 @@ YAML	yaml
 YES	yes
 YIJIAN	yijian
 acquire	acquire
+advance	advance
 allowed	allowed
 api	api
 appIdentifier	appidentifier
@@ -265,6 +266,7 @@ macOS	macos
 nginx	nginx
 npm	npm
 overlay	overlay
+prepare	prepare
 process	process
 prompt	prompt
 proposed	proposed

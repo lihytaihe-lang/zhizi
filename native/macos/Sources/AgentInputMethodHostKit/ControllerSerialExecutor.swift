@@ -19,7 +19,9 @@ final class ControllerSerialExecutor: @unchecked Sendable {
         }
         return withoutActuallyEscaping(operation) { escapableOperation in
             let box = SynchronousMainOperationBox(operation: escapableOperation)
+            let queued = DispatchTime.now().uptimeNanoseconds
             DispatchQueue.main.sync {
+                KeyPathContentionTrace.shared?.record("controller.main.wait", DispatchTime.now().uptimeNanoseconds &- queued)
                 self.withLock {
                     box.invoke()
                 }
@@ -29,8 +31,15 @@ final class ControllerSerialExecutor: @unchecked Sendable {
     }
 
     private func withLock<Result>(_ operation: () -> Result) -> Result {
+        let started = DispatchTime.now().uptimeNanoseconds
         lock.lock()
-        defer { lock.unlock() }
+        let acquired = DispatchTime.now().uptimeNanoseconds
+        defer {
+            let held = DispatchTime.now().uptimeNanoseconds &- acquired
+            lock.unlock()
+            KeyPathContentionTrace.shared?.record("controller.lock.wait", acquired &- started)
+            KeyPathContentionTrace.shared?.record("controller.lock.hold", held)
+        }
         return operation()
     }
 }

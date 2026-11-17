@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock, Weak, mpsc};
 use std::time::{Duration, SystemTime};
 
 const ASCII_LAYERS: &[&str] = &[
@@ -260,6 +260,22 @@ fn load_terms(shared: &Path, user: &Path) -> Arc<Index> {
 
 type SharedFingerprint = Vec<(String, SystemTime, u64, [u64; 6])>;
 
+fn table_fingerprint(directory: &Path) -> SharedFingerprint {
+    ["manifest.json", "unigrams.tsv", "bigrams.tsv"].into_iter().filter_map(|name| {
+        let metadata = fs::metadata(directory.join(name)).ok()?;
+        #[cfg(unix)]
+        let identity = {
+            use std::os::unix::fs::MetadataExt;
+            [metadata.ino(), metadata.mode() as u64, metadata.nlink(), metadata.uid() as u64,
+                metadata.ctime() as u64, metadata.ctime_nsec() as u64]
+        };
+        #[cfg(not(unix))]
+        let identity = [0; 6];
+        Some((directory.join(name).to_string_lossy().into_owned(),
+            metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH), metadata.len(), identity))
+    }).collect()
+}
+
 fn shared_fingerprint(shared: &Path) -> SharedFingerprint {
     let mut files: Vec<_> = fs::read_dir(shared)
         .into_iter()
@@ -285,6 +301,7 @@ fn shared_fingerprint(shared: &Path) -> SharedFingerprint {
             ))
         })
         .collect();
+    files.extend(table_fingerprint(&super::WordBigram::directory(shared)));
     files.sort();
     files
 }
@@ -293,6 +310,42 @@ fn reap_indexes(generations: &mut Vec<Arc<Index>>) {
     let mut seen = HashSet::new();
     generations.retain(|index| seen.insert(Arc::as_ptr(index)));
     generations.retain(|index| Arc::strong_count(index) > 1);
+}
+
+type BigramRequest = ((PathBuf, SharedFingerprint), Weak<Index>);
+
+fn load_sentence_bigrams(receiver: mpsc::Receiver<BigramRequest>,
+    mut load: impl FnMut(&Path) -> io::Result<super::WordBigram>) {
+    let mut previous = None;
+    let mut model = None;
+    for (fingerprint, index) in receiver {
+        let Some(index) = index.upgrade() else { continue; };
+        let (directory, files) = &fingerprint;
+        if index.sentence_bigram.get().is_some() || *files != table_fingerprint(directory) { continue; }
+        if previous.as_ref() != Some(&fingerprint) {
+            model = match load(directory) {
+                Ok(model) => Some(Arc::new(model)),
+                Err(error) => {
+                    eprintln!("zhixu sentence bigram unavailable: {error}");
+                    None
+                }
+            };
+            previous = Some(fingerprint.clone());
+        }
+        // A replacement during parsing must not attach a different table to this generation.
+        if *files == table_fingerprint(directory) && let Some(model) = &model {
+            index.attach_sentence_bigram(model.clone());
+        }
+    }
+}
+
+fn sentence_bigram_loader() -> mpsc::Sender<BigramRequest> {
+    let (sender, receiver) = mpsc::channel();
+    if let Err(error) = std::thread::Builder::new().name("zhixu-sentence-bigram".into())
+        .spawn(move || load_sentence_bigrams(receiver, super::WordBigram::load)) {
+        eprintln!("zhixu sentence bigram unavailable: {error}");
+    }
+    sender
 }
 
 /// The index-cache key of the dictionaries as they are right now; the cache
@@ -319,6 +372,7 @@ pub(crate) struct RuntimeDictionary {
     /// Idle reloads hand new native generations to the same background reclaimer.
     deployed_generations: Arc<Mutex<Vec<Arc<Index>>>>,
     deployed: Mutex<Option<(DictionaryLayers, SharedFingerprint, SharedFingerprint, Arc<Index>)>>,
+    sentence_bigrams: mpsc::Sender<BigramRequest>,
 }
 
 impl RuntimeDictionary {
@@ -331,6 +385,7 @@ impl RuntimeDictionary {
             terms,
             deployed_generations: Arc::new(Mutex::new(Vec::new())),
             deployed: Mutex::new(None),
+            sentence_bigrams: sentence_bigram_loader(),
         });
         let weak = Arc::downgrade(&runtime);
         let deployed_generations = runtime.deployed_generations.clone();
@@ -406,7 +461,7 @@ impl RuntimeDictionary {
         }
         generations.push(index.clone());
         let retired = if let Ok(mut current) = self.index.lock() {
-            let retired = current.replace(index);
+            let retired = current.replace(index.clone());
             *previous = Some((layers, shared));
             retired
         } else {
@@ -414,7 +469,15 @@ impl RuntimeDictionary {
         };
         // Release the replaced publication outside the lock; generations retains ownership until worker reaping.
         drop(retired);
+        self.request_sentence_bigram(&index);
     }
+
+    fn request_sentence_bigram(&self, index: &Arc<Index>) {
+        let directory = super::WordBigram::directory(&self.shared);
+        let fingerprint = table_fingerprint(&directory);
+        let _ = self.sentence_bigrams.send(((directory, fingerprint), Arc::downgrade(index)));
+    }
+
     fn deployed_snapshot(&self) -> io::Result<Arc<Index>> {
         // Serialize builders, not typing. An unchanged idle switch reuses the
         // generation already built by the background loader.
@@ -439,6 +502,7 @@ impl RuntimeDictionary {
                 self.deployed_generations.lock().map_err(|_| invalid("dictionary reclaimer unavailable"))?
                     .push(index.clone());
                 *deployed = Some((layers, before.0, before.1, index.clone()));
+                self.request_sentence_bigram(&index);
                 super::prewarm_whole_index(index.clone());
                 return Ok(index);
             }
@@ -455,6 +519,7 @@ impl RuntimeDictionary {
         self.deployed_generations.lock().map_err(|_| invalid("dictionary reclaimer unavailable"))?
             .push(index.clone());
         *deployed = Some((layers, before.0, before.1, index.clone()));
+        self.request_sentence_bigram(&index);
         // The background prewarm thread writes the cache once the warm
         // structures it must contain are ready.
         super::index_cache::schedule_write(&self.shared, &self.user, &key, &index);
@@ -539,7 +604,195 @@ mod tests {
 
     struct Fixture(PathBuf);
 
+    #[test]
+    fn sentence_bigram_first_publication_does_not_wait_for_the_table() {
+        let _serialized = index_cache::tests_lock();
+        for cached in [false, true] {
+            let fixture = Fixture::new();
+            fixture.write_bigram();
+            if cached {
+                let mut data = load(&fixture.shared(), &fixture.user()).unwrap();
+                data.entries.push(Entry { text: "缓存词".into(), reading: "huan cun ci".into(),
+                    weight: 999, layer: "second".into() });
+                let index = Index::from_data(data);
+                index.warm_whole();
+                index_cache::save(&fixture.user(), &current_cache_key(&fixture.shared(), &fixture.user()).unwrap(), &index).unwrap();
+            }
+            let (started, observed) = mpsc::channel();
+            let (resume, paused) = mpsc::channel();
+            let reads = Arc::new(AtomicU64::new(0));
+            let count = reads.clone();
+            let caller = std::thread::current().id();
+            let (runtime, worker) = fixture.runtime_with_bigram_loader(move |directory| {
+                assert_ne!(std::thread::current().id(), caller, "table I/O must be off the caller");
+                started.send(()).unwrap();
+                paused.recv_timeout(Duration::from_secs(5)).unwrap();
+                count.fetch_add(1, Ordering::Relaxed);
+                super::super::WordBigram::load(directory)
+            });
+            let index = runtime.deployed_snapshot().unwrap();
+            observed.recv_timeout(Duration::from_secs(5)).unwrap();
+            assert!(index.sentence_bigram.get().is_none(), "publish while the table loader is blocked");
+            assert_eq!(reads.load(Ordering::Relaxed), 0);
+            assert_eq!(index.all_readings_for_text("缓存词").next().is_some(), cached);
+            resume.send(()).unwrap();
+            wait_for_bigram(&index);
+            assert!(Arc::ptr_eq(&index, &runtime.deployed_snapshot().unwrap()), "attach to the same generation");
+            drop(runtime);
+            worker.join().unwrap();
+            assert_eq!(reads.load(Ordering::Relaxed), 1);
+        }
+    }
+
+    #[test]
+    fn sentence_bigram_dictionary_reload_reuses_the_table() {
+        let fixture = Fixture::new();
+        fixture.write_bigram();
+        let reads = Arc::new(AtomicU64::new(0));
+        let count = reads.clone();
+        let (runtime, worker) = fixture.runtime_with_bigram_loader(move |directory| {
+            count.fetch_add(1, Ordering::Relaxed);
+            super::super::WordBigram::load(directory)
+        });
+        let first = runtime.deployed_snapshot().unwrap();
+        wait_for_bigram(&first);
+        fixture.write("shared/second.dict.yaml", "---\nname: second\nsort: by_weight\n...\n一\tyi\t201\n");
+        let second = runtime.deployed_snapshot().unwrap();
+        wait_for_bigram(&second);
+        assert_ne!(first.generation, second.generation);
+        let model = &first.sentence_bigram.get().unwrap().model;
+        assert!(Arc::ptr_eq(model, &second.sentence_bigram.get().unwrap().model));
+        // A distinct correction view must also share the table, while rebuilding its own text IDs.
+        fixture.write("user/lexicon_layers_v1.json", r#"{"formatVersion":1,"disabled":["second"],"enabled":[]}"#);
+        runtime.refresh(&mut None, &mut Vec::new());
+        let correction = runtime.snapshot().unwrap();
+        wait_for_bigram(&correction);
+        assert!(Arc::ptr_eq(model, &correction.sentence_bigram.get().unwrap().model));
+        for index in [&first, &second, &correction] {
+            let loaded = index.sentence_bigram.get().unwrap();
+            for (id, word) in loaded.words.iter().enumerate() {
+                assert_eq!(*word, model.word_id(index.texts.get(id as u32)));
+            }
+        }
+        drop(runtime);
+        worker.join().unwrap();
+        assert_eq!(reads.load(Ordering::Relaxed), 1, "dictionary reloads never reread an unchanged table");
+    }
+
+    #[test]
+    fn sentence_bigram_missing_reload_and_cached_dictionary_share_the_lifecycle() {
+        let fixture = Fixture::new();
+        let runtime = RuntimeDictionary::new(fixture.shared(), fixture.user());
+        let before = runtime.deployed_snapshot().unwrap();
+        assert!(before.sentence_bigram.get().is_none());
+        fixture.write_bigram();
+        let directory = super::super::WordBigram::directory(&fixture.shared());
+        let loaded = runtime.deployed_snapshot().unwrap();
+        wait_for_bigram(&loaded);
+        let model = &loaded.sentence_bigram.get().unwrap().model;
+        assert_ne!(before.generation, loaded.generation);
+        assert!(Arc::ptr_eq(&loaded, &runtime.deployed_snapshot().unwrap()));
+        let mut writer = super::super::index_cache::Writer::new();
+        loaded.cache_write(&mut writer);
+        let bytes = writer.into_bytes();
+        let cached = Arc::new(Index::cache_read(&mut super::super::index_cache::Reader::new(&bytes)).unwrap());
+        runtime.request_sentence_bigram(&cached);
+        wait_for_bigram(&cached);
+        assert!(Arc::ptr_eq(model, &cached.sentence_bigram.get().unwrap().model));
+        fs::write(directory.join("bigrams.tsv"), "<s>\t你好\t-0.2\n").unwrap();
+        let changed = runtime.deployed_snapshot().unwrap();
+        wait_for_bigram(&changed);
+        let replacement = &changed.sentence_bigram.get().unwrap().model;
+        assert!(!Arc::ptr_eq(model, replacement));
+        assert_ne!(model.log_probability(model.bos, model.word_id("你好")),
+            replacement.log_probability(replacement.bos, replacement.word_id("你好")));
+        fs::remove_file(directory.join("bigrams.tsv")).unwrap();
+        let missing = runtime.deployed_snapshot().unwrap();
+        assert!(missing.sentence_bigram.get().is_none());
+        assert!(loaded.sentence_bigram.get().is_some(), "existing snapshots retain the old table");
+    }
+
+    #[test]
+    fn sentence_bigram_failure_is_cached_until_the_table_changes() {
+        let fixture = Fixture::new();
+        fixture.write_bigram();
+        let reads = Arc::new(AtomicU64::new(0));
+        let count = reads.clone();
+        let (runtime, worker) = fixture.runtime_with_bigram_loader(move |_| {
+            count.fetch_add(1, Ordering::Relaxed);
+            Err(invalid("test table unavailable"))
+        });
+        let first = runtime.deployed_snapshot().unwrap();
+        fixture.write("shared/second.dict.yaml", "---\nname: second\nsort: by_weight\n...\n一\tyi\t201\n");
+        let second = runtime.deployed_snapshot().unwrap();
+        drop(runtime);
+        worker.join().unwrap();
+        assert!(first.sentence_bigram.get().is_none());
+        assert!(second.sentence_bigram.get().is_none());
+        assert_eq!(reads.load(Ordering::Relaxed), 1, "one failure and one diagnostic per table version");
+    }
+
+    #[test]
+    fn sentence_bigram_replacement_during_load_does_not_attach_to_an_old_generation() {
+        let fixture = Fixture::new();
+        fixture.write_bigram();
+        let (started, observed) = mpsc::channel();
+        let (resume, paused) = mpsc::channel();
+        let mut first_load = true;
+        let (runtime, worker) = fixture.runtime_with_bigram_loader(move |directory| {
+            let model = super::super::WordBigram::load(directory)?;
+            if first_load {
+                first_load = false;
+                started.send(()).unwrap();
+                paused.recv_timeout(Duration::from_secs(5)).unwrap();
+            }
+            Ok(model)
+        });
+        let old = runtime.deployed_snapshot().unwrap();
+        observed.recv_timeout(Duration::from_secs(5)).unwrap();
+        let directory = super::super::WordBigram::directory(&fixture.shared());
+        fs::write(directory.join("bigrams.tsv"), "<s>\t你好\t-0.2\n").unwrap();
+        let current = runtime.deployed_snapshot().unwrap();
+        resume.send(()).unwrap();
+        wait_for_bigram(&current);
+        drop(runtime);
+        worker.join().unwrap();
+        assert!(old.sentence_bigram.get().is_none(), "never publish a table read across a replacement");
+        let model = &current.sentence_bigram.get().unwrap().model;
+        assert!((model.log_probability(model.bos, model.word_id("你好")) + 0.2 * std::f64::consts::LN_10).abs() < 1e-6);
+    }
+
+    fn wait_for_bigram(index: &Index) {
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while index.sentence_bigram.get().is_none() {
+            assert!(std::time::Instant::now() < deadline, "background table did not attach");
+            std::thread::sleep(Duration::from_millis(1));
+        }
+    }
+
     impl Fixture {
+        fn runtime_with_bigram_loader(&self,
+            load: impl FnMut(&Path) -> io::Result<super::super::WordBigram> + Send + 'static,
+        ) -> (RuntimeDictionary, std::thread::JoinHandle<()>) {
+            let (sender, receiver) = mpsc::channel();
+            let worker = std::thread::spawn(move || load_sentence_bigrams(receiver, load));
+            (RuntimeDictionary {
+                shared: self.shared(), user: self.user(), index: Mutex::new(None),
+                terms: Arc::new(Index::from_data(DictionaryData::default())),
+                deployed_generations: Arc::new(Mutex::new(Vec::new())), deployed: Mutex::new(None),
+                sentence_bigrams: sender,
+            }, worker)
+        }
+
+        fn write_bigram(&self) {
+            let directory = super::super::WordBigram::directory(&self.shared());
+            let path = directory.strip_prefix(&self.0).unwrap().display().to_string();
+            self.write(&format!("{path}/manifest.json"),
+                r#"{"smoothing":"modified-interpolated-kneser-ney","pcont_floor":0.000001,"unigram_count":2,"bigram_count":1}"#);
+            self.write(&format!("{path}/unigrams.tsv"), "<s>\t-99\t0\n你好\t-1\t0\n");
+            self.write(&format!("{path}/bigrams.tsv"), "<s>\t你好\t-0.1\n");
+        }
+
         fn new() -> Self {
             static NEXT: AtomicU64 = AtomicU64::new(0);
             let path = std::env::temp_dir().join(format!(
@@ -770,6 +1023,7 @@ mod tests {
             terms: Arc::new(Index::from_data(DictionaryData::default())),
             deployed_generations: Arc::new(Mutex::new(Vec::new())),
             deployed: Mutex::new(None),
+            sentence_bigrams: sentence_bigram_loader(),
         };
         let mut fingerprint = None;
         let mut generations = Vec::new();
@@ -864,6 +1118,7 @@ mod tests {
             terms: Arc::new(Index::from_data(DictionaryData::default())),
             deployed_generations: Arc::new(Mutex::new(Vec::new())),
             deployed: Mutex::new(None),
+            sentence_bigrams: sentence_bigram_loader(),
         };
         assert!(runtime.snapshot().is_none());
         let mut fingerprint = None;
@@ -939,6 +1194,7 @@ mod tests {
             terms: Arc::new(Index::from_data(DictionaryData::default())),
             deployed_generations: Arc::new(Mutex::new(Vec::new())),
             deployed: Mutex::new(None),
+            sentence_bigrams: sentence_bigram_loader(),
         };
         let mut fingerprint = None;
         let mut generations = Vec::new();
@@ -956,6 +1212,7 @@ mod tests {
         let runtime = RuntimeDictionary {
             shared: fixture.shared(), user: fixture.user(), index: Mutex::new(None), terms: index.clone(),
             deployed_generations: Arc::new(Mutex::new(Vec::new())), deployed: Mutex::new(None),
+            sentence_bigrams: sentence_bigram_loader(),
         };
         let mut builder = runtime.deployed.lock().unwrap();
         assert!(runtime.ready_deployed().is_none(), "must not wait on the builder lock");
@@ -1189,6 +1446,7 @@ mod tests {
             terms: Arc::new(Index::from_data(DictionaryData::default())),
             deployed_generations: Arc::new(Mutex::new(Vec::new())),
             deployed: Mutex::new(None),
+            sentence_bigrams: sentence_bigram_loader(),
         };
         let mut fingerprint = None;
         let mut generations = Vec::new();

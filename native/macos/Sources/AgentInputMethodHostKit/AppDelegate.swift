@@ -7,12 +7,30 @@ public final class InputMethodAppDelegate: NSObject, NSApplicationDelegate {
     private var recoveryMarker: RuntimeRecoveryMarker?
     private let memorySampler = MemorySampler()
     private var runtimeStorageLease: RuntimeStorageLease?
+    private let attestationPreparation: RuntimeArtifactAttestationPreparation?
     /// A windowless background-only app is App Napped and scheduled at low QoS, which puts key handling
     /// on efficiency cores: live core time per key ran ~10x the same replay. Held for the process lifetime;
     /// it must still allow idle system sleep (plain .userInitiated kept the Mac awake in 0.3.6).
     private var keyHandlingActivity: NSObjectProtocol?
+    private let traceColdStart = ProcessInfo.processInfo.environment["AIM_COLD_START_PHASE_TRACE"] == "1"
+    private var coldStartPhases: [String: Double] = [:]
 
-    public override init() { super.init() }
+    private func recordColdStartPhase(_ name: String) {
+        guard traceColdStart,
+              let raw = ProcessInfo.processInfo.environment["AIM_COLD_START_PROCESS_ENTRY_NS"],
+              let entry = UInt64(raw) else { return }
+        coldStartPhases[name] = Double(DispatchTime.now().uptimeNanoseconds &- entry) / 1_000_000
+    }
+
+    public override init() {
+        attestationPreparation = nil
+        super.init()
+    }
+
+    public init(attestationPreparation: RuntimeArtifactAttestationPreparation) {
+        self.attestationPreparation = attestationPreparation
+        super.init()
+    }
 
     /// `notifyutil -p com.hongye.facai.inputmethod.zhizi.show-skin-gallery` opens the skin gallery (the menu item "皮肤管理…" does the same);
     /// it only opens a window, so it needs no authority beyond being able to post a Darwin notification.
@@ -51,9 +69,11 @@ public final class InputMethodAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
+        recordColdStartPhase("appkit")
         keyHandlingActivity = ProcessInfo.processInfo.beginActivity(
             options: [.userInitiatedAllowingIdleSystemSleep, .latencyCritical], reason: "Input method key handling")
         LegacyPreferences.migrate()
+        recordColdStartPhase("preferences")
         let primaryApplicationSupport = ProcessInfo.processInfo.environment["AIM_COLD_START_PROBE_DIR"]
             .map { URL(fileURLWithPath: $0, isDirectory: true) }
             ?? FileManager.default.homeDirectoryForCurrentUser
@@ -67,7 +87,14 @@ public final class InputMethodAppDelegate: NSObject, NSApplicationDelegate {
             exit(11)
         }
         guard let applicationSupport = runtimeStorageLease?.location.rootDirectory else { exit(11) }
-        let runtimeAttestation = try? RuntimeArtifactAttestation.capture()
+        recordColdStartPhase("storage")
+        let runtimeAttestation: RuntimeArtifactAttestation?
+        if let attestationPreparation {
+            runtimeAttestation = try? attestationPreparation.finish()
+        } else {
+            runtimeAttestation = try? RuntimeArtifactAttestation.capture()
+        }
+        recordColdStartPhase("attestation")
         if let runtimeAttestation {
             DiagnosticsRecorder.shared.configureProcessInstance(
                 generation: runtimeAttestation.generation
@@ -120,6 +147,7 @@ public final class InputMethodAppDelegate: NSObject, NSApplicationDelegate {
             serverName = connectionName
         }
         server = IMKServer(name: serverName, bundleIdentifier: bundleIdentifier)
+        recordColdStartPhase("server")
         observeSkinGalleryRequests()
         observeLexiconWindowRequests()
         memorySampler.start()
@@ -146,7 +174,9 @@ public final class InputMethodAppDelegate: NSObject, NSApplicationDelegate {
             releaseRuntimeStorage()
             exit(9)
         }
+        recordColdStartPhase("controller")
         controller.activateServer(client)
+        recordColdStartPhase("activate")
         if environment["AIM_COLD_START_CONTEXT_MODEL"] == "1" {
             controller.enableContextRankingForPerformance()
         }
@@ -167,6 +197,7 @@ public final class InputMethodAppDelegate: NSObject, NSApplicationDelegate {
             exit(9)
         }
         let consumed = controller.handle(event, client: client)
+        recordColdStartPhase("handle")
         let readyElapsedNanoseconds = environment["AIM_COLD_START_PROCESS_ENTRY_NS"]
             .flatMap(UInt64.init)
             .map { DispatchTime.now().uptimeNanoseconds &- $0 }
@@ -183,6 +214,9 @@ public final class InputMethodAppDelegate: NSObject, NSApplicationDelegate {
         }
         let readyLine = "agent-ime-cold-ready-ns=\(readyElapsedNanoseconds)\n"
         FileHandle.standardOutput.write(Data(readyLine.utf8))
+        if traceColdStart, let data = try? JSONSerialization.data(withJSONObject: coldStartPhases, options: [.sortedKeys]) {
+            FileHandle.standardOutput.write(Data("agent-ime-cold-phases=".utf8) + data + Data("\n".utf8))
+        }
         // The ready measurement above is final. Drain the asynchronous model
         // load (its ANE compilation can still be in flight) before exiting:
         // teardown-time destruction of C++ statics racing that compilation is

@@ -2,6 +2,35 @@ import CryptoKit
 import Darwin
 import Foundation
 
+/// Starts the same complete capture while AppKit initializes. Consumers still wait for
+/// its result before configuring diagnostics or accepting input; no check is skipped.
+public final class RuntimeArtifactAttestationPreparation: @unchecked Sendable {
+    private let ready = DispatchGroup()
+    private let lock = NSLock()
+    private var result: Result<RuntimeArtifactAttestation, Error>?
+
+    public convenience init(bundle: Bundle = .main) {
+        self.init(capture: { try RuntimeArtifactAttestation.capture(bundle: bundle) })
+    }
+
+    init(capture: @escaping @Sendable () throws -> RuntimeArtifactAttestation) {
+        ready.enter()
+        DispatchQueue.global(qos: .userInitiated).async { [self] in
+            let captured = Result { try capture() }
+            lock.withLock { result = captured }
+            ready.leave()
+        }
+    }
+
+    public func finish() throws -> RuntimeArtifactAttestation {
+        ready.wait()
+        return try lock.withLock {
+            guard let result else { throw RuntimeArtifactAttestationError.invalidBundleEntry }
+            return try result.get()
+        }
+    }
+}
+
 public struct RuntimeArtifactAttestation: Codable, Equatable, Sendable {
     public let formatVersion: Int
     public let generation: String
@@ -31,13 +60,14 @@ public struct RuntimeArtifactAttestation: Codable, Equatable, Sendable {
         }
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let checksums = try RuntimeArtifactHasher.checksums(at: bundle.bundleURL, executable: executableURL)
         return try RuntimeArtifactAttestation(
             formatVersion: 1,
             generation: generation.uuidString.lowercased(),
             processID: getpid(),
             launchedAt: formatter.string(from: now),
-            bundleChecksum: RuntimeArtifactHasher.bundleChecksum(at: bundle.bundleURL),
-            executableChecksum: RuntimeArtifactHasher.fileChecksum(at: executableURL),
+            bundleChecksum: checksums.bundle,
+            executableChecksum: checksums.executable,
             bundleIdentifier: required("CFBundleIdentifier"),
             version: required("CFBundleShortVersionString"),
             build: required("CFBundleVersion"),
@@ -70,6 +100,16 @@ public enum RuntimeArtifactHasher {
     }
 
     public static func bundleChecksum(at bundle: URL) throws -> String {
+        try calculateChecksums(at: bundle, executable: nil).bundle
+    }
+
+    static func checksums(at bundle: URL, executable: URL) throws -> (bundle: String, executable: String) {
+        let result = try calculateChecksums(at: bundle, executable: executable)
+        guard let executable = result.executable else { throw RuntimeArtifactAttestationError.invalidBundleEntry }
+        return (result.bundle, executable)
+    }
+
+    private static func calculateChecksums(at bundle: URL, executable: URL?) throws -> (bundle: String, executable: String?) {
         let rootValues = try bundle.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
         guard rootValues.isDirectory == true, rootValues.isSymbolicLink != true else {
             throw RuntimeArtifactAttestationError.invalidBundleRoot
@@ -109,16 +149,66 @@ public enum RuntimeArtifactHasher {
         entries.sort { left, right in
             left.relative.utf8.lexicographicallyPrecedes(right.relative.utf8)
         }
+        // Hash at most two files concurrently. Each file retains the same
+        // no-follow/regular-file/link checks and bounded1MiB reads; manifest
+        // reduction stays in sorted order and waits for every result.
+        let files = entries
+        let checksums = FileChecksums(count: files.count)
+        let workers = min(2, files.count)
+        if workers > 0 {
+            DispatchQueue.concurrentPerform(iterations: workers) { _ in
+                while let index = checksums.takeNextIndex() {
+                    checksums.store(Result { try fileChecksum(at: files[index].url) }, at: index)
+                }
+            }
+        }
+        let executablePath = executable?.standardizedFileURL.resolvingSymlinksInPath().path
+        var executableChecksum: String?
         var manifestHasher = SHA256()
-        for entry in entries {
-            let checksum = try fileChecksum(at: entry.url)
+        for (index, entry) in files.enumerated() {
+            let checksum = try checksums.value(at: index)
+            if entry.url.path == executablePath { executableChecksum = checksum }
             manifestHasher.update(data: Data("\(checksum)  ./\(entry.relative)\n".utf8))
         }
-        return hexadecimal(manifestHasher.finalize())
+        return (hexadecimal(manifestHasher.finalize()), executableChecksum)
     }
 
+    private final class FileChecksums: @unchecked Sendable {
+        private let lock = NSLock()
+        private var nextIndex = 0
+        private var values: [Result<String, Error>?]
+
+        init(count: Int) { values = Array(repeating: nil, count: count) }
+
+        func takeNextIndex() -> Int? {
+            lock.withLock {
+                guard nextIndex < values.count else { return nil }
+                defer { nextIndex += 1 }
+                return nextIndex
+            }
+        }
+
+        func store(_ value: Result<String, Error>, at index: Int) {
+            lock.withLock { values[index] = value }
+        }
+
+        func value(at index: Int) throws -> String {
+            try lock.withLock {
+                guard let value = values[index] else { throw RuntimeArtifactAttestationError.invalidBundleEntry }
+                return try value.get()
+            }
+        }
+    }
+
+    private static let hexadecimalDigits = Array("0123456789abcdef".utf8)
     private static func hexadecimal<D: Sequence>(_ digest: D) -> String where D.Element == UInt8 {
-        digest.map { String(format: "%02x", $0) }.joined()
+        var bytes: [UInt8] = []
+        bytes.reserveCapacity(64)
+        for byte in digest {
+            bytes.append(hexadecimalDigits[Int(byte >> 4)])
+            bytes.append(hexadecimalDigits[Int(byte & 15)])
+        }
+        return String(decoding: bytes, as: UTF8.self)
     }
 }
 

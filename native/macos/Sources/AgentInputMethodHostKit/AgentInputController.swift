@@ -58,9 +58,20 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
     /// deferredRankingDisabled -bool true` restores the synchronous path.
     private func attachDeferredRanking(forTesting: Bool = false) {
         guard forTesting || !performanceMode, let core else { return }
+        core.zhijuEnabled = ZhijuPreferences.isEnabled()
         core.defersRanking = !UserDefaults.standard.bool(forKey: "deferredRankingDisabled")
+        installDeferredApplier(core)
+    }
+
+    private func installDeferredApplier(_ core: CoreSession) {
         core.deferredApplier = { [weak self] step in
-            DispatchQueue.main.async { self?.applyDeferredRanking(step) }
+            let queued = DispatchTime.now().uptimeNanoseconds
+            DispatchQueue.main.async {
+                KeyPathContentionTrace.shared?.record("ranking.main.wait", DispatchTime.now().uptimeNanoseconds &- queued)
+                KeyPathContentionTrace.shared?.record(step.stage == 2 ? "zhiju.main.wait" : "zhizi.main.wait",
+                    DispatchTime.now().uptimeNanoseconds &- queued)
+                self?.applyDeferredRanking(step)
+            }
         }
     }
 
@@ -68,6 +79,12 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
     /// inside the controller lock, together with the redraw: a key can never see one without the
     /// other. Only while no key has come since, and only for the same preedit and page.
     func applyDeferredRanking(_ step: DeferredRankingStep) {
+        let started = DispatchTime.now().uptimeNanoseconds
+        defer {
+            let elapsed = DispatchTime.now().uptimeNanoseconds &- started
+            KeyPathContentionTrace.shared?.record("ranking.main.apply", elapsed)
+            KeyPathContentionTrace.shared?.record(step.stage == 2 ? "zhiju.main.apply" : "zhizi.main.apply", elapsed)
+        }
         callbackExecutor.sync {
             guard !resourcesClosed, let core, core.currentRankingGeneration == step.generation,
                   hasActiveComposition, candidateGrid == nil, let shown = latestView,
@@ -115,6 +132,35 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
 
     func enableDeferredRankingForTesting() { callbackExecutor.sync { attachDeferredRanking(forTesting: true) } }
     var latestCandidateTextsForTesting: [String]? { callbackExecutor.sync { latestView?.candidates.map(\.text) } }
+    var zhijuEnabledForTesting: Bool? { callbackExecutor.sync { core?.zhijuEnabled } }
+    var latestViewForTesting: IMEViewModel? { callbackExecutor.sync { latestView } }
+    var latestPageMatchesCoreForTesting: Bool {
+        callbackExecutor.sync { latestView?.candidates.map(\.text) == core?.corePageTexts() }
+    }
+    func configureDeferredModelsForProbe(zhijuEnabled: Bool, shortAbbreviations: Bool = true, fifthSlotSelection: Bool = true) {
+        callbackExecutor.sync {
+            attachDeferredRanking(forTesting: true)
+            core?.zhijuEnabled = zhijuEnabled
+            core?.enableCandidateFunnelForTesting()
+            core?.setShortAbbreviationOffersForTesting(shortAbbreviations)
+            core?.setFifthSlotSelectionForTesting(fifthSlotSelection)
+        }
+    }
+
+    func configureInputForProbe(fuzzyMask: UInt32, typoCorrectionEnabled: Bool) -> Bool {
+        callbackExecutor.sync {
+            guard !resourcesClosed, let core else { return false }
+            guard core.setFuzzyMask(fuzzyMask) else { return false }
+            guard core.setTypoCorrectionEnabled(typoCorrectionEnabled) else { return false }
+            return true
+        }
+    }
+
+    var zhijuAlternativesForTesting: [String] { callbackExecutor.sync { core?.zhijuAlternativesForTesting ?? [] } }
+
+    var candidateFunnelForTesting: (pool: [String], group: [String], compositions: [String], shortWords: [String])? {
+        callbackExecutor.sync { core?.candidateFunnelForTesting() }
+    }
 
     var contextAppIdentifierForTesting: String { appIdentifier }
     var candidateGridForTesting: CandidateGrid? { callbackExecutor.sync { candidateGrid } }
@@ -220,6 +266,7 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
                 self?.closeForProcessTermination()
             },
         ]
+        observeZhijuPreference()
     }
 
     @_spi(PerformanceHarness)
@@ -242,6 +289,7 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
         super.init(server: nil, delegate: nil, client: nil)
         self.appIdentifier = appIdentifier
         core = session
+        installDeferredApplier(session)
         currentClient = inputClient
         performanceMode = true
         performanceSharedDirectory = sharedDirectory
@@ -255,11 +303,27 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
                 )
             }
         }
+        observeZhijuPreference()
+    }
+
+    private func observeZhijuPreference() {
+        runtimeObservers.append(NotificationCenter.default.addObserver(
+            forName: .agentZhijuConfigurationDidChange, object: nil, queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            self.callbackExecutor.sync {
+                guard !self.resourcesClosed else { return }
+                self.core?.zhijuEnabled = ZhijuPreferences.isEnabled()
+                self.refreshStatusItemMenu()
+            }
+        })
     }
 
     public override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
-        callbackExecutor.sync {
-            handleSerialized(event, client: sender)
+        let received = DispatchTime.now().uptimeNanoseconds
+        return callbackExecutor.sync {
+            KeyPathContentionTrace.shared?.record("controller.key.executor.wait", DispatchTime.now().uptimeNanoseconds &- received)
+            return handleSerialized(event, client: sender)
         }
     }
 
@@ -454,6 +518,7 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
     private func activateServerSerialized(_ sender: Any?) {
         if let next = Self.bundleIdentifier(from: sender), next != appIdentifier { recentCommitContext.clear() }
         guard !resourcesClosed else { return }
+        core?.zhijuEnabled = ZhijuPreferences.isEnabled()
         if let client = sender as? (any IMKTextInput & NSObjectProtocol) {
             currentClient = client
         }
@@ -713,6 +778,12 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
         mode.isEnabled = false
         menu.addItem(mode)
         menu.addItem(.separator())
+        let zhiju = NSMenuItem(title: "知句（本地造词）", action: #selector(toggleZhiju(_:)), keyEquivalent: "")
+        zhiju.target = self
+        zhiju.state = ZhijuPreferences.isEnabled() ? .on : .off
+        zhiju.toolTip = "按拼音生成词句；开关作用于后续输入，当前候选保持不变。"
+        menu.addItem(zhiju)
+        menu.addItem(.separator())
         let mask = UInt32(UserDefaults.standard.integer(forKey: "fuzzyMask"))
         for (index, label) in Self.fuzzyLabels.enumerated() {
             let item = NSMenuItem(title: label, action: #selector(toggleFuzzy(_:)), keyEquivalent: "")
@@ -807,6 +878,18 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
             guard !resourcesClosed,
                   Self.makePersonalModelMenuItem(directory: personalModelDirectory, defaults: .standard).isEnabled else { return }
             Self.togglePersonalModelPreference(defaults: .standard)
+            refreshStatusItemMenu()
+        }
+    }
+
+    @objc private func toggleZhiju(_ sender: NSMenuItem) {
+        callbackExecutor.sync {
+            guard !resourcesClosed, let core else { return }
+            let enabled = !ZhijuPreferences.isEnabled()
+            UserDefaults.standard.set(enabled, forKey: ZhijuPreferences.defaultsKey)
+            core.zhijuEnabled = enabled
+            sender.state = enabled ? .on : .off
+            NotificationCenter.default.post(name: .agentZhijuConfigurationDidChange, object: nil)
             refreshStatusItemMenu()
         }
     }

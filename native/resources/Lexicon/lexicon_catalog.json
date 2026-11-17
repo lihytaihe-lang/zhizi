@@ -55,7 +55,7 @@
       "description": "动物、食物、物品等日常名称",
       "group": "core",
       "defaultEnabled": true,
-      "rows": 25025
+      "rows": 25345
     },
     {
       "id": "agent_idioms",

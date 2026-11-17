@@ -21,8 +21,8 @@ const assets = Object.freeze({
   modern: ["native/resources/Rime/agent_modern.dict.yaml", "d1e6a40abca03593a85c38da0e5da9cf8d04404fa1ccb0039027268bd7b54682"],
   general: ["native/resources/Rime/agent_general.dict.yaml", "acf8a03457802fd3add68334d0ff93eac1ebcef289407e205576113612728d98"],
   generalProvenance: ["quality/corpus/agent-general-provenance.tsv", "1e1c0407d247ddd3ac3f30e076fc7beaff141978fb6bf5c0319ffb94814dd6ab"],
-  newwords: ["native/resources/Rime/agent_newwords.dict.yaml", "3f1e80009df6db6b93857dedeb88765117de6c9f7f4454400f23e049ec859c9b"],
-  newwordsProvenance: ["quality/corpus/agent-newwords-provenance.tsv", "55c589987e9ffd2f47025dd8c3ff4f9da3bb1d9351d34f863416cb59e9bcad6c"],
+  newwords: ["native/resources/Rime/agent_newwords.dict.yaml", "1603e68d7b993e5e6ad742ec902f11dd8554a72c52bb71709737b4de25b489de"],
+  newwordsProvenance: ["quality/corpus/agent-newwords-provenance.tsv", "dee2ff41d2b391977b51c95f732d1c672f4975fb1a2dc9b4af05e1f287e46fed"],
   spoken: ["native/resources/Rime/agent_spoken.dict.yaml", "68fd7ae5a41d2eb8b6a1b60922a23580f698263bb41192c11de3041b6aaba898"],
   spokenProvenance: ["quality/corpus/agent-spoken-provenance.tsv", "12dbf8b5be1447db7f5c0cbc9e4de2aa49a93ef0026f0f11aee31afae611f093"],
   aiTerms: ["native/resources/Rime/agent_ai_terms.dict.yaml", "2e4e058bc42a1a83f4fedf1c9b2a31ed93d63f1c7558f63dcdef01caed2ec4b3"],
@@ -298,7 +298,7 @@ for (const [, reading, weight] of precedingRows) {
 }
 const syllables = new Set(upstreamRows.flatMap(([, reading]) => reading.toLowerCase().split(" ")));
 assert(syllables.size === 415, "pinned schema syllable inventory changed");
-for (const [name, expectedCount] of [["general", 26947], ["newwords", 25025], ["spoken", 10807]]) {
+for (const [name, expectedCount] of [["general", 26947], ["newwords", 25345], ["spoken", 10807]]) {
   const rows = parseDictionaryRows(loaded[name]);
   const provenance = loaded[`${name}Provenance`].trimEnd().split(/\r?\n/u).slice(1).map((line) => line.split("\t"));
   assert(rows.length === expectedCount && provenance.length === rows.length, `${name} row count changed`);
@@ -333,7 +333,9 @@ for (const [name, expectedCount] of [["general", 26947], ["newwords", 25025], ["
       // newwords also carries words the owner's records show missing (scripts/lexicon/append_owner_words.py)
       const newwordsSources = ["deepseek-flash generation, 3-pass review",
         "owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked",
-        "owner input records (owner-approved for public use), owner-confirmed colloquial, not DeepSeek-approved"];
+        "owner input records (owner-approved for public use), owner-confirmed colloquial, not DeepSeek-approved",
+        "rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed",
+        "reviewed productive compounds (quality/corpus/coverage-compounds-0.3.34.tsv), no usage-frequency evidence"];
       const jiebaSource = "jieba 0.42.1 dict.txt (MIT), DeepSeek-judged, 2-pass";  // scripts/lexicon/append_jieba_words.py
       assert(fields.length === 9 && newwordsSources.concat([jiebaSource]).includes(fields[7])
         && fields[8] === (fields[7] === jiebaSource ? "MIT" : "project-authored")

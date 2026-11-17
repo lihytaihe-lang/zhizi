@@ -96,6 +96,9 @@ gate_add artifact_checksum_equivalence bundle '' '"$REG_SCRIPT_DIR/test_artifact
 # mode: a genuinely unavailable context model must FAIL the suite here — the
 # runner would otherwise record the script's internal SKIP+exit-0 as PASS.
 gate_add context_model_integration deps,core_lib '' 'AIM_CONTEXT_MODEL_REQUIRED=1 "$REG_SCRIPT_DIR/test_context_model_integration.sh"'
+# The delivery gate requires real 知句 assets, an applied controller page and an identical digit
+# commit. It cannot turn a missing model or an all-timeout measurement into a passing release.
+gate_add zhiju_delivery deps,core_lib,bundle '' 'swift_bin_dir="$(swift build --package-path "$REG_ROOT/native/macos" -c release --disable-automatic-resolution --show-bin-path)" && "$REG_SCRIPT_DIR/test_zhiju_delivery.sh" "$REG_ROOT/build/native/release/Agent Input Method.inputmethod" "$swift_bin_dir/AgentIMEContextModelHarness" "${AIM_ZHIJU_DELIVERY_REPORT_DIR:-$REG_ROOT/build/zhiju-delivery}"'
 gate_add short_input_factory_top1 deps,core_lib,bundle '' '"$REG_SCRIPT_DIR/test_short_input_factory_top1.sh"'
 gate_add learning_degradation deps,core_lib,bundle '' '"$REG_SCRIPT_DIR/test_learning_degradation.sh"'
 gate_add context_ranking_replay deps,core_lib,bundle '' '"$REG_SCRIPT_DIR/test_context_ranking_replay.sh"'

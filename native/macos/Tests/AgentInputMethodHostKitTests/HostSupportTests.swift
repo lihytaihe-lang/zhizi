@@ -110,6 +110,106 @@ final class HostSupportTests: XCTestCase {
         XCTAssertEqual(mapper.map(try flags(56, []))?.kind, .shiftTap)
     }
 
+    func testShiftTapSurvivesKeyUpOfKeyPressedBeforeShift() throws {
+        let mapper = EventMapper()
+        func key(_ type: NSEvent.EventType, keyCode: UInt16, characters: String, modifiers: NSEvent.ModifierFlags) throws -> NSEvent {
+            try XCTUnwrap(NSEvent.keyEvent(
+                with: type, location: .zero, modifierFlags: modifiers, timestamp: 1,
+                windowNumber: 0, context: nil, characters: characters,
+                charactersIgnoringModifiers: characters, isARepeat: false, keyCode: keyCode
+            ))
+        }
+        func flags(_ keyCode: UInt16, _ modifiers: NSEvent.ModifierFlags) throws -> NSEvent {
+            try XCTUnwrap(NSEvent.keyEvent(
+                with: .flagsChanged, location: .zero, modifierFlags: modifiers, timestamp: 1,
+                windowNumber: 0, context: nil, characters: "", charactersIgnoringModifiers: "",
+                isARepeat: false, keyCode: keyCode
+            ))
+        }
+
+        let plainA = try key(.keyDown, keyCode: 0, characters: "a", modifiers: [])
+        XCTAssertEqual(mapper.map(plainA)?.kind, .text)
+        XCTAssertNil(mapper.map(try flags(56, [.shift])))
+        XCTAssertNil(mapper.map(try key(.keyUp, keyCode: 0, characters: "a", modifiers: [.shift])))
+        XCTAssertEqual(mapper.map(try flags(56, []))?.kind, .shiftTap)
+    }
+
+    func testShiftTapCancelsOnLeftMouseDownWhileShiftIsHeld() throws {
+        let mapper = EventMapper()
+        func flags(_ keyCode: UInt16, _ modifiers: NSEvent.ModifierFlags) throws -> NSEvent {
+            try XCTUnwrap(NSEvent.keyEvent(
+                with: .flagsChanged, location: .zero, modifierFlags: modifiers, timestamp: 1,
+                windowNumber: 0, context: nil, characters: "", charactersIgnoringModifiers: "",
+                isARepeat: false, keyCode: keyCode
+            ))
+        }
+        let mouseDown = try XCTUnwrap(NSEvent.mouseEvent(
+            with: .leftMouseDown, location: NSPoint(x: 12, y: 34), modifierFlags: [.shift],
+            timestamp: 2, windowNumber: 1, context: nil,
+            eventNumber: 7, clickCount: 1, pressure: 1
+        ))
+
+        XCTAssertNil(mapper.map(try flags(56, [.shift])))
+        XCTAssertNil(mapper.map(mouseDown))
+        XCTAssertNil(mapper.map(try flags(56, [])))
+        XCTAssertNil(mapper.map(try flags(56, [])))
+    }
+
+    func testShiftTapEmitsExactlyOncePerBareReleaseOnLeftAndRightShift() throws {
+        let mapper = EventMapper()
+        func flags(_ keyCode: UInt16, _ modifiers: NSEvent.ModifierFlags) throws -> NSEvent {
+            try XCTUnwrap(NSEvent.keyEvent(
+                with: .flagsChanged, location: .zero, modifierFlags: modifiers, timestamp: 1,
+                windowNumber: 0, context: nil, characters: "", charactersIgnoringModifiers: "",
+                isARepeat: false, keyCode: keyCode
+            ))
+        }
+        for keyCode: UInt16 in [56, 60] {
+            XCTAssertNil(mapper.map(try flags(keyCode, [.shift])))
+            XCTAssertEqual(mapper.map(try flags(keyCode, []))?.kind, .shiftTap)
+            XCTAssertNil(mapper.map(try flags(keyCode, [])))
+        }
+    }
+
+    func testShiftTapCancelsOnRealKeyDownWhileShiftIsHeld() throws {
+        let mapper = EventMapper()
+        func flags(_ keyCode: UInt16, _ modifiers: NSEvent.ModifierFlags) throws -> NSEvent {
+            try XCTUnwrap(NSEvent.keyEvent(
+                with: .flagsChanged, location: .zero, modifierFlags: modifiers, timestamp: 1,
+                windowNumber: 0, context: nil, characters: "", charactersIgnoringModifiers: "",
+                isARepeat: false, keyCode: keyCode
+            ))
+        }
+        let underscore = try XCTUnwrap(NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: .shift, timestamp: 1,
+            windowNumber: 0, context: nil, characters: "_", charactersIgnoringModifiers: "-",
+            isARepeat: false, keyCode: 27
+        ))
+
+        XCTAssertNil(mapper.map(try flags(56, [.shift])))
+        let mapped = try XCTUnwrap(mapper.map(underscore))
+        XCTAssertEqual(mapped.kind, .text)
+        XCTAssertEqual(mapped.text, "_")
+        XCTAssertNotEqual(mapped.modifiers & UInt32(AIM_MOD_SHIFT), 0)
+        XCTAssertNil(mapper.map(try flags(56, [])))
+        XCTAssertNil(mapper.map(try flags(56, [])))
+    }
+
+    func testShiftTapNeverEmitsWhenShiftCombinesWithCommandOptionOrControl() throws {
+        let mapper = EventMapper()
+        func flags(_ keyCode: UInt16, _ modifiers: NSEvent.ModifierFlags) throws -> NSEvent {
+            try XCTUnwrap(NSEvent.keyEvent(
+                with: .flagsChanged, location: .zero, modifierFlags: modifiers, timestamp: 1,
+                windowNumber: 0, context: nil, characters: "", charactersIgnoringModifiers: "",
+                isARepeat: false, keyCode: keyCode
+            ))
+        }
+        for extra in [NSEvent.ModifierFlags.command, .option, .control] {
+            XCTAssertNil(mapper.map(try flags(56, [.shift, extra])))
+            XCTAssertNil(mapper.map(try flags(56, [])))
+        }
+    }
+
     func testUnknownNonPrintableKeyMapsToUnsupportedAction() throws {
         let event = try XCTUnwrap(NSEvent.keyEvent(
             with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,

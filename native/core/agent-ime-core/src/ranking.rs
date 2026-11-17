@@ -307,10 +307,18 @@ fn group_rank_penalty() -> f64 {
 
 /// C1: within one reading, score - 2 x rank.
 pub fn blended_order(scores: &[f64]) -> Vec<usize> {
+    homophone_order(scores, false)
+}
+
+fn homophone_order(scores: &[f64], has_context: bool) -> Vec<usize> {
     let mut order: Vec<usize> = (0..scores.len()).collect();
+    // With Han context, keep the two-point evidence threshold against the first
+    // without making a later homophone pay again for every intervening spelling.
+    // Empty-context callers retain the original positional prior.
+    let prior = |index: usize| 2.0 * if has_context { index.min(1) } else { index } as f64;
     order.sort_by(|&left, &right| {
-        let a = scores[left] - 2.0 * left as f64;
-        let b = scores[right] - 2.0 * right as f64;
+        let a = scores[left] - prior(left);
+        let b = scores[right] - prior(right);
         b.partial_cmp(&a).unwrap_or(std::cmp::Ordering::Equal).then(left.cmp(&right))
     });
     order
@@ -318,6 +326,10 @@ pub fn blended_order(scores: &[f64]) -> Vec<usize> {
 
 /// C2 over the complete-coverage group (`homophone[i]`: same reading as the first).
 pub fn model_first_order(scores: &[f64], homophone: &[bool]) -> Vec<usize> {
+    model_first_order_with_context(scores, homophone, false)
+}
+
+fn model_first_order_with_context(scores: &[f64], homophone: &[bool], has_context: bool) -> Vec<usize> {
     // Never panic here (it runs behind the C ABI): mismatched input keeps the order.
     if scores.len() != homophone.len() {
         return (0..scores.len()).collect();
@@ -325,7 +337,7 @@ pub fn model_first_order(scores: &[f64], homophone: &[bool]) -> Vec<usize> {
     let mut order: Vec<usize> = (0..scores.len()).collect();
     let same_reading: Vec<usize> = (0..scores.len()).filter(|&i| homophone[i]).collect();
     if same_reading.len() >= 2 {
-        let ranked = blended_order(&same_reading.iter().map(|&i| scores[i]).collect::<Vec<_>>());
+        let ranked = homophone_order(&same_reading.iter().map(|&i| scores[i]).collect::<Vec<_>>(), has_context);
         for (rank, &slot) in same_reading.iter().enumerate() {
             order[slot] = same_reading[ranked[rank]];
         }
@@ -349,10 +361,14 @@ pub fn model_first_order(scores: &[f64], homophone: &[bool]) -> Vec<usize> {
 
 /// C2/C1 order of a group (`texts[0]` is the page's first), the owner's habits allowing.
 pub fn group_order(texts: &[String], scores: &[f64], homophone: &[bool]) -> Vec<usize> {
+    contextual_group_order(texts, scores, homophone, false)
+}
+
+pub fn contextual_group_order(texts: &[String], scores: &[f64], homophone: &[bool], has_context: bool) -> Vec<usize> {
     if texts.len() != scores.len() || scores.len() != homophone.len() || scores.is_empty() {
         return (0..scores.len()).collect();
     }
-    let mut order = model_first_order(scores, homophone);
+    let mut order = model_first_order_with_context(scores, homophone, has_context);
     if order[0] != 0 && owner_keeps(&texts[0], &texts[order[0]]) {
         order.retain(|&index| index != 0);
         order.insert(0, 0);
@@ -662,6 +678,22 @@ mod tests {
         assert_eq!(blended_order(&[-5.0, -4.0]), vec![0, 1]);
         assert_eq!(blended_order(&[-5.0, -2.5]), vec![1, 0]);
         assert_eq!(blended_order(&[0.0, 2.0, 4.0]), vec![0, 1, 2]);
+    }
+
+    #[test]
+    fn contextual_homophones_keep_an_evidence_margin_without_repeated_slot_penalties() {
+        let words = texts(&["实施", "事实", "试试", "实时"]);
+        let scores = [-11.80078125, -9.984375, -18.0, -7.00390625];
+        let flags = [true; 4];
+        assert_eq!(group_order(&words, &scores, &flags)[0], 0);
+        assert_eq!(contextual_group_order(&words, &scores, &flags, false), group_order(&words, &scores, &flags));
+        assert_eq!(contextual_group_order(&words, &scores, &flags, true)[0], 3);
+        assert_eq!(contextual_group_order(&words, &[0.0, 2.0, 2.0, 2.0], &flags, true)[0], 0,
+            "a tie at the existing two-point evidence threshold keeps the first");
+        assert_eq!(contextual_group_order(&words, &[0.0, 1.9, 1.9, 1.9], &flags, true)[0], 0);
+        assert_eq!(contextual_group_order(&words, &[-20.0, -30.0, -9.0, -40.0], &[true, true, false, false], true)[0], 0,
+            "another reading still pays the existing six-point per-slot prior");
+        assert_eq!(contextual_group_order(&words, &[0.0], &flags, true), vec![0]);
     }
 
     #[test]

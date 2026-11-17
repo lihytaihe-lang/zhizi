@@ -275,6 +275,13 @@ final class QualityRecorder: @unchecked Sendable {
             }
         }
 
+        if kind == .text, keyText == "_", result.markedText.contains("_") {
+            // An explicit identifier is no longer a pinyin selection attempt.
+            // Do not retain the old Chinese page as a false friction example.
+            pending = nil
+            return
+        }
+
         if !result.markedText.isEmpty, let marked = splitMarkedText(result.markedText) {
             let firstLayerIndices = result.candidates.prefix(12).indices.filter {
                 sanitizedCandidate(result.candidates[$0].text) != nil
@@ -376,7 +383,10 @@ final class QualityRecorder: @unchecked Sendable {
         if kind == .backspace, completed.backspaces < Int.max { completed.backspaces += 1 }
         // The commit result has no candidates. Keep the last displayed page's
         // provenance, except that a disabled switch must be recorded as such.
-        if !result.contextModel.enabled { completed.contextModel = .disabled }
+        if !result.contextModel.enabled {
+            completed.contextModel = ContextModelObservation.disabled.withZhiju(
+                outcome: completed.contextModel.zhijuOutcome, latencyMs: completed.contextModel.zhijuLatencyMs)
+        }
 
         let committedText = result.commitText.isEmpty ? nil : sanitizedCandidate(result.commitText)
         let outcome: CompositionOutcome
@@ -427,6 +437,7 @@ final class QualityRecorder: @unchecked Sendable {
         } else if let raw = committedText {
             outcome = .committedRaw
             selectedText = raw
+            if !completed.segments.isEmpty { segments = completed.segments }
             if let whole = completed.whole {
                 completed.candidates = whole.candidates
                 completed.candidateComments = whole.candidateComments
@@ -459,7 +470,7 @@ final class QualityRecorder: @unchecked Sendable {
             durationMs: duration.overflow ? (nowMs >= completed.startedAtMs ? Int64.max : 0) : max(0, duration.partialValue),
             backspaces: completed.backspaces,
             redoAfterCommit: false,
-            candidateCount: completed.candidateCount,
+            candidateCount: max(completed.candidateCount, completed.candidates.count),
             contextModel: completed.contextModel.includingAppendedCandidate(count: completed.candidates.count, anomaly: {
                 self.recordAnomaly($0, observation: completed.contextModel, indices: [],
                                    count: completed.candidates.count, page: completed.pageNumber)

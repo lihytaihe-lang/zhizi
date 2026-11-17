@@ -107,7 +107,7 @@ export type QualityRecordingEvent = {
   candidateCount: number;
   contextModel?: {
     enabled: boolean;
-    outcome: "disabled" | "unavailable" | "no_group" | "timeout" | "suspended" | "error" | "unchanged" | "reordered";
+    outcome: "disabled" | "unavailable" | "no_group" | "timeout" | "suspended" | "error" | "unchanged" | "reordered" | "composed";
     baseOrder?: number[];
     groupSize?: number;
   };
@@ -258,6 +258,17 @@ export const revokeQualityRecordingConsent = (deleteRecords: boolean) =>
   invokeLocal<QualityConsentRevocationResult>("revoke_quality_recording_consent", { deleteRecords });
 export const listQualityRecords = () =>
   invokeLocal<QualityRecordingEvent[]>("list_quality_records");
+export type QualityRecordsPage = { records: QualityRecordingEvent[]; nextCursor: string | null };
+export type QualityRecordsOverview = {
+  totalCount: number; commits: number; firstChoiceRate: number | null; redoRate: number | null;
+};
+export const qualityRecordsPage = (cursor: string | null = null, rawOnly = false) =>
+  invokeLocal<QualityRecordsPage>("quality_records_page", { cursor, limit: 100, filter: { rawOnly } });
+export const qualityRecordsOverview = () => invokeLocal<QualityRecordsOverview>("quality_records_overview");
+export const countQualityRecords = (filter: { startMs?: number; endMs?: number; appHash?: string } = {}) =>
+  invokeLocal<number>("count_quality_records", { filter });
+export const exportQualityRecordsFile = () =>
+  invokeLocal<{ path: string; count: number } | null>("export_quality_records_file");
 export const personalProfileIntrospection = () =>
   invokeLocal<PersonalProfileIntrospection>("personal_profile_introspection");
 export const applyPersonalProfileAutoUpdate = () =>

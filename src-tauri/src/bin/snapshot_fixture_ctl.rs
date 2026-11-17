@@ -1,3 +1,6 @@
+#[path = "../quality_log.rs"]
+#[allow(dead_code)]
+mod quality_log;
 #[path = "../replay_gate.rs"]
 #[allow(dead_code)]
 mod replay_gate;
@@ -13,6 +16,34 @@ use std::{
 
 fn main() {
     let arguments = std::env::args().collect::<Vec<_>>();
+    if arguments.get(1).map(String::as_str) == Some("quality-readonly") {
+        if arguments.len() != 3 { eprintln!("usage: snapshot-fixture-ctl quality-readonly <quality-root>"); std::process::exit(2); }
+        let directory = std::path::Path::new(&arguments[2]);
+        let mut total = 0usize;
+        let mut composed = 0usize;
+        let mut repaired_candidate_count = 0usize;
+        let mut issues = std::collections::BTreeMap::<&str,usize>::new();
+        let read = quality_log::records(directory, None, false).and_then(|records| {
+            for record in records {
+                let record = record?;
+                repaired_candidate_count += usize::from(record.repaired_candidate_count);
+                let event = record.event;
+                total += 1;
+                if let Some(reason) = replay_gate::event_validation_issue(&event) { *issues.entry(reason).or_default() += 1; }
+                composed += usize::from(event.context_model.is_some_and(|observation|
+                    observation.outcome == replay_gate::ContextModelOutcome::Composed));
+            }
+            Ok(())
+        });
+        let validation = replay_gate::stream_quality_events(directory)
+            .and_then(|mut records| records.try_fold(0usize, |count, record| record.map(|_| count + 1)));
+        let profile = agent_input_layer_lib::quality_profile_readonly_summary(directory);
+        println!("{}", serde_json::json!({"readOnly":true,"recordCount":total,
+            "composedCount":composed,"legacyCandidateCountRepaired":repaired_candidate_count,"validationIssueCounts":issues,"readPassed":read.is_ok(),"readError":read.err(),
+            "replayValidationPassed":validation.is_ok(),"replayValidationError":validation.err(),
+            "profilePassed":profile.is_ok(),"profile":profile.as_ref().ok(),"profileError":profile.err()}));
+        return;
+    }
     if arguments.get(1).map(String::as_str) == Some("personal-replay-empty") {
         run_personal_replay_empty(&arguments);
         return;

@@ -38,6 +38,7 @@ struct ContextModelPerformanceReport: Codable {
 struct PerformanceReport: Codable {
     /// Every condition of the pass/fail verdict, by name, so a failed run says which one failed.
     let gateConditions: [String: Bool]
+    let keyPathContention: [String: KeyPathWaitDistribution]?
     let contextModel: ContextModelPerformanceReport
     let artifactVersion: String
     let artifactChecksum: String
@@ -442,6 +443,7 @@ let warmupResourceStabilizationSeconds = Double(
 ) / 1_000_000_000
 let warmBaseline = aggregateResourceSamples(warmupResourceSamples)
 
+KeyPathContentionTrace.shared?.reset()
 let stressStarted = DispatchTime.now().uptimeNanoseconds
 let stressDeadline = stressSeconds > 0
     ? stressStarted &+ UInt64(stressSeconds) &* 1_000_000_000
@@ -587,6 +589,7 @@ repeat {
     }
 } while stressDeadline.map({ DispatchTime.now().uptimeNanoseconds < $0 })
     ?? (sequences < 10_000 || keyEvents < 100_000)
+let keyPathContention = KeyPathContentionTrace.shared?.distributions
 let stressElapsed = Double(DispatchTime.now().uptimeNanoseconds &- stressStarted) / 1_000_000_000
 // The measured loop can exit between a raw sample coming due and being taken,
 // because the loop condition reads a later clock than the sampling check. Take
@@ -788,6 +791,7 @@ let failedConditions = gateConditions.filter { !$0.value }.keys.sorted()
 if !runPassed { print("performance_gate_failed_conditions=\(failedConditions.joined(separator: ","))") }
 let report = PerformanceReport(
     gateConditions: gateConditions,
+    keyPathContention: keyPathContention,
     contextModel: contextModelReport,
     artifactVersion: ReleaseVersion.current,
     artifactChecksum: artifactChecksum,

@@ -21,6 +21,7 @@ const expectedComponents = [
   "rime-pinyin-simp",
   "rime-pinyin-simp AUTHORS",
   "THUOCL lexicons (chengyu, IT, caijing)",
+  "Zhizi word bigram table notice",
 ].sort();
 
 function assert(condition, message) {
@@ -72,6 +73,10 @@ for (const asset of manifest.assets) {
       && !asset.toolchainRelativePath.split(path.sep).includes("..")
       && asset.repositoryPath.startsWith(".build-deps/rust/1.94.1/licenses/"),
     `invalid Rust toolchain path for ${asset.component}`);
+  } else if (asset.sourceKind === "project-authored") {
+    // A notice written in this repository for data built from third-party corpora.
+    assert(asset.sourceUrl === null && asset.repositoryPath.startsWith("native/resources/"),
+      `invalid project-authored notice path for ${asset.component}`);
   } else {
     assert(asset.sourceKind === undefined, `unknown locked source kind for ${asset.component}`);
     assert(/^https:\/\/raw\.githubusercontent\.com\//u.test(asset.sourceUrl),

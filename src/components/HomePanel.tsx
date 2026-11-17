@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { BookOpen, ChevronRight, ListChecks, SlidersHorizontal } from "lucide-react";
 import {
   contextModelAvailability,
-  listQualityRecords,
+  qualityRecordsOverview,
   projectRuntimeConfiguration,
   confirmTestRecordingConsent,
   qualityRecordingStatus,
@@ -11,7 +11,7 @@ import {
   setQualityRecording,
 } from "../lib/lexicon";
 import { FUZZY_PAIRS, imePreferences, setImeFuzzyMask, setImeTypoCorrection, type ImePreferences } from "../lib/imePreferences";
-import { percent, weeklyStats, type WeeklyStats } from "../lib/weeklyStats";
+import { percent, type WeeklyStats } from "../lib/weeklyStats";
 
 export type HomeDestination = "lexicon" | "records" | "advanced";
 
@@ -37,7 +37,7 @@ export function HomePanel({ onNavigate }: HomePanelProps) {
     void testUploadEnabled().then(setUploads).catch(() => {});
     void qualityRecordingStatus().then((status) => setRecording(status.enabled && status.continuous)).catch(() => {});
     void imePreferences().then(setIme).catch(() => {});
-    void listQualityRecords().then((events) => setStats(weeklyStats(events, Date.now()))).catch(() => {});
+    void qualityRecordsOverview().then(setStats).catch(() => {});
   }, []);
 
   async function run(action: () => Promise<void>, done: string) {

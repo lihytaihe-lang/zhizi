@@ -8,6 +8,44 @@ struct Report: Encodable {
     let rows: [Row]
 }
 
+if CommandLine.arguments.count == 5, CommandLine.arguments[1] == "--zhiju-distributions" {
+    let cases = try JSONDecoder().decode([ZhijuDistributionCase].self,
+        from: Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[3])))
+    let rows = try ZhijuDistributionProbe.run(directory: URL(fileURLWithPath: CommandLine.arguments[2]), cases: cases,
+        output: URL(fileURLWithPath: CommandLine.arguments[4]))
+    print("synthetic-distribution-rows=\(rows)")
+    exit(0)
+}
+
+if [6, 8].contains(CommandLine.arguments.count), ["--zhiju-delivery", "--zhiju-fifth-delivery", "--context-delivery", "--context-delivery-trace"].contains(CommandLine.arguments[1]) {
+    guard ["on", "off"].contains(CommandLine.arguments[5]) else { fatalError("expected on or off") }
+    if CommandLine.arguments.count == 8, CommandLine.arguments[6] != "--learning-fixture" {
+        fatalError("expected --learning-fixture <copied-learning.json>")
+    }
+    let cases = try JSONDecoder().decode([ZhijuDeliveryCase].self,
+        from: Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[3])))
+    let report = try ZhijuDeliveryProbe.run(sharedDirectory: URL(fileURLWithPath: CommandLine.arguments[2]),
+        cases: cases, enabled: CommandLine.arguments[5] == "on",
+        requireFifthOffer: CommandLine.arguments[1] == "--zhiju-fifth-delivery",
+        requireZhijuApplication: !["--context-delivery", "--context-delivery-trace"].contains(CommandLine.arguments[1]),
+        learningFixture: CommandLine.arguments.count == 8 ? URL(fileURLWithPath: CommandLine.arguments[7]) : nil,
+        recordZhijuTrace: CommandLine.arguments[1] == "--context-delivery-trace")
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+    try encoder.encode(report).write(to: URL(fileURLWithPath: CommandLine.arguments[4]), options: .atomic)
+    exit(report.passed ? 0 : 1)
+}
+
+// An optional final argument measures that exact input; the default preserves the original probe.
+if (4...6).contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--zhiju" {
+    let report = try ZhijuSearchProbe.run(sharedDirectory: URL(fileURLWithPath: CommandLine.arguments[2]),
+        input: CommandLine.arguments.count >= 5 ? CommandLine.arguments[4] : "wmxcqcfb",
+        context: CommandLine.arguments.count == 6 ? CommandLine.arguments[5] : "")
+    try JSONEncoder().encode(report).write(to: URL(fileURLWithPath: CommandLine.arguments[3]), options: .atomic)
+    if report.status == "skipped_model_missing" { print("知句模型缺失，跳过搜索耗时测量。") }
+    exit(0)
+}
+
 // `--paced <ContextModel-dir> <report.json>` replays keys with typing pauses.
 if CommandLine.arguments.count == 4, CommandLine.arguments[1] == "--paced" {
     // Inter-key gaps seen while typing: within a word, between words, a short think,
@@ -21,7 +59,7 @@ if CommandLine.arguments.count == 4, CommandLine.arguments[1] == "--paced" {
 }
 
 guard CommandLine.arguments.count == 4 else {
-    fatalError("usage: AgentIMEContextModelHarness <ContextModel-dir> <cases.json> <report.json> | --paced <ContextModel-dir> <report.json>")
+    fatalError("usage: AgentIMEContextModelHarness <ContextModel-dir> <cases.json> <report.json> | --paced <ContextModel-dir> <report.json> | --zhiju <Resources/Rime-dir> <report.json> [input] | --zhiju-delivery <Resources/Rime-dir> <cases.json> <report.json> <on|off>")
 }
 let cases = try JSONDecoder().decode([Case].self, from: Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[2])))
 let started = DispatchTime.now().uptimeNanoseconds

@@ -13,6 +13,8 @@ mod maintenance;
 mod mcp;
 mod native_integration;
 mod profile_introspection;
+mod quality_records;
+mod quality_log;
 mod replay_gate;
 mod skin_catalog;
 mod skin_packages {
@@ -77,7 +79,6 @@ const COMPACT_WINDOW_LABEL: &str = "compact";
 const FOCUS_INPUT_EVENT: &str = "agent-input-layer://focus-input";
 const PROVIDER_REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
 const QUALITY_CONSENT_NOTICE_VERSION: &str = "w7-v1";
-const MAXIMUM_QUALITY_BYTES: usize = 32 * 1024 * 1024;
 static QUALITY_TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Deserialize)]
@@ -1240,39 +1241,85 @@ fn grant_quality_recording_consent_at(
 fn read_quality_records_at(
     directory: &std::path::Path,
 ) -> Result<Vec<RecordedQualityEvent>, String> {
-    let path = directory.join("events.jsonl");
-    let Some(data) = read_regular_local_file(&path, "质量记录")? else {
-        return Ok(Vec::new());
-    };
-    if data.len() > MAXIMUM_QUALITY_BYTES {
-        return Err("质量记录超过 32 MiB 上限。".into());
-    }
-    let text = std::str::from_utf8(&data).map_err(|_| "质量记录不是有效 UTF-8。".to_string())?;
-    text.lines()
-        .map(|line| serde_json::from_str(line).map_err(|_| "质量记录包含无效行。".to_string()))
-        .collect()
+    quality_records::records(directory, None, false)?
+        .map(|record| record.map(|record| record.event)).collect()
 }
 
 #[tauri::command]
 fn list_quality_records() -> Result<Vec<RecordedQualityEvent>, String> {
-    Ok(read_quality_records_at(&quality_directory()?)?
-        .into_iter()
-        .rev()
-        .collect())
+    let directory = quality_directory()?;
+    // Preserve the old all-records contract for small-log callers. The UI uses
+    // the explicit page/overview API; never silently return an incomplete list.
+    if fs::metadata(directory.join("events.jsonl")).is_ok_and(|metadata| metadata.len() > 32 * 1024 * 1024) {
+        return Err("记录较大，请使用分页读取。".into());
+    }
+    Ok(read_quality_records_at(&directory)?.into_iter().rev().collect())
 }
 
 #[tauri::command]
-fn personal_profile_introspection() -> Result<serde_json::Value, String> {
-    let events = replay_gate::read_quality_events(&quality_directory()?)?;
-    profile_introspection::mine_profile_introspection_value(&events)
+async fn quality_records_page(cursor: Option<String>, limit: Option<usize>, filter: Option<quality_records::Filter>) -> Result<quality_records::Page, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        quality_records::page(&quality_directory()?, cursor.as_deref(), limit.unwrap_or(100), &filter.unwrap_or_default())
+    }).await.map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+async fn quality_records_overview() -> Result<quality_records::Overview, String> {
+    tauri::async_runtime::spawn_blocking(|| quality_records::overview(&quality_directory()?, current_time_ms()?))
+        .await.map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+async fn count_quality_records(filter: Option<quality_records::Filter>) -> Result<usize, String> {
+    tauri::async_runtime::spawn_blocking(move || quality_records::count(&quality_directory()?, &filter.unwrap_or_default()))
+        .await.map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+async fn export_quality_records_file(app: AppHandle) -> Result<Option<quality_records::ExportResult>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let selected = tauri::async_runtime::spawn_blocking(move || {
+        app.dialog().file().set_file_name("quality-records.json").add_filter("JSON", &["json"]).blocking_save_file()
+    }).await.map_err(|error| error.to_string())?;
+    let Some(selected) = selected else { return Ok(None); };
+    let destination = selected.into_path().map_err(|_| "请选择本地文件位置。")?;
+    tauri::async_runtime::spawn_blocking(move || quality_records::export_file(&quality_directory()?, &destination).map(Some))
+        .await.map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+async fn personal_profile_introspection() -> Result<serde_json::Value, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let report = profile_introspection::mine_profile_introspection_stream(
+            replay_gate::stream_quality_events(&quality_directory()?)?
+        )?;
+        serde_json::to_value(report).map_err(|error| error.to_string())
+    }).await.map_err(|error| error.to_string())?
+}
+
+/// Aggregate-only diagnostic for the internal fixture helper. It never applies
+/// preferences, publishes a snapshot, or returns recorded words and contexts.
+#[doc(hidden)]
+pub fn quality_profile_readonly_summary(directory: &std::path::Path) -> Result<serde_json::Value, String> {
+    let report = profile_introspection::mine_profile_introspection_stream(replay_gate::stream_quality_events(directory)?)?;
+    let count = report.confident_targets.len();
+    let value = serde_json::to_value(report).map_err(|error| error.to_string())?;
+    let mut result = serde_json::Map::new();
+    for key in ["totalEvents", "frictionEvents", "rawCommitEvents", "homophoneSplitCount", "deepPageEvents", "abandonedEvents", "redoEvents"] {
+        result.insert(key.into(), value[key].clone());
+    }
+    result.insert("confidentTargetCount".into(), serde_json::json!(count));
+    result.insert("readOnly".into(), serde_json::json!(true));
+    Ok(serde_json::Value::Object(result))
 }
 
 fn apply_profile_updates_from_quality(
     storage: &AppStorage,
     now_ms: i64,
 ) -> Result<PersonalProfileAutoUpdateReport, String> {
-    let events = replay_gate::read_quality_events(&quality_directory()?)?;
-    let report = profile_introspection::mine_profile_introspection(&events);
+    let report = profile_introspection::mine_profile_introspection_stream(
+        replay_gate::stream_quality_events(&quality_directory()?)?
+    )?;
     let blacklist = userdb_maintenance::list_blacklist()?
         .into_iter()
         .map(|item| (item.reading, item.text))
@@ -1281,10 +1328,10 @@ fn apply_profile_updates_from_quality(
 }
 
 #[tauri::command]
-fn apply_personal_profile_auto_update(
-    storage: State<'_, AppStorage>,
-) -> Result<PersonalProfileAutoUpdateReport, String> {
-    apply_profile_updates_from_quality(&storage, current_time_ms()?)
+async fn apply_personal_profile_auto_update(app: AppHandle) -> Result<PersonalProfileAutoUpdateReport, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        apply_profile_updates_from_quality(&app.state::<AppStorage>(), current_time_ms()?)
+    }).await.map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
@@ -1324,8 +1371,7 @@ fn revoke_personal_profile_auto_update(
 
 #[tauri::command]
 fn export_quality_records() -> Result<String, String> {
-    serde_json::to_string_pretty(&list_quality_records()?)
-        .map_err(|error| format!("无法导出质量记录：{error}"))
+    quality_records::export_string(&quality_directory()?)
 }
 
 fn rewrite_quality_records_at<F>(
@@ -1335,36 +1381,7 @@ fn rewrite_quality_records_at<F>(
 where
     F: FnMut(&RecordedQualityEvent) -> bool,
 {
-    let events = read_quality_records_at(directory)?;
-    let original_count = events.len();
-    let retained = events
-        .into_iter()
-        .filter(|event| !should_delete(event))
-        .collect::<Vec<_>>();
-    let deleted_count = original_count.saturating_sub(retained.len());
-    if deleted_count == 0 {
-        return Ok(0);
-    }
-    let path = directory.join("events.jsonl");
-    if retained.is_empty() {
-        match fs::remove_file(&path) {
-            Ok(()) => {}
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(format!("无法删除质量记录：{error}")),
-        }
-        fs::File::open(directory)
-            .and_then(|file| file.sync_all())
-            .map_err(|error| format!("无法同步质量记录删除：{error}"))?;
-        return Ok(deleted_count);
-    }
-    let mut data = Vec::new();
-    for event in retained {
-        serde_json::to_writer(&mut data, &event)
-            .map_err(|error| format!("无法编码质量记录：{error}"))?;
-        data.push(b'\n');
-    }
-    atomic_write_quality_file(directory, "events.jsonl", &data, "质量记录")?;
-    Ok(deleted_count)
+    quality_records::rewrite_locked(directory, &mut should_delete)
 }
 
 fn revoke_quality_recording_consent_at(
@@ -1397,22 +1414,27 @@ fn revoke_quality_recording_consent_at(
 }
 
 #[tauri::command]
-fn revoke_quality_recording_consent(
+async fn revoke_quality_recording_consent(
     delete_records: bool,
 ) -> Result<QualityConsentRevocationResult, String> {
-    let directory = prepare_quality_directory()?;
-    revoke_quality_recording_consent_at(&directory, delete_records, current_time_ms()?)
+    tauri::async_runtime::spawn_blocking(move || {
+        let directory = prepare_quality_directory()?;
+        revoke_quality_recording_consent_at(&directory, delete_records, current_time_ms()?)
+    }).await.map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
-fn delete_quality_records() -> Result<usize, String> {
-    let directory = prepare_quality_directory()?;
-    let _lock = acquire_quality_lock(&directory)?;
-    rewrite_quality_records_at(&directory, |_| true)
+async fn delete_quality_records() -> Result<usize, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let directory = prepare_quality_directory()?;
+        let _lock = acquire_quality_lock(&directory)?;
+        rewrite_quality_records_at(&directory, |_| true)
+    }).await.map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
-fn delete_quality_record(id: String) -> Result<usize, String> {
+async fn delete_quality_record(id: String) -> Result<usize, String> {
+    tauri::async_runtime::spawn_blocking(move || {
     let id = id.trim();
     if id.is_empty() || id.len() > 128 {
         return Err("质量记录 ID 无效。".into());
@@ -1420,10 +1442,12 @@ fn delete_quality_record(id: String) -> Result<usize, String> {
     let directory = prepare_quality_directory()?;
     let _lock = acquire_quality_lock(&directory)?;
     rewrite_quality_records_at(&directory, |event| event.id == id)
+    }).await.map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
-fn delete_quality_records_by_app(app_hash: String) -> Result<usize, String> {
+async fn delete_quality_records_by_app(app_hash: String) -> Result<usize, String> {
+    tauri::async_runtime::spawn_blocking(move || {
     let app_hash = app_hash.trim().to_ascii_lowercase();
     if app_hash.len() != 64 || !app_hash.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return Err("App 标识散列无效。".into());
@@ -1431,10 +1455,12 @@ fn delete_quality_records_by_app(app_hash: String) -> Result<usize, String> {
     let directory = prepare_quality_directory()?;
     let _lock = acquire_quality_lock(&directory)?;
     rewrite_quality_records_at(&directory, |event| event.app_hash == app_hash)
+    }).await.map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
-fn delete_quality_records_by_time_range(start_ms: i64, end_ms: i64) -> Result<usize, String> {
+async fn delete_quality_records_by_time_range(start_ms: i64, end_ms: i64) -> Result<usize, String> {
+    tauri::async_runtime::spawn_blocking(move || {
     if start_ms < 0 || end_ms < start_ms {
         return Err("删除时间范围无效。".into());
     }
@@ -1443,6 +1469,7 @@ fn delete_quality_records_by_time_range(start_ms: i64, end_ms: i64) -> Result<us
     rewrite_quality_records_at(&directory, |event| {
         event.recorded_at_ms >= start_ms && event.recorded_at_ms <= end_ms
     })
+    }).await.map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
@@ -2270,6 +2297,10 @@ lexicon_download::lexicon_packs_installed,
             test_upload_enabled,
             revoke_quality_recording_consent,
             list_quality_records,
+            quality_records_page,
+            quality_records_overview,
+            count_quality_records,
+            export_quality_records_file,
             personal_profile_introspection,
             apply_personal_profile_auto_update,
             declare_owner_disambiguation,

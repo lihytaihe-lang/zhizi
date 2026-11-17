@@ -385,3 +385,25 @@ fn core_key_latency_profile() {
         }
     }));
 }
+
+/// Numeral x measure-word words (几十秒, 十几分钟, ...) must be typable with full pinyin
+/// (scripts/lexicon/gen_numeral_unit_words.py). `jishimiao` used to offer 及时秒/即使秒 only.
+#[test]
+fn numeral_unit_words_reach_the_first_page() {
+    let fixture = Fixture::new();
+    let dictionary = fixture.dictionary();
+    crate::ranking::with_correction_settings(crate::ranking::CorrectionSettings::default(), ||
+    super::with_index(dictionary.clone(), || {
+        let mut session = fixture.session(dictionary.clone());
+        for (raw, want, top) in [("jishimiao", "几十秒", true), ("shijifenzhong", "十几分钟", false),
+            ("jishixiaoshi", "几十小时", false), ("jishihaomiao", "几十毫秒", false),
+            ("jibaitian", "几百天", false), ("jishitiaorizhi", "几十条日志", false)] {
+            session.inner.process(event(KeyKind::Escape, ""));
+            for ch in raw.chars() { session.inner.process(event(KeyKind::Text, &ch.to_string())); }
+            let page = page_texts(&mut session);
+            let texts: Vec<&str> = page.split('\t').collect();
+            assert!(texts.contains(&want), "{raw}: {want} missing from the first page {texts:?}");
+            if top { assert_eq!(texts[0], want, "{raw}: {texts:?}"); }
+        }
+    }));
+}

@@ -573,11 +573,11 @@ fn exact_spelling(raw: &str, reading: &str) -> bool {
     offset == raw.len()
 }
 
-fn visit_spellings<'a>(raw: &'a str, mut visitor: impl FnMut(usize, &[&'a str])) {
+pub(super) fn visit_spellings<'a>(raw: &'a str, mut visitor: impl FnMut(usize, &[&'a str])) {
     visit_spellings_with(raw, true, &mut visitor);
 }
 
-fn visit_spellings_with<'a>(raw: &'a str, preferred: bool, mut visitor: impl FnMut(usize, &[&'a str])) {
+pub(super) fn spelling_edges(raw: &str, preferred: bool) -> (Vec<Vec<(usize, usize)>>, Vec<bool>) {
     let mut edges = vec![Vec::new(); raw.len() + 1];
     let mut reachable = vec![false; raw.len() + 1];
     reachable[0] = true;
@@ -609,6 +609,11 @@ fn visit_spellings_with<'a>(raw: &'a str, preferred: bool, mut visitor: impl FnM
             && (!preferred || abbreviations[start] == abbreviations[next] + usize::from(!full_syllable(&raw[start..end]))));
     }
     let reaches_last: Vec<_> = abbreviations.iter().map(|&cost| cost != usize::MAX).collect();
+    (edges, reaches_last)
+}
+
+fn visit_spellings_with<'a>(raw: &'a str, preferred: bool, mut visitor: impl FnMut(usize, &[&'a str])) {
+    let (edges, reaches_last) = spelling_edges(raw, preferred);
     fn walk<'a>(raw: &'a str, start: usize, preferred: bool, edges: &[Vec<(usize, usize)>], reaches_last: &[bool], tokens: &mut Vec<&'a str>,
         visitor: &mut impl FnMut(usize, &[&'a str])) {
         // The schema composes phrases of at most eight syllables. Longer exact

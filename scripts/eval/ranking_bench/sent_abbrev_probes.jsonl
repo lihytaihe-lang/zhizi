@@ -1,0 +1,8 @@
+{"id": "probe-01", "bucket": "sent_abbrev", "source": "ext", "raw": "woxianzsysoug", "context": "", "target": "我现在使用搜狗"}
+{"id": "probe-02", "bucket": "sent_abbrev", "source": "ext", "raw": "woxianzaisysougou", "context": "", "target": "我现在使用搜狗"}
+{"id": "probe-03", "bucket": "sent_abbrev", "source": "ext", "raw": "woxianzaishiysougou", "context": "", "target": "我现在使用搜狗"}
+{"id": "probe-04", "bucket": "sent_abbrev", "source": "ext", "raw": "jintiantqbcw", "context": "", "target": "今天天气不错"}
+{"id": "probe-05", "bucket": "sent_abbrev", "source": "ext", "raw": "wmxcqcfb", "context": "", "target": "我们下次去吃饭吧"}
+{"id": "probe-06", "bucket": "sent_abbrev", "source": "ext", "raw": "zgwtyjjjl", "context": "", "target": "这个问题已经解决了"}
+{"id": "probe-07", "bucket": "sent_abbrev", "source": "ext", "raw": "que'shi's'shou", "context": "", "target": "确实顺手"}
+{"id": "probe-08", "bucket": "sent_abbrev", "source": "ext", "raw": "queshishunsh", "context": "", "target": "确实顺手"}

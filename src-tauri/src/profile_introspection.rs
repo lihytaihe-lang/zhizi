@@ -82,24 +82,34 @@ struct RawCommitAccumulator {
 pub(crate) fn mine_profile_introspection(
     events: &[RecordedQualityEvent],
 ) -> ProfileIntrospectionReport {
+    mine_profile_introspection_stream(events.iter().cloned().map(Ok)).expect("validated in-memory events")
+}
+
+pub(crate) fn mine_profile_introspection_stream(
+    events: impl IntoIterator<Item = Result<RecordedQualityEvent, String>>,
+) -> Result<ProfileIntrospectionReport, String> {
     let mut pair_counts = HashMap::<(String, String), TopNAccumulator>::new();
     let mut raw_commits = HashMap::<String, RawCommitAccumulator>::new();
     let mut friction_by_reading = HashMap::<String, HashMap<String, usize>>::new();
     let mut friction_latest = HashMap::<String, i64>::new();
     let mut friction_events = 0usize;
     let mut raw_commit_events = 0usize;
-    let deep_page_events = events.iter().filter(|event| event.max_page >= 3).count();
-    let abandoned_events = events
-        .iter()
-        .filter(|event| event.outcome == CompositionOutcome::Abandoned)
-        .count();
-    let redo_events = events
-        .iter()
-        .filter(|event| event.redo_after_commit)
-        .count();
-
+    let (mut total_events, mut deep_page_events, mut abandoned_events, mut redo_events) = (0, 0, 0, 0);
+    let mut latest_recorded_at_ms = None;
     for event in events {
-        if event.outcome == CompositionOutcome::Abandoned {
+        let event = event?;
+        total_events += 1;
+        deep_page_events += usize::from(event.max_page >= 3);
+        abandoned_events += usize::from(event.outcome == CompositionOutcome::Abandoned);
+        redo_events += usize::from(event.redo_after_commit);
+        latest_recorded_at_ms = Some(latest_recorded_at_ms.map_or(event.recorded_at_ms, |latest: i64| latest.max(event.recorded_at_ms)));
+        // A mixed raw commit expresses literal typing, not a preference for a
+        // Chinese candidate. Keep the event visible without teaching its raw
+        // suffix as a selected phrase. Deliberate mixed candidate picks remain.
+        let mixed_raw = event.outcome == CompositionOutcome::CommittedRaw
+            && event.selected_text.chars().any(is_han)
+            && event.selected_text.chars().any(|character| character.is_ascii_alphabetic());
+        if event.outcome == CompositionOutcome::Abandoned || mixed_raw {
             continue;
         }
         let pair = (event.pinyin.clone(), event.selected_text.clone());
@@ -264,22 +274,22 @@ pub(crate) fn mine_profile_introspection(
     let homophone_split_count = homophone_splits.len();
     homophone_splits.truncate(MAXIMUM_TARGETS);
 
-    ProfileIntrospectionReport {
+    Ok(ProfileIntrospectionReport {
         source_kind: "quality-events-jsonl-v1",
         read_only: true,
-        total_events: events.len(),
+        total_events,
         friction_events,
         raw_commit_events,
         homophone_split_count,
         deep_page_events,
         abandoned_events,
         redo_events,
-        latest_recorded_at_ms: events.iter().map(|event| event.recorded_at_ms).max(),
+        latest_recorded_at_ms,
         top_n_targets,
         whole_string_targets,
         homophone_splits,
         confident_targets,
-    }
+    })
 }
 
 pub(crate) fn mine_profile_introspection_value(
@@ -328,6 +338,23 @@ mod tests {
             candidate_count: candidates.len(),
             context_model: None,
         }
+    }
+
+    #[test]
+    fn mixed_raw_shift_is_not_a_deliberate_chinese_candidate_choice() {
+        let selected = (0..5).map(|index| {
+            event(&index.to_string(), "zhongwenshuru", &["中文输入", "中文shuru"], 1, 100 + index)
+        }).collect::<Vec<_>>();
+        let deliberate = mine_profile_introspection(&selected);
+        assert_eq!(deliberate.confident_targets.len(), 1);
+        let raw = selected.into_iter().map(|mut event| {
+            event.outcome = CompositionOutcome::CommittedRaw;
+            event
+        }).collect::<Vec<_>>();
+        let report = mine_profile_introspection(&raw);
+        assert_eq!(report.total_events, 5);
+        assert_eq!(report.friction_events, 0);
+        assert!(report.confident_targets.is_empty());
     }
 
     #[test]

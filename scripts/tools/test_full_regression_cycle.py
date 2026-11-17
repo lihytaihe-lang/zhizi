@@ -241,16 +241,16 @@ class FullRegressionCycleSelfTest(unittest.TestCase):
         self.assertIn("BUILD_NUMBER=2743", result.stdout)
         self.assertTrue(result.stdout.strip().endswith("CLEANUP unregister exit=0"), result.stdout[-300:])
 
-    def test_gate_table_has_56_entries_including_unittest(self):
+    def test_gate_table_has_57_entries_including_unittest_and_zhiju_delivery(self):
         listing = _run_plain([TEST_ALL, "--list"])
         self.assertEqual(listing.returncode, 0, listing.stderr)
         lines = listing.stdout.splitlines()
         self.assertEqual(lines[0].split("\t"), ["id", "needs", "provides", "command"])
         ids = [line.split("\t")[0] for line in lines[1:]]
-        # A real 56-gate table, not an empty header: exact count, unique ids,
+        # A real 57-gate table, not an empty header: exact count, unique ids,
         # every row carries a non-empty command.
-        self.assertEqual(len(ids), 56, ids)
-        self.assertEqual(len(set(ids)), 56, ids)
+        self.assertEqual(len(ids), 57, ids)
+        self.assertEqual(len(set(ids)), 57, ids)
         self.assertEqual(ids, self.GATE_IDS)
         commands = {line.split("\t")[0]: line.split("\t")[3] for line in lines[1:]}
         for gate_id, command in commands.items():
@@ -258,6 +258,7 @@ class FullRegressionCycleSelfTest(unittest.TestCase):
         # The suite runs the context-model gate in strict mode: a missing
         # model must FAIL there, not SKIP-with-exit-0 into a recorded PASS.
         self.assertIn("AIM_CONTEXT_MODEL_REQUIRED=1", commands["context_model_integration"])
+        self.assertIn("test_zhiju_delivery.sh", commands["zhiju_delivery"])
         for required in ("unittest", "bootstrap_native", "build_release", "fuzzy_exact_priority_replay",
                          "offcorpus_probe", "q3b1_garble_replay", "q3b2_heavy_garble_replay",
                          "partial_coverage_closed_replay", "learning_degradation", "install_input_method",
@@ -267,6 +268,7 @@ class FullRegressionCycleSelfTest(unittest.TestCase):
         # on a missing bundle), so it must be blocked by a failed build.
         needs = {line.split("\t")[0]: line.split("\t")[1] for line in lines[1:]}
         self.assertEqual(needs["artifact_checksum_equivalence"], "bundle")
+        self.assertEqual(needs["zhiju_delivery"], "deps,core_lib,bundle")
 
     def test_fuzzy_gate_exit6_fails_run_but_independent_gates_still_run(self):
         self.stub.control_exit("test_fuzzy_exact_priority_replay.sh", 6)
@@ -330,7 +332,7 @@ class FullRegressionCycleSelfTest(unittest.TestCase):
         rows = self.stub.latest_rows()
         for gate_id in ("cargo_test_src_tauri", "cargo_test_core", "cargo_build_core_release"):
             self.assert_status(rows, gate_id, "FAIL", 1)
-        for gate_id in ("swift_tests", "context_model_integration", "fuzzy_exact_priority_replay"):
+        for gate_id in ("swift_tests", "context_model_integration", "zhiju_delivery", "fuzzy_exact_priority_replay"):
             row = self.assert_status(rows, gate_id, "BLOCKED")
             self.assertIn("core_lib", row["needs"].split(","))
         self.assertEqual(self.stub.invocations("swift"), [])

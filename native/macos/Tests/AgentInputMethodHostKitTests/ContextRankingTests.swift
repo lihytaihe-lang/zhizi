@@ -2,6 +2,61 @@ import XCTest
 @_spi(PerformanceHarness) @testable import AgentInputMethodHostKit
 
 final class ContextRankingTests: XCTestCase {
+    func testHanContextCapsHomophonePriorButKeepsEmptyAndLatinContextOrder() {
+        let words = ["实施", "事实", "试试", "实时"]
+        let scores = [-11.80078125, -9.984375, -18.0, -7.00390625]
+        let flags = Array(repeating: true, count: words.count)
+        XCTAssertEqual(ContextRankingScorer.groupOrder(texts: words, scores: scores, homophone: flags).first, 0)
+        XCTAssertEqual(ContextRankingScorer.groupOrder(texts: words, scores: scores, homophone: flags, context: "https://example.com").first, 0)
+        XCTAssertEqual(ContextRankingScorer.groupOrder(texts: words, scores: scores, homophone: flags,
+            context: "保留前文", contextualPriorAllowed: false).first, 0)
+        var session = ContextRankingSession()
+        session.enabled = true
+        XCTAssertEqual(session.order(context: "行情每秒刷新", candidates: words, homophone: flags,
+            score: { context, candidates in
+                XCTAssertEqual(context, "行情每秒刷新")
+                XCTAssertEqual(candidates, words)
+                return scores
+            })?.first, 3)
+        XCTAssertEqual(session.lastOutcome, .reordered)
+    }
+
+    func testShortCompositionOfferMustBeatTheDisplacedFifthAndKeepDigitIdentity() throws {
+        let directories = try RealZhixuProcessFixture.directories.get()
+        for (guarded, fifthScore, replaces) in [(false, 0.0, true), (true, 0.0, false), (true, -4.0, true)] {
+            let session = try XCTUnwrap(CoreSession(sharedDirectory: directories.shared,
+                userDirectory: directories.user, appIdentifier: "com.agentinputlayer.fifth-comparison"))
+            defer { session.close() }
+            var original: IMEViewModel?
+            for key in "xm" { original = session.process(kind: .text, text: String(key), security: .nonSecure) }
+            let before = try XCTUnwrap(original).candidates
+            XCTAssertEqual(before.count, 5)
+            let target = try XCTUnwrap(session.compositionAlternativesForTesting().first { text in
+                !before.contains { $0.text == text }
+            })
+            _ = session.process(kind: .escape, security: .nonSecure)
+            session.setFifthSlotSelectionForTesting(guarded)
+            session.contextRankingColdForTesting = false
+            session.contextRankingScoreForTesting = { _, candidates in candidates.map {
+                $0 == target ? 1 : $0 == before[4].text ? fifthScore : $0 == before[0].text ? 0 : -100
+            } }
+            session.setContextRankingEnabled(true)
+            var result: IMEViewModel?
+            for key in "xm" { result = session.process(kind: .text, text: String(key), security: .nonSecure) }
+            let shown = try XCTUnwrap(result)
+            XCTAssertEqual(shown.candidates.prefix(4).map(\.text), before.prefix(4).map(\.text))
+            XCTAssertEqual(shown.candidates[4].text, replaces ? target : before[4].text)
+            XCTAssertEqual(shown.candidates.map(\.text), session.corePageTexts())
+            // The final case checks selection after the comparison; earlier arms
+            // do not teach a shared fixture profile before the next comparison.
+            if guarded && replaces {
+                let selected = try XCTUnwrap(session.process(kind: .text, text: "5", security: .nonSecure))
+                XCTAssertEqual(selected.commitText, target)
+                XCTAssertTrue(selected.markedText.isEmpty)
+            }
+        }
+    }
+
     func testDefaultOffNeverCallsScorer() {
         var session = ContextRankingSession()
         session.diagnostic = { _ in }
@@ -509,6 +564,57 @@ final class ContextRankingTests: XCTestCase {
         XCTAssertNotEqual(reordered, corePage, "the controller never received the deferred reorder")
         let commit = try XCTUnwrap(session.processText(" "))
         XCTAssertEqual(commit.commitText, reordered.first, "space commits the page now on screen")
+    }
+
+    func testSlowShortWordOfferCannotTurnThePrimaryOrderIntoATimeoutFallback() throws {
+        let directories = try RealZhixuProcessFixture.directories.get()
+        let session = try XCTUnwrap(CoreSession(sharedDirectory: directories.shared,
+            userDirectory: directories.user, appIdentifier: "com.agentinputlayer.short-offer-budget-test"))
+        defer { session.close() }
+        session.contextRankingColdForTesting = false
+        session.setContextRankingEnabled(true)
+        session.defersRanking = true
+        let primary = expectation(description: "primary order delivered")
+        let secondary = expectation(description: "slow optional score finished")
+        let lock = NSLock()
+        var first: IMEViewModel?
+        session.contextRankingScoreForTesting = { _, candidates in
+            if candidates.count == 8 && !candidates.contains("时间") && !candidates.contains("手机") {
+                Thread.sleep(forTimeInterval: 0.075)
+                secondary.fulfill()
+                return candidates.indices.map { $0 == 0 ? 1000 : -100 }
+            }
+            if candidates.count == 5 && candidates.contains("手机") {
+                return candidates.map { $0 == "手机" ? 100 : -100 }
+            }
+            return candidates.map { _ in -100 }
+        }
+        session.onDeferredRanking = { view, generation in
+            guard generation == session.currentRankingGeneration else { return }
+            lock.lock()
+            let isFirst = first == nil
+            if isFirst { first = view }
+            lock.unlock()
+            if isFirst { primary.fulfill() }
+        }
+        for key in "sj" { _ = session.process(kind: .text, text: String(key), security: .nonSecure) }
+        wait(for: [primary, secondary], timeout: 5)
+        lock.lock(); let shown = first; lock.unlock()
+        XCTAssertEqual(try XCTUnwrap(shown).candidates.first?.text, "手机")
+        XCTAssertNotEqual(shown?.contextModel.outcome, .timeout)
+    }
+
+    func testDigitOneConfirmsAPrefixWhileTheRemainingLetterStaysMarked() throws {
+        let directories = try RealZhixuProcessFixture.directories.get()
+        let session = try XCTUnwrap(InputControllerPerformanceSession(sharedDirectory: directories.shared,
+            userDirectory: directories.user, appIdentifier: "com.agentinputlayer.partial-digit-test"))
+        defer { session.close() }
+        for key in "tme" { _ = session.processText(String(key)) }
+        let first = try XCTUnwrap(session.latestCandidateTextsForTesting?.first)
+        let chosen = try XCTUnwrap(session.processText("1"))
+        XCTAssertEqual(chosen.commitText, "")
+        XCTAssertEqual(chosen.markedText, first + "e")
+        XCTAssertTrue(session.recentCommittedDocumentForTesting.isEmpty, "confirming a prefix does not commit the unfinished reading")
     }
 
     func testDigitKeyBeforeTheDeferredStepActsOnTheShownPageAndTheStepGoesStale() throws {

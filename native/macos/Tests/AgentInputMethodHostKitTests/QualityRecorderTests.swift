@@ -64,6 +64,65 @@ final class QualityRecorderTests: XCTestCase {
         XCTAssertEqual(event.candidateCount, 2)
     }
 
+    func testAppendingCommittedCandidateKeepsRecordedCandidateCountConsistent() throws {
+        let root = try fixtureRoot("appended-candidate-count")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try writeConfig(root: root, enabled: true, expiresAtMs: 20_000)
+        try writeConsent(root: root)
+        let recorder = QualityRecorder(root: root, now: { 1_000 })
+        recorder.waitForIdle()
+        recorder.observe(kind: .text, keyText: "o", security: .nonSecure,
+            result: view(marked: "nihao", candidates: ["你好"]), appIdentifier: "app")
+        recorder.observe(kind: .space, keyText: "", security: .nonSecure,
+            result: view(commit: "你好吗", selectionID: 99), appIdentifier: "app")
+        recorder.waitForIdle()
+        let event = try XCTUnwrap(readEvents(root).last)
+        XCTAssertTrue(event.candidates.contains(event.selectedText))
+        XCTAssertGreaterThanOrEqual(event.candidateCount, event.candidates.count)
+    }
+
+    func testKeyboard037ShiftRawCommitKeepsSelectedChineseSegments() throws {
+        let root = try fixtureRoot("shift-mixed")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try writeConfig(root: root, enabled: true, expiresAtMs: 20_000)
+        try writeConsent(root: root)
+        let recorder = QualityRecorder(root: root, now: { 1_000 })
+        recorder.waitForIdle()
+        recorder.observe(kind: .text, keyText: "u", security: .nonSecure,
+            result: view(marked: "zhongwenshuru", candidates: ["中文输入", "中文", "中"]), appIdentifier: "app")
+        recorder.observe(kind: .text, keyText: "2", security: .nonSecure,
+            result: view(marked: "中文shuru", candidates: ["输入"], selectionID: 11), appIdentifier: "app")
+        recorder.observe(kind: .shiftTap, keyText: "", security: .nonSecure,
+            result: view(commit: "中文shuru"), appIdentifier: "app")
+        recorder.flush(); recorder.waitForIdle()
+        let event = try XCTUnwrap(readEvents(root).last)
+        XCTAssertEqual(event.pinyin, "zhongwenshuru")
+        XCTAssertEqual(event.selectedText, "中文shuru")
+        XCTAssertEqual(event.outcome, .committedRaw)
+        XCTAssertEqual(event.segments?.map(\.text), ["中文"])
+        XCTAssertEqual(event.candidates[event.selectedIndex], event.selectedText)
+        XCTAssertGreaterThanOrEqual(event.candidateCount, event.candidates.count)
+    }
+
+    func testKeyboard037UnderscoreIdentifierIsNotAChineseFrictionSample() throws {
+        let root = try fixtureRoot("underscore-identifier")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try writeConfig(root: root, enabled: true, expiresAtMs: 20_000)
+        try writeConsent(root: root)
+        let recorder = QualityRecorder(root: root, now: { 1_000 })
+        recorder.waitForIdle()
+        recorder.observe(kind: .text, keyText: "i", security: .nonSecure,
+            result: view(marked: "ni", candidates: ["你"]), appIdentifier: "app")
+        recorder.observe(kind: .text, keyText: "_", security: .nonSecure,
+            result: view(marked: "ni_"), appIdentifier: "app")
+        recorder.observe(kind: .text, keyText: "t", security: .nonSecure,
+            result: view(marked: "ni_test"), appIdentifier: "app")
+        recorder.observe(kind: .space, keyText: "", security: .nonSecure,
+            result: view(commit: "ni_test"), appIdentifier: "app")
+        recorder.flush(); recorder.waitForIdle()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Quality/events.jsonl").path))
+    }
+
     func testDefaultOffExpiredAndSecureInputNeverRecord() throws {
         for (name, config, consent, security) in [
             ("default-off", nil, false, IMESecurityState.nonSecure),

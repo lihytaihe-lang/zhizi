@@ -8,6 +8,7 @@ pub(crate) mod trie;
 pub mod learning;
 pub(crate) mod learning_session;
 pub mod decoder;
+pub(crate) mod zhiju;
 pub(crate) mod fuzzy;
 #[cfg(test)]
 pub(crate) mod key_latency_profile;
@@ -149,6 +150,7 @@ impl WholeReadingIndex {
 
 pub(crate) struct Index {
     pub generation: u64,
+    pub(crate) sentence_bigram: OnceLock<SentenceBigram>,
     entries: Vec<StoredWord>,
     texts: Strings,
     readings: Strings,
@@ -169,7 +171,157 @@ pub(crate) struct Index {
     pub embedded: Arc<Vec<(String, String)>>,
 }
 
+pub(crate) struct SentenceBigram {
+    pub(crate) model: Arc<WordBigram>,
+    words: Vec<u32>,
+}
+
+/// TSV probabilities become compact word IDs and sorted successor ranges.
+/// Dictionary generations share the table, with a separate text-ID map for each index.
+pub(crate) struct WordBigram {
+    words: Strings,
+    unigrams: Vec<(f32, f32)>,
+    starts: Vec<u32>,
+    successors: Vec<(u32, f32)>,
+    floor: f32,
+    default_alpha: f32,
+    pub(crate) bos: u32,
+}
+
+impl WordBigram {
+    pub(crate) fn directory(shared: &std::path::Path) -> std::path::PathBuf {
+        // Overrides are for offline evaluation; the eventual bundle location is a packaging decision.
+        let root = std::env::var_os("ZHIZI_SENT_BIGRAM_DIR").map(std::path::PathBuf::from)
+            .unwrap_or_else(|| shared.join("word-bigram"));
+        let tier = std::env::var("ZHIZI_SENT_BIGRAM_TIER").ok()
+            .filter(|value| matches!(value.as_str(), "5mb" | "10mb" | "20mb"))
+            .unwrap_or_else(|| "10mb".into());
+        root.join(tier)
+    }
+
+    pub(crate) fn load(directory: &std::path::Path) -> std::io::Result<Self> {
+        let read = |name: &str, maximum| {
+            let path = directory.join(name);
+            let metadata = std::fs::metadata(&path)?;
+            if !metadata.is_file() || metadata.len() > maximum {
+                return Err(Self::invalid());
+            }
+            std::fs::read_to_string(path)
+        };
+        let manifest: serde_json::Value = serde_json::from_str(&read("manifest.json", 65536)?)
+            .map_err(|_| Self::invalid())?;
+        if manifest["smoothing"] != "modified-interpolated-kneser-ney" {
+            return Err(Self::invalid());
+        }
+        let floor = manifest["pcont_floor"].as_f64().ok_or_else(Self::invalid)?;
+        let alpha = manifest["default_log_alpha"].as_f64().unwrap_or(0.0);
+        let unigrams = read("unigrams.tsv", 20 * 1024 * 1024)?;
+        let bigrams = read("bigrams.tsv", 20 * 1024 * 1024)?;
+        if unigrams.len() + bigrams.len() > 20 * 1024 * 1024 {
+            return Err(Self::invalid());
+        }
+        let model = Self::from_tsv(&unigrams, &bigrams, floor, alpha)?;
+        if manifest["unigram_count"].as_u64() != Some(model.unigrams.len() as u64)
+            || manifest["bigram_count"].as_u64() != Some(model.successors.len() as u64) {
+            return Err(Self::invalid());
+        }
+        Ok(model)
+    }
+
+    fn invalid() -> std::io::Error {
+        std::io::Error::new(std::io::ErrorKind::InvalidData, "invalid word bigram table")
+    }
+
+    pub(crate) fn from_tsv(unigrams: &str, bigrams: &str, floor: f64, alpha: f64) -> std::io::Result<Self> {
+        let log_value = |raw: &str, maximum| {
+            raw.parse::<f64>().ok().filter(|value| value.is_finite() && *value >= -99.0 && *value <= maximum)
+                .map(|value| (value * std::f64::consts::LN_10) as f32).ok_or_else(Self::invalid)
+        };
+        if !floor.is_finite() || floor <= 0.0 || floor > 1.0 || !alpha.is_finite() || !(-99.0..=6.0).contains(&alpha) {
+            return Err(Self::invalid());
+        }
+        let mut rows = Vec::new();
+        for line in unigrams.lines().filter(|line| !line.is_empty()) {
+            let mut fields = line.split('\t');
+            let word = fields.next().filter(|word| !word.is_empty()).ok_or_else(Self::invalid)?;
+            let cont = log_value(fields.next().ok_or_else(Self::invalid)?, 0.0)?;
+            let backed = log_value(fields.next().ok_or_else(Self::invalid)?, 6.0)?;
+            if fields.next().is_some() { return Err(Self::invalid()); }
+            rows.push((word, cont, backed));
+        }
+        rows.sort_unstable_by_key(|row| row.0);
+        if rows.windows(2).any(|pair| pair[0].0 == pair[1].0) { return Err(Self::invalid()); }
+        let words = Strings::new(rows.iter().map(|row| row.0));
+        let bos = words.find("<s>").ok_or_else(Self::invalid)?;
+        let mut pairs = Vec::new();
+        for line in bigrams.lines().filter(|line| !line.is_empty()) {
+            let mut fields = line.split('\t');
+            let left = fields.next().and_then(|word| words.find(word)).ok_or_else(Self::invalid)?;
+            let right = fields.next().and_then(|word| words.find(word)).ok_or_else(Self::invalid)?;
+            let logp = log_value(fields.next().ok_or_else(Self::invalid)?, 0.0)?;
+            if fields.next().is_some() { return Err(Self::invalid()); }
+            pairs.push((left, right, logp));
+        }
+        pairs.sort_unstable_by_key(|&(left, right, _)| (left, right));
+        if pairs.windows(2).any(|pair| (pair[0].0, pair[0].1) == (pair[1].0, pair[1].1)) {
+            return Err(Self::invalid());
+        }
+        let mut starts = vec![0; rows.len() + 1];
+        for &(left, _, _) in &pairs { starts[left as usize + 1] += 1; }
+        for position in 1..starts.len() { starts[position] += starts[position - 1]; }
+        let mut successors: Vec<_> = pairs.into_iter().map(|(_, right, logp)| (right, logp)).collect();
+        successors.shrink_to_fit();
+        let mut unigrams: Vec<_> = rows.into_iter().map(|(_, cont, backed)| (cont, backed)).collect();
+        unigrams.shrink_to_fit();
+        Ok(Self { words, unigrams,
+            starts, successors, floor: floor.ln() as f32,
+            default_alpha: (alpha * std::f64::consts::LN_10) as f32, bos })
+    }
+
+    pub(crate) fn word_id(&self, word: &str) -> u32 { self.words.find(word).unwrap_or(u32::MAX) }
+
+    pub(crate) fn log_probability(&self, previous: u32, word: u32) -> f64 {
+        if previous != u32::MAX {
+            let rows = &self.successors[self.starts[previous as usize] as usize..self.starts[previous as usize + 1] as usize];
+            if let Ok(position) = rows.binary_search_by_key(&word, |row| row.0) {
+                return f64::from(rows[position].1);
+            }
+        }
+        let alpha = self.unigrams.get(previous as usize).map_or(self.default_alpha, |row| row.1);
+        let cont = self.unigrams.get(word as usize).map_or(self.floor, |row| row.0);
+        f64::from(alpha) + f64::from(cont)
+    }
+
+    fn estimated_bytes(&self) -> usize {
+        self.words.estimated_bytes() + self.unigrams.capacity() * 8 + self.starts.capacity() * 4
+            + self.successors.capacity() * 8
+    }
+}
+
 impl Index {
+    /// Build the text-ID map on the table worker, then publish both atomically.
+    pub(crate) fn attach_sentence_bigram(&self, model: Arc<WordBigram>) {
+        if self.sentence_bigram.get().is_some() { return; }
+        let words = (0..self.texts.spans.len()).map(|id| model.word_id(self.texts.get(id as u32))).collect();
+        let _ = self.sentence_bigram.set(SentenceBigram { model, words });
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_sentence_bigram(self, model: Option<Arc<WordBigram>>) -> Self {
+        if let Some(model) = model { self.attach_sentence_bigram(model); }
+        self
+    }
+
+    #[cfg(test)]
+    pub(crate) fn load_sentence_bigram(self, shared: &std::path::Path) -> Self {
+        self.with_sentence_bigram(WordBigram::load(&WordBigram::directory(shared)).ok().map(Arc::new))
+    }
+
+    pub(crate) fn bigram_word(&self, word: trie::HeavyTerminal) -> u32 {
+        self.sentence_bigram.get().and_then(|loaded| loaded.words.get(word.text as usize))
+            .copied().unwrap_or(u32::MAX)
+    }
+
     fn complete_initials(&self) -> &HashMap<String, Vec<u32>> {
         self.complete_initials.get_or_init(|| self.build_complete_initials())
     }
@@ -393,6 +545,7 @@ impl Index {
         embedded.sort_by(|a, b| b.0.len().cmp(&a.0.len()).then_with(|| a.0.cmp(&b.0)));
         Self {
             generation: fresh_generation(),
+            sentence_bigram: OnceLock::new(),
             entries,
             texts,
             readings,
@@ -562,6 +715,7 @@ impl Index {
         };
         Ok(Self {
             generation: fresh_generation(),
+            sentence_bigram: OnceLock::new(),
             entries,
             texts,
             readings,
@@ -847,6 +1001,21 @@ impl Index {
     pub fn text(&self, terminal: trie::HeavyTerminal) -> &str {
         self.texts.get(terminal.text)
     }
+
+    /// Recover the original frequency without changing the frozen correction trie.
+    /// Its rounded score can tie across readings of one text; use the larger source
+    /// frequency in that tie, just as the projection does when merging duplicates.
+    #[cfg(test)]
+    pub(crate) fn lattice_weight(&self, terminal: trie::HeavyTerminal) -> u32 {
+        let start = self.by_text.partition_point(|&id| self.entries[id as usize].text < terminal.text);
+        self.by_text[start..].iter().map(|&id| &self.entries[id as usize])
+            .take_while(|word| word.text == terminal.text)
+            .filter(|word| {
+                self.readings.get(word.reading).bytes().filter(u8::is_ascii_lowercase).count() == usize::from(terminal.full_letter_count)
+                    && ((word.weight.max(1) as f64).powf(0.2) * 1000.0).round() as i64 == terminal.lexical_score
+            })
+            .map(|word| word.weight).max().expect("lattice terminal belongs to the dictionary projection")
+    }
     #[cfg_attr(not(test), allow(dead_code))]
     pub fn entry_count(&self) -> usize {
         self.entries.len()
@@ -896,6 +1065,8 @@ impl Index {
                 .sum::<usize>();
         vec![
             ("index", size_of::<Self>()),
+            ("sentence_bigram", self.sentence_bigram.get().map_or(0, |loaded|
+                loaded.model.estimated_bytes() + loaded.words.capacity() * size_of::<u32>())),
             (
                 "entries",
                 self.entries.capacity() * size_of::<StoredWord>()
@@ -1090,6 +1261,74 @@ fn add_ascii_fixture(data: &mut DictionaryData) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sentence_bigram_defaults_to_the_10mb_tier() {
+        assert_eq!(WordBigram::directory(std::path::Path::new("fixture")),
+            std::path::Path::new("fixture/word-bigram/10mb"));
+    }
+
+    #[test]
+    fn sentence_bigram_explicit_and_unseen_pairs_follow_the_table() {
+        let model = WordBigram::from_tsv("<s>\t-99\t-0.2\n吃饭\t-2\t-0.4\n吧\t-1\t0\n饭\t-3\t0\n",
+            "<s>\t吃饭\t-0.5\n吃饭\t吧\t-0.7\n", 1e-6, 0.0).unwrap();
+        let query = |left, right| model.log_probability(model.word_id(left), model.word_id(right)) / std::f64::consts::LN_10;
+        for (left, right, expected) in [("<s>", "吃饭", -0.5), ("吃饭", "吧", -0.7),
+            ("吃饭", "饭", -3.4), ("未见上文", "饭", -3.0), ("吃饭", "未见后词", -6.4),
+            ("未见上文", "未见后词", -6.0)] {
+            assert!((query(left, right) - expected).abs() < 1e-5, "{left}|{right}");
+        }
+        assert_ne!(query("吃饭", "饭"), query("吃饭", "未见后词"));
+    }
+
+    #[test]
+    fn sentence_bigram_rejects_incomplete_or_invalid_tables() {
+        for (unigrams, bigrams) in [("吧\t-1\t0\n", ""),
+            ("<s>\t-99\t0\n吧\tNaN\t0\n", ""),
+            ("<s>\t-99\t0\n吧\t-1\t0\n", "<s>\t外词\t-1\n"),
+            ("<s>\t-99\t0\n吧\t-1\t0\n", "<s>\t吧\t1\n"),
+            ("<s>\t-99\t0\n吧\t-1\t0\n吧\t-1\t0\n", "")] {
+            assert!(WordBigram::from_tsv(unigrams, bigrams, 1e-6, 0.0).is_err());
+        }
+    }
+
+    #[test]
+    #[ignore]
+    fn sentence_bigram_load_probe() {
+        let shared = std::env::var("AIM_ZHIXU_SHARED").expect("AIM_ZHIXU_SHARED");
+        let user = std::env::temp_dir().join(format!("bigram-empty-{}", std::process::id()));
+        std::fs::create_dir_all(&user).unwrap();
+        let data = loader::load(std::path::Path::new(&shared), &user).unwrap();
+        let index = Index::from_data(data);
+        let resident = || -> i64 {
+            #[cfg(target_os = "macos")]
+            {
+                unsafe extern "C" {
+                    static mach_task_self_: u32;
+                    fn task_info(task: u32, flavor: u32, info: *mut i32, count: *mut u32) -> i32;
+                }
+                // MACH_TASK_BASIC_INFO: virtual size, resident size, resident max, then times/policy.
+                let mut info = [0u64; 6];
+                let mut count = 12;
+                assert_eq!(unsafe { task_info(mach_task_self_, 20, info.as_mut_ptr().cast(), &mut count) }, 0);
+                info[1] as i64
+            }
+            #[cfg(not(target_os = "macos"))]
+            { panic!("this RSS probe requires macOS"); }
+        };
+        let before = resident();
+        let start = std::time::Instant::now();
+        let index = index.load_sentence_bigram(std::path::Path::new(&shared));
+        let ms = start.elapsed().as_secs_f64() * 1000.0;
+        let after = resident();
+        let loaded = index.sentence_bigram.get().expect("table must load");
+        let model = &loaded.model;
+        println!("BIGRAM_LOAD {}", serde_json::json!({"load_ms": ms,
+            "resident_before": before, "resident_after": after, "resident_delta": after - before,
+            "estimated_bytes": model.estimated_bytes() + loaded.words.capacity() * 4,
+            "unigrams": model.unigrams.len(), "bigrams": model.successors.len()}));
+        std::fs::remove_dir_all(user).unwrap();
+    }
 
     fn prewarm_fixture(text: &str) -> Arc<Index> {
         Arc::new(Index::from_data(DictionaryData { entries: vec![Entry {

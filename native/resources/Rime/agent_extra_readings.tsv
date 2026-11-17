@@ -783,6 +783,7 @@
 三十公里	san shi gong li
 三十六年	san shi liu nian
 三十几	san shi ji
+三十几分钟	san shi ji fen zhong
 三十分	san shi fen
 三十分钟	san shi fen zhong
 三十周年	san shi zhou nian
@@ -4143,6 +4144,7 @@
 二十六年	er shi liu nian
 二十六日	er shi liu ri
 二十几个	er shi ji ge
+二十几天	er shi ji tian
 二十分	er shi fen
 二十分钟	er shi fen zhong
 二十名	er shi ming
@@ -11129,6 +11131,76 @@
 凝炼	ning lian
 凝练	ning lian
 凝血功能	ning xue gong neng
+几万个	ji wan ge
+几万个人	ji wan ge ren
+几万个字	ji wan ge zi
+几万个字符	ji wan ge zi fu
+几万个月	ji wan ge yue
+几万个点	ji wan ge dian
+几万人	ji wan ren
+几万亿	ji wan yi
+几万件	ji wan jian
+几万份	ji wan fen
+几万伏	ji wan fu
+几万位	ji wan wei
+几万倍	ji wan bei
+几万元	ji wan yuan
+几万兆	ji wan zhao
+几万公斤	ji wan gong jin
+几万公里	ji wan gong li
+几万分	ji wan fen
+几万分钟	ji wan fen zhong
+几万厘米	ji wan li mi
+几万句	ji wan ju
+几万只	ji wan zhi
+几万台	ji wan tai
+几万号	ji wan hao
+几万名	ji wan ming
+几万吨	ji wan dun
+几万周	ji wan zhou
+几万场	ji wan chang
+几万块	ji wan kuai
+几万块钱	ji wan kuai qian
+几万处	ji wan chu
+几万天	ji wan tian
+几万套	ji wan tao
+几万家	ji wan jia
+几万封	ji wan feng
+几万小时	ji wan xiao shi
+几万局	ji wan ju
+几万层	ji wan ceng
+几万岁	ji wan sui
+几万帧	ji wan zhen
+几万年	ji wan nian
+几万度	ji wan du
+几万张	ji wan zhang
+几万斤	ji wan jin
+几万本	ji wan ben
+几万条	ji wan tiao
+几万条日志	ji wan tiao ri zhi
+几万根	ji wan gen
+几万次	ji wan ci
+几万步	ji wan bu
+几万毫安	ji wan hao an
+几万毫秒	ji wan hao miao
+几万毫米	ji wan hao mi
+几万点	ji wan dian
+几万瓦	ji wan wa
+几万种	ji wan zhong
+几万秒	ji wan miao
+几万笔	ji wan bi
+几万篇	ji wan pian
+几万米	ji wan mi
+几万行	ji wan hang
+几万行代码	ji wan hang dai ma
+几万赫兹	ji wan he zi
+几万轮	ji wan lun
+几万辆	ji wan liang
+几万遍	ji wan bian
+几万部	ji wan bu
+几万里	ji wan li
+几万页	ji wan ye
+几万项	ji wan xiang
 几个人吃	ji ge ren chi
 几个小菜	ji ge xiao cai
 几个意思	ji ge yi si
@@ -11164,17 +11236,144 @@
 几分钟	ji fen zhong
 几勺	ji shao
 几十个	ji shi ge
+几十个人	ji shi ge ren
+几十个字	ji shi ge zi
+几十个字符	ji shi ge zi fu
+几十个月	ji shi ge yue
+几十个点	ji shi ge dian
 几十人	ji shi ren
+几十件	ji shi jian
+几十份	ji shi fen
+几十伏	ji shi fu
+几十位	ji shi wei
+几十倍	ji shi bei
 几十元	ji shi yuan
+几十兆	ji shi zhao
+几十公斤	ji shi gong jin
+几十公里	ji shi gong li
+几十分	ji shi fen
+几十分钟	ji shi fen zhong
+几十厘米	ji shi li mi
+几十句	ji shi ju
+几十只	ji shi zhi
+几十台	ji shi tai
+几十号	ji shi hao
+几十名	ji shi ming
+几十吨	ji shi dun
+几十周	ji shi zhou
+几十场	ji shi chang
 几十块	ji shi kuai
+几十块钱	ji shi kuai qian
+几十处	ji shi chu
+几十天	ji shi tian
+几十套	ji shi tao
 几十家	ji shi jia
+几十封	ji shi feng
+几十小时	ji shi xiao shi
+几十局	ji shi ju
+几十层	ji shi ceng
+几十岁	ji shi sui
+几十帧	ji shi zhen
 几十年	ji shi nian
+几十度	ji shi du
+几十张	ji shi zhang
+几十斤	ji shi jin
+几十本	ji shi ben
 几十条	ji shi tiao
+几十条日志	ji shi tiao ri zhi
+几十根	ji shi gen
 几十桌	ji shi zhuo
+几十次	ji shi ci
+几十步	ji shi bu
+几十毫安	ji shi hao an
+几十毫秒	ji shi hao miao
+几十毫米	ji shi hao mi
+几十点	ji shi dian
+几十瓦	ji shi wa
 几十种	ji shi zhong
+几十秒	ji shi miao
+几十笔	ji shi bi
+几十篇	ji shi pian
 几十米	ji shi mi
+几十行	ji shi hang
+几十行代码	ji shi hang dai ma
+几十赫兹	ji shi he zi
+几十轮	ji shi lun
+几十辆	ji shi liang
+几十遍	ji shi bian
+几十部	ji shi bu
+几十里	ji shi li
+几十页	ji shi ye
+几十项	ji shi xiang
+几千个	ji qian ge
+几千个人	ji qian ge ren
+几千个字	ji qian ge zi
+几千个字符	ji qian ge zi fu
+几千个月	ji qian ge yue
+几千个点	ji qian ge dian
+几千人	ji qian ren
+几千亿	ji qian yi
+几千件	ji qian jian
+几千份	ji qian fen
+几千伏	ji qian fu
+几千位	ji qian wei
+几千倍	ji qian bei
+几千元	ji qian yuan
+几千兆	ji qian zhao
+几千公斤	ji qian gong jin
+几千公里	ji qian gong li
+几千分	ji qian fen
+几千分钟	ji qian fen zhong
+几千厘米	ji qian li mi
+几千句	ji qian ju
+几千只	ji qian zhi
+几千台	ji qian tai
+几千号	ji qian hao
+几千名	ji qian ming
+几千吨	ji qian dun
+几千周	ji qian zhou
+几千场	ji qian chang
 几千块	ji qian kuai
+几千块钱	ji qian kuai qian
+几千处	ji qian chu
+几千天	ji qian tian
+几千套	ji qian tao
+几千家	ji qian jia
+几千封	ji qian feng
+几千小时	ji qian xiao shi
+几千局	ji qian ju
+几千层	ji qian ceng
+几千岁	ji qian sui
+几千帧	ji qian zhen
+几千度	ji qian du
+几千张	ji qian zhang
+几千斤	ji qian jin
+几千本	ji qian ben
 几千条	ji qian tiao
+几千条日志	ji qian tiao ri zhi
+几千根	ji qian gen
+几千次	ji qian ci
+几千步	ji qian bu
+几千毫安	ji qian hao an
+几千毫秒	ji qian hao miao
+几千毫米	ji qian hao mi
+几千点	ji qian dian
+几千瓦	ji qian wa
+几千种	ji qian zhong
+几千秒	ji qian miao
+几千笔	ji qian bi
+几千篇	ji qian pian
+几千米	ji qian mi
+几千行	ji qian hang
+几千行代码	ji qian hang dai ma
+几千赫兹	ji qian he zi
+几千轮	ji qian lun
+几千辆	ji qian liang
+几千遍	ji qian bian
+几千部	ji qian bu
+几千里	ji qian li
+几千页	ji qian ye
+几千项	ji qian xiang
 几号口	ji hao kou
 几号线	ji hao xian
 几号馆	ji hao guan
@@ -11203,10 +11402,75 @@
 几点见	ji dian jian
 几版	ji ban
 几百个	ji bai ge
+几百个人	ji bai ge ren
+几百个字	ji bai ge zi
+几百个字符	ji bai ge zi fu
+几百个月	ji bai ge yue
+几百个点	ji bai ge dian
 几百人	ji bai ren
+几百亿	ji bai yi
+几百件	ji bai jian
+几百份	ji bai fen
+几百伏	ji bai fu
+几百位	ji bai wei
+几百倍	ji bai bei
+几百元	ji bai yuan
+几百兆	ji bai zhao
+几百公斤	ji bai gong jin
+几百公里	ji bai gong li
+几百分	ji bai fen
+几百分钟	ji bai fen zhong
+几百厘米	ji bai li mi
+几百句	ji bai ju
+几百只	ji bai zhi
+几百台	ji bai tai
+几百号	ji bai hao
+几百名	ji bai ming
+几百吨	ji bai dun
+几百周	ji bai zhou
+几百场	ji bai chang
 几百块	ji bai kuai
+几百块钱	ji bai kuai qian
+几百处	ji bai chu
+几百天	ji bai tian
+几百套	ji bai tao
+几百家	ji bai jia
+几百封	ji bai feng
+几百小时	ji bai xiao shi
+几百局	ji bai ju
+几百层	ji bai ceng
+几百岁	ji bai sui
+几百帧	ji bai zhen
 几百年	ji bai nian
+几百度	ji bai du
+几百张	ji bai zhang
+几百斤	ji bai jin
+几百本	ji bai ben
+几百条	ji bai tiao
+几百条日志	ji bai tiao ri zhi
+几百根	ji bai gen
+几百次	ji bai ci
+几百步	ji bai bu
+几百毫安	ji bai hao an
+几百毫秒	ji bai hao miao
+几百毫米	ji bai hao mi
+几百点	ji bai dian
+几百瓦	ji bai wa
+几百种	ji bai zhong
+几百秒	ji bai miao
+几百笔	ji bai bi
+几百篇	ji bai pian
 几百米	ji bai mi
+几百行	ji bai hang
+几百行代码	ji bai hang dai ma
+几百赫兹	ji bai he zi
+几百轮	ji bai lun
+几百辆	ji bai liang
+几百遍	ji bai bian
+几百部	ji bai bu
+几百里	ji bai li
+几百页	ji bai ye
+几百项	ji bai xiang
 几盆	ji pen
 几盒	ji he
 几盘	ji pan
@@ -14359,25 +14623,75 @@
 十六进制数字	shi liu jin zhi shu zi
 十几个	shi ji ge
 十几个人	shi ji ge ren
+十几个字	shi ji ge zi
+十几个字符	shi ji ge zi fu
+十几个月	shi ji ge yue
+十几个点	shi ji ge dian
 十几人	shi ji ren
+十几亿	shi ji yi
+十几件	shi ji jian
+十几份	shi ji fen
+十几伏	shi ji fu
+十几位	shi ji wei
+十几倍	shi ji bei
 十几元	shi ji yuan
+十几兆	shi ji zhao
+十几公斤	shi ji gong jin
 十几公里	shi ji gong li
 十几分	shi ji fen
 十几分钟	shi ji fen zhong
+十几厘米	shi ji li mi
+十几句	shi ji ju
 十几只	shi ji zhi
+十几台	shi ji tai
+十几号	shi ji hao
+十几名	shi ji ming
+十几吨	shi ji dun
+十几周	shi ji zhou
+十几场	shi ji chang
 十几块	shi ji kuai
 十几块钱	shi ji kuai qian
 十几处	shi ji chu
+十几天	shi ji tian
+十几套	shi ji tao
+十几家	shi ji jia
+十几封	shi ji feng
+十几小时	shi ji xiao shi
+十几局	shi ji ju
+十几层	shi ji ceng
 十几岁	shi ji sui
+十几帧	shi ji zhen
 十几年	shi ji nian
+十几度	shi ji du
 十几张	shi ji zhang
+十几斤	shi ji jin
+十几本	shi ji ben
 十几条	shi ji tiao
+十几条日志	shi ji tiao ri zhi
+十几根	shi ji gen
 十几桌	shi ji zhuo
 十几次	shi ji ci
+十几步	shi ji bu
+十几毫安	shi ji hao an
+十几毫秒	shi ji hao miao
+十几毫米	shi ji hao mi
+十几点	shi ji dian
+十几瓦	shi ji wa
 十几种	shi ji zhong
 十几秒	shi ji miao
+十几笔	shi ji bi
 十几篇	shi ji pian
 十几米	shi ji mi
+十几行	shi ji hang
+十几行代码	shi ji hang dai ma
+十几赫兹	shi ji he zi
+十几轮	shi ji lun
+十几辆	shi ji liang
+十几遍	shi ji bian
+十几部	shi ji bu
+十几里	shi ji li
+十几页	shi ji ye
+十几项	shi ji xiang
 十分困难	shi fen kun nan
 十分复杂	shi fen fu za
 十分必要	shi fen bi yao
@@ -14418,6 +14732,7 @@
 十月初	shi yue chu
 十月初五街	shi yue chu wu jie
 十来个	shi lai ge
+十来个人	shi lai ge ren
 十来分钟	shi lai fen zhong
 十桌	shi zhuo
 十渡	shi du
@@ -25374,6 +25689,7 @@
 审察	shen cha
 审批一下	shen pi yi xia
 审批人	shen pi ren
+审批制	shen pi zhi
 审批局	shen pi ju
 审批权	shen pi quan
 审批流	shen pi liu
@@ -52021,6 +52337,7 @@
 登机牌	deng ji pai
 登机箱	deng ji xiang
 登船	deng chuan
+登记制	deng ji zhi
 登记在册	deng ji zai ce
 登记备案	deng ji bei an
 登记本	deng ji ben
@@ -54940,6 +55257,7 @@
 秧苗	yang miao
 秩序井然	zhi xu jing ran
 积分兑换	ji fen dui huan
+积分制	ji fen zhi
 积分器	ji fen qi
 积分图	ji fen tu
 积分控制	ji fen kong zhi
@@ -70899,6 +71217,7 @@
 邀功	yao gong
 邀功请赏	yao gong qing shang
 邀请信	yao qing xin
+邀请制	yao qing zhi
 邀请我	yao qing wo
 邀请码	yao qing ma
 邋里邋遢	la li la ta
@@ -75113,6 +75432,7 @@
 预紧安全带	yu jin an quan dai
 预约了吗	yu yue le ma
 预约到	yu yue dao
+预约制	yu yue zhi
 预约办理	yu yue ban li
 预约好	yu yue hao
 预约挂号	yu yue gua hao

@@ -11,6 +11,8 @@ extern "C" {
 typedef struct AimSession AimSession;
 typedef struct AimLexiconSnapshot AimLexiconSnapshot;
 typedef struct AimContextModelSnapshot AimContextModelSnapshot;
+typedef struct AimZhijuSearch AimZhijuSearch;
+typedef struct AimZhijuSnapshot AimZhijuSnapshot;
 
 typedef enum {
   AIM_KEY_TEXT = 0,
@@ -134,8 +136,97 @@ int32_t aim_session_reload_dictionaries(AimSession *session);
 int32_t aim_session_set_context_profile(AimSession *session,
                                         uint32_t app_class_override,
                                         uint32_t punctuation_policy);
+/* Independent of apply_context_model (the latter is a context-bigram snapshot).
+ * UTF-8 path to itos.json. Success=0; null session=-1; invalid path/vocab=-2.
+ * A failed load preserves the previously loaded vocabulary. */
+int32_t aim_session_set_zhiju_vocab(AimSession *session, const uint8_t *path, size_t path_len);
+/* One synchronous call per beam step: tokens is Int32[rows,cols], cols=40,
+ * BOS=1 followed by the last min(context+generated length,38) characters,
+ * UNK=2, right-padded with PAD=0. Each row has the same non-padding length.
+ * Fill every Float32 out[rows,vocab] with finite next-character logprobs.
+ * Return 0 on success, nonzero on failure. Do not reenter the session, unwind,
+ * retain pointers, or use these borrowed buffers after returning. */
+typedef int32_t (*AimZhijuScorer)(void *user_data, const int32_t *tokens,
+                                size_t rows, size_t cols, float *out, size_t vocab);
+/* Search only: never changes the page, ranking or composition.
+ * beam=0 means 8; otherwise use the requested width. At most 16 model steps.
+ * budget_ms is a wall-clock budget, including core preparation. Zero performs
+ * no forwards. A synchronous callback cannot be interrupted: its completed
+ * expansions are retained, then the deadline is checked before another call.
+ * Returns at most beam completed sentences (no unfinished text), sorted by
+ * cumulative logprob plus word rewards minus initial penalties descending,
+ * consumed keys descending, UTF-8 text ascending.
+ * *out_len is byte capacity on entry; bytes written/required on return.
+ * UTF-8 encoding, no NUL terminator, one record per line:
+ *     text<TAB>score (decimal f64)<TAB>consumed ASCII keys<LF>
+ * Apostrophes count as keys. Output may be empty, including on timeout.
+ * 0=success (also timeout/step cap with partial completed results), -1=null
+ * argument, -2=invalid size, -3=not a sentence abbreviation (also secure/ASCII
+ * mode), -4=vocabulary not set, -5=callback failure/non-finite output,
+ * -6=buffer too small (*out_len is required bytes), -7=no loaded dictionary.
+ * On errors no bytes are written; *out_len=0 except -6. out may be NULL only
+ * with zero capacity. Session access must remain exclusive throughout. */
+int32_t aim_session_zhiju_search(AimSession *session, AimZhijuScorer scorer, void *user_data,
+                               size_t beam, uint64_t budget_ms, uint8_t *out, size_t *out_len);
+/* A request-only callback. Copy tokens before returning; predict after releasing
+ * session access. The tokens/rows/cols/vocab layout matches AimZhijuScorer. */
+typedef void (*AimZhijuRowsReady)(void *user_data, const int32_t *tokens,
+                                size_t rows, size_t cols, size_t vocab);
+/* Worker-owned search. Create loads only vocabulary; prepare builds reusable
+ * dictionary caches. Neither call takes or accesses a session. Null on load error. */
+AimZhijuSearch *aim_zhiju_search_create(const uint8_t *path, size_t path_len);
+void aim_zhiju_search_destroy(AimZhijuSearch *search);
+/* Capture under exclusive session access; only copies input/context and retains
+ * an immutable dictionary Arc. No vocabulary loading, expansion or sorting.
+ * 0=success; -1=null; -3=not applicable; -7=no dictionary. Clears *out on error.
+ * The snapshot outlives keys, dictionary reloads and session destruction. */
+int32_t aim_session_zhiju_snapshot(const AimSession *session, AimZhijuSnapshot **out);
+void aim_zhiju_snapshot_destroy(AimZhijuSnapshot *snapshot);
+int32_t aim_zhiju_search_prepare(AimZhijuSearch *search, const AimZhijuSnapshot *snapshot);
+/* Same requests, step/budget/buffer rules and encoded results as the session
+ * continuation below, but operates entirely on worker-owned state. Use the same
+ * search for every step and do not concurrently use either handle. No session
+ * access or global runtime lock is required. A stale snapshot may finish safely;
+ * the host should cancel it before starting another expansion or prediction. */
+int32_t aim_zhiju_snapshot_step(AimZhijuSnapshot *snapshot, AimZhijuSearch *search,
+                              AimZhijuRowsReady request, void *user_data,
+                              size_t beam, uint64_t budget_ms,
+                              const float *scores, size_t score_count,
+                              uint8_t *out, size_t *out_len);
+/* One exclusive session call: validate originating session, key/dictionary
+ * generation, optionally remember/promote the best completed result, then read
+ * the current page. promote=0 only reads the page (including timeout fallback).
+ * -8=stale/foreign snapshot (empty result); other lead statuses match
+ * aim_session_lead_with_composition and return the unchanged current page.
+ * Free out with aim_result_free on every status. */
+int32_t aim_session_apply_zhiju_snapshot(AimSession *session, const AimZhijuSnapshot *snapshot,
+                                      int32_t promote, AimResult *out);
+/* Resumable search with the same results/encoding as aim_session_zhiju_search.
+ * *generation=0 starts a search with no scores. A prepared search receives a
+ * nonzero identity; an already exhausted start budget leaves it zero.
+ * 1=request emitted, *out_len=0; supply exactly rows*vocab finite scores on the
+ * next call with that identity. Each call expands at most one completed step,
+ * preserving its beam and completions; prior steps are never replayed.
+ * 0=complete (possibly empty/partial). budget_ms is the REMAINING wall-clock
+ * budget for this call, including core preparation; the host must subtract
+ * time spent predicting outside the core. Zero applies any supplied scores and
+ * returns completed results without requesting another batch. Zero with no
+ * scores also finishes a pending search using its completed steps only.
+ * beam is used only on start. Every key (including commit/paging/security),
+ * vocabulary/lexicon replacement, or new search invalidates the old identity;
+ * resuming it returns -8 without a request or output. A dictionary generation
+ * change also invalidates it. Completed results can be reread with no scores,
+ * including after -6 (short buffer). Other statuses match the synchronous ABI.
+ * All pointers are borrowed for this call only; session access is exclusive
+ * during the call, and is free between calls, including during prediction. */
+int32_t aim_session_zhiju_step(AimSession *session, uint64_t *generation,
+                             AimZhijuRowsReady request, void *user_data,
+                             size_t beam, uint64_t budget_ms,
+                             const float *scores, size_t score_count,
+                             uint8_t *out, size_t *out_len);
 uint32_t aim_session_context_group_mask(AimSession *session);
 uint32_t aim_session_context_complete_mask(AimSession *session);
+int32_t aim_session_contextual_prior_allowed(AimSession *session);
 intptr_t aim_session_peek_following_pages(AimSession *session, size_t count, uint8_t *buffer, size_t capacity);
 intptr_t aim_session_composition_alternatives(AimSession *session, uint8_t *buffer, size_t capacity);
 /* Texts of the current page exactly as digit keys resolve against it, tab-separated. A shell that draws a page it
@@ -147,14 +238,25 @@ int32_t aim_session_set_corrections(AimSession *session, int32_t enabled,
                                   int32_t typed_costs, int32_t multiple_readings,
                                   int32_t trailing_letter);
 intptr_t aim_session_composition_edits(AimSession *session, uint8_t *buffer, size_t capacity);
-/* 0 = leads; -1 invalid; -10 not a current alternative; -11 the owner's learned whole stays first; -12 something else is first.
+/* 0 = leads; -1 invalid; -10 not a current alternative; -11 the owner's learned whole stays first; -12 something else is first;
+ * -13 a dictionary entry covering all keys stays first (Zhiju results only).
  * Success means the page the digit keys resolve against really starts with the text. */
 int32_t aim_session_lead_with_composition(AimSession *session, const uint8_t *text, size_t length);
+/* Offers a current C3 alternative or a remembered, full-reading-validated Zhiju
+ * result in slot five. Raw/full-reading blacklists and learned-word protection
+ * still apply; key/page edits expire generated proofs. Never changes slots 1–4. */
 int32_t aim_session_offer_composition(AimSession *session, const uint8_t *text, size_t length);
+/* Read-only, bounded off-page dictionary matches for 2–3 initials. UTF-8 TSV;
+ * returns bytes written or negated required size. Same buffer contract as page_texts. */
+intptr_t aim_session_abbreviation_alternatives(AimSession *session, uint8_t *buffer, size_t capacity);
+/* Offer a current short dictionary alternative in slot five; never changes slots 1–4. */
+int32_t aim_session_offer_abbreviation(AimSession *session, const uint8_t *text, size_t length);
 int32_t aim_session_composition_guessed(AimSession *session);
 int32_t aim_ranking_composition_lead(const uint8_t *texts, size_t length, const double *scores, const double *edits, size_t count, int32_t guessed);
 int32_t aim_ranking_composition_offer(const uint8_t *texts, size_t length, const double *scores, const double *edits, size_t count);
 int32_t aim_ranking_group_order(const uint8_t *texts, size_t length, const double *scores, const uint8_t *homophone, size_t count, size_t *order);
+// has_context is 0 or 1; the host sets 1 when the preceding text contains Han.
+int32_t aim_ranking_contextual_group_order(const uint8_t *texts, size_t length, const double *scores, const uint8_t *homophone, size_t count, int32_t has_context, size_t *order);
 int32_t aim_ranking_load_owner_style(const uint8_t *records, size_t length);
 int32_t aim_ranking_owner_keeps(const uint8_t *first, size_t first_length, const uint8_t *challenger, size_t challenger_length);
 int32_t aim_session_reorder_context_candidates(AimSession *session, const size_t *order, size_t count);

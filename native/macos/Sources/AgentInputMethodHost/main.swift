@@ -7,8 +7,9 @@ if ProcessInfo.processInfo.environment["AIM_COLD_START_PROBE_DIR"] != nil {
     setenv("AIM_COLD_START_PROCESS_ENTRY_NS", String(processEntryNanoseconds), 1)
 }
 _ = umask(S_IRWXG | S_IRWXO)
+let attestationPreparation = RuntimeArtifactAttestationPreparation()
 let app = NSApplication.shared
-let delegate = InputMethodAppDelegate()
+let delegate = InputMethodAppDelegate(attestationPreparation: attestationPreparation)
 app.delegate = delegate
 app.setActivationPolicy(.prohibited)
 if ProcessInfo.processInfo.environment["AIM_COLD_START_PROBE_DIR"] != nil {

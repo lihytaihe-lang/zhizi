@@ -104,6 +104,14 @@ pub struct AimContextModelSnapshot {
     inner: std::sync::Arc<ContextModel>,
 }
 
+pub struct AimZhijuSearch {
+    inner: zhixu::zhiju::Search,
+}
+
+pub struct AimZhijuSnapshot {
+    inner: state::ZhijuSnapshot,
+}
+
 fn copy_bytes(bytes: &[u8]) -> (*mut u8, usize) {
     if bytes.is_empty() {
         return (ptr::null_mut(), 0);
@@ -506,6 +514,206 @@ pub unsafe extern "C" fn aim_session_set_preceding_text(
     0
 }
 
+/// A synchronous batch of right-padded tokens [rows,40] to next-character
+/// log-probabilities [rows,vocab]. Zero means success. See the C header.
+pub type AimZhijuScorer = unsafe extern "C" fn(
+    user_data: *mut c_void, tokens: *const i32, rows: usize, cols: usize, out: *mut f32, vocab: usize,
+) -> i32;
+
+#[unsafe(no_mangle)]
+/// Loads the vocabulary independently of the optional context-bigram model.
+/// A failed load preserves the previous vocabulary.
+/// # Safety
+/// `session` is live and exclusively accessed; `path` is UTF-8 bytes of `path_len`.
+pub unsafe extern "C" fn aim_session_set_zhiju_vocab(
+    session: *mut AimSession, path: *const u8, path_len: usize,
+) -> i32 {
+    if session.is_null() { return -1; }
+    let Ok(path) = (unsafe { utf8_argument(path, path_len) }) else { return -2; };
+    match unsafe { &mut *session }.inner.set_zhiju_vocab(std::path::Path::new(&path)) {
+        Ok(()) => 0,
+        Err(_) => -2,
+    }
+}
+
+#[unsafe(no_mangle)]
+/// Runs a sentence-abbreviation search without changing the composition/page.
+/// `*out_len` is capacity on input and bytes written/required on output.
+/// The compact UTF-8 records and status codes are documented in the C header.
+/// # Safety
+/// Session access is exclusive for the entire synchronous search. `out_len`
+/// points to writable storage; `out` has its input capacity. The callback must
+/// fill [rows,vocab], must not unwind or reenter the session, and may only use
+/// its borrowed buffers for the duration of the callback.
+pub unsafe extern "C" fn aim_session_zhiju_search(
+    session: *mut AimSession, scorer: Option<AimZhijuScorer>, user_data: *mut c_void,
+    beam: usize, budget_ms: u64, out: *mut u8, out_len: *mut usize,
+) -> i32 {
+    if out_len.is_null() { return -1; }
+    let capacity = unsafe { *out_len };
+    unsafe { *out_len = 0; }
+    if session.is_null() || scorer.is_none() || (out.is_null() && capacity != 0) { return -1; }
+    let scorer = scorer.unwrap();
+    let result = unsafe { &mut *session }.inner.zhiju_search(beam, Duration::from_millis(budget_ms),
+        |tokens, rows, cols, logprobs, vocab| {
+            match unsafe { scorer(user_data, tokens.as_ptr(), rows, cols, logprobs.as_mut_ptr(), vocab) } {
+                0 => Ok(()), _ => Err(()),
+            }
+        });
+    let candidates = match result { Ok(candidates) => candidates, Err(status) => return status };
+    let mut encoded = String::new();
+    for candidate in &candidates {
+        use std::fmt::Write;
+        let _ = writeln!(encoded, "{}\t{}\t{}", candidate.text, candidate.score, candidate.consumed);
+    }
+    unsafe { *out_len = encoded.len(); }
+    if encoded.len() > capacity { return -6; }
+    if !encoded.is_empty() { unsafe { ptr::copy_nonoverlapping(encoded.as_ptr(), out, encoded.len()); } }
+    unsafe { &mut *session }.inner.remember_zhiju_results(&candidates);
+    0
+}
+
+/// Copies one borrowed batch request to the host; no inference runs in this callback.
+pub type AimZhijuRowsReady = unsafe extern "C" fn(
+    user_data: *mut c_void, tokens: *const i32, rows: usize, cols: usize, vocab: usize,
+);
+
+#[unsafe(no_mangle)]
+/// Loads a worker-owned vocabulary, without accessing a session or the runtime.
+/// # Safety
+/// `path` is valid UTF-8 storage of `path_len` bytes.
+pub unsafe extern "C" fn aim_zhiju_search_create(path: *const u8, path_len: usize) -> *mut AimZhijuSearch {
+    let Ok(path) = (unsafe { utf8_argument(path, path_len) }) else { return ptr::null_mut(); };
+    let Ok(vocab) = zhixu::zhiju::Vocabulary::load(std::path::Path::new(&path)) else { return ptr::null_mut(); };
+    Box::into_raw(Box::new(AimZhijuSearch { inner: zhixu::zhiju::Search::new(vocab) }))
+}
+
+#[unsafe(no_mangle)]
+/// # Safety
+/// `search` is null or a live, exclusively owned worker search, destroyed once.
+pub unsafe extern "C" fn aim_zhiju_search_destroy(search: *mut AimZhijuSearch) {
+    if !search.is_null() { unsafe { drop(Box::from_raw(search)); } }
+}
+
+#[unsafe(no_mangle)]
+/// Captures only immutable dictionary ownership, input, context and identity.
+/// # Safety
+/// Session access is exclusive for this call; `out` is writable pointer storage.
+pub unsafe extern "C" fn aim_session_zhiju_snapshot(session: *const AimSession, out: *mut *mut AimZhijuSnapshot) -> i32 {
+    if out.is_null() { return -1; }
+    unsafe { *out = ptr::null_mut(); }
+    if session.is_null() { return -1; }
+    match unsafe { &*session }.inner.zhiju_snapshot() {
+        Ok(inner) => { unsafe { *out = Box::into_raw(Box::new(AimZhijuSnapshot { inner })); } 0 },
+        Err(status) => status,
+    }
+}
+
+#[unsafe(no_mangle)]
+/// # Safety
+/// `snapshot` is null or a live snapshot, destroyed once after its last use.
+pub unsafe extern "C" fn aim_zhiju_snapshot_destroy(snapshot: *mut AimZhijuSnapshot) {
+    if !snapshot.is_null() { unsafe { drop(Box::from_raw(snapshot)); } }
+}
+
+#[unsafe(no_mangle)]
+/// Prepares reusable dictionary caches on the worker, outside the search deadline.
+/// # Safety
+/// Both handles are live and exclusive. No session access is required.
+pub unsafe extern "C" fn aim_zhiju_search_prepare(search: *mut AimZhijuSearch, snapshot: *const AimZhijuSnapshot) -> i32 {
+    if search.is_null() || snapshot.is_null() { return -1; }
+    unsafe { &*snapshot }.inner.prepare(&mut unsafe { &mut *search }.inner);
+    0
+}
+
+#[unsafe(no_mangle)]
+/// Advances a worker-owned snapshot; it never accesses the originating session.
+/// # Safety
+/// Handles are live, exclusively accessed and use the same search for every step.
+/// Buffer and callback rules match `aim_session_zhiju_step`.
+pub unsafe extern "C" fn aim_zhiju_snapshot_step(
+    snapshot: *mut AimZhijuSnapshot, search: *mut AimZhijuSearch, request: Option<AimZhijuRowsReady>, user_data: *mut c_void,
+    beam: usize, budget_ms: u64, scores: *const f32, score_count: usize, out: *mut u8, out_len: *mut usize,
+) -> i32 {
+    if out_len.is_null() { return -1; }
+    let capacity = unsafe { *out_len };
+    unsafe { *out_len = 0; }
+    if snapshot.is_null() || search.is_null() || request.is_none()
+        || (scores.is_null() && score_count != 0) || (out.is_null() && capacity != 0) { return -1; }
+    if score_count > isize::MAX as usize / std::mem::size_of::<f32>() { return -2; }
+    let scores = if score_count == 0 { &[] } else { unsafe { slice::from_raw_parts(scores, score_count) } };
+    let request = request.unwrap();
+    let result = unsafe { &mut *snapshot }.inner.step(&mut unsafe { &mut *search }.inner, beam,
+        Duration::from_millis(budget_ms), scores, |tokens, rows, vocab| {
+            unsafe { request(user_data, tokens.as_ptr(), rows, 40, vocab); }
+        });
+    let candidates = match result { Ok(Some(candidates)) => candidates, Ok(None) => return 1, Err(status) => return status };
+    let mut encoded = String::new();
+    for candidate in &candidates {
+        use std::fmt::Write;
+        let _ = writeln!(encoded, "{}\t{}\t{}", candidate.text, candidate.score, candidate.consumed);
+    }
+    unsafe { *out_len = encoded.len(); }
+    if encoded.len() > capacity { return -6; }
+    if !encoded.is_empty() { unsafe { ptr::copy_nonoverlapping(encoded.as_ptr(), out, encoded.len()); } }
+    0
+}
+
+#[unsafe(no_mangle)]
+/// Validates identity, optionally promotes the best result, and reads the page once.
+/// # Safety
+/// Session access is exclusive; snapshot is live and no longer being advanced.
+/// `out` is writable, uninitialized AimResult storage, freed with aim_result_free.
+pub unsafe extern "C" fn aim_session_apply_zhiju_snapshot(
+    session: *mut AimSession, snapshot: *const AimZhijuSnapshot, promote: i32, out: *mut AimResult,
+) -> i32 {
+    if out.is_null() { return -1; }
+    unsafe { ptr::write(out, AimResult::default()); }
+    if session.is_null() || snapshot.is_null() { return -1; }
+    let session = unsafe { &mut *session };
+    let (status, page) = match session.inner.apply_zhiju_snapshot(&unsafe { &*snapshot }.inner, promote != 0) {
+        Ok(result) => result, Err(status) => return status,
+    };
+    fill_result(unsafe { &mut *out }, page, 0);
+    status
+}
+
+#[unsafe(no_mangle)]
+/// Advances at most one saved beam step, then requests its successor or returns results.
+/// See the C header for generation, budget and buffer ownership rules.
+/// # Safety
+/// Session access is exclusive only for this call. `generation` and `out_len`
+/// are writable; `scores` has `score_count` floats, `out` has its input capacity.
+/// The request callback must not unwind, reenter the session or retain pointers.
+pub unsafe extern "C" fn aim_session_zhiju_step(
+    session: *mut AimSession, generation: *mut u64, request: Option<AimZhijuRowsReady>, user_data: *mut c_void,
+    beam: usize, budget_ms: u64, scores: *const f32, score_count: usize, out: *mut u8, out_len: *mut usize,
+) -> i32 {
+    if out_len.is_null() { return -1; }
+    let capacity = unsafe { *out_len };
+    unsafe { *out_len = 0; }
+    if session.is_null() || generation.is_null() || request.is_none()
+        || (scores.is_null() && score_count != 0) || (out.is_null() && capacity != 0) { return -1; }
+    if score_count > isize::MAX as usize / std::mem::size_of::<f32>() { return -2; }
+    let scores = if score_count == 0 { &[] } else { unsafe { slice::from_raw_parts(scores, score_count) } };
+    let request = request.unwrap();
+    let result = unsafe { &mut *session }.inner.zhiju_step(unsafe { &mut *generation }, beam,
+        Duration::from_millis(budget_ms), scores, |tokens, rows, vocab| {
+            unsafe { request(user_data, tokens.as_ptr(), rows, 40, vocab); }
+        });
+    let candidates = match result { Ok(Some(candidates)) => candidates, Ok(None) => return 1, Err(status) => return status };
+    let mut encoded = String::new();
+    for candidate in &candidates {
+        use std::fmt::Write;
+        let _ = writeln!(encoded, "{}\t{}\t{}", candidate.text, candidate.score, candidate.consumed);
+    }
+    unsafe { *out_len = encoded.len(); }
+    if encoded.len() > capacity { return -6; }
+    if !encoded.is_empty() { unsafe { ptr::copy_nonoverlapping(encoded.as_ptr(), out, encoded.len()); } }
+    unsafe { &mut *session }.inner.remember_zhiju_results(&candidates);
+    0
+}
+
 #[unsafe(no_mangle)]
 /// Returns eligible slots in the original visible page. No text crosses this ABI.
 /// # Safety
@@ -527,6 +735,15 @@ pub unsafe extern "C" fn aim_session_context_complete_mask(session: *mut AimSess
         return 0;
     }
     unsafe { &*session }.inner.context_complete_mask()
+}
+
+#[unsafe(no_mangle)]
+/// Allows the contextual soft prior only when the current first has no matching pick.
+/// # Safety
+/// `session` must be null or a live, exclusively accessed session.
+pub unsafe extern "C" fn aim_session_contextual_prior_allowed(session: *mut AimSession) -> i32 {
+    if session.is_null() { return 0; }
+    i32::from(unsafe { &*session }.inner.contextual_prior_allowed())
 }
 
 #[unsafe(no_mangle)]
@@ -724,6 +941,25 @@ pub unsafe extern "C" fn aim_ranking_group_order(
 }
 
 #[unsafe(no_mangle)]
+/// Context-aware C1 order; C2 and settled-owner protections retain their rules.
+/// # Safety
+/// `texts` readable for `length` bytes; the other arrays hold `count` entries.
+pub unsafe extern "C" fn aim_ranking_contextual_group_order(
+    texts: *const u8, length: usize, scores: *const f64, homophone: *const u8,
+    count: usize, has_context: i32, order: *mut usize,
+) -> i32 {
+    if scores.is_null() || homophone.is_null() || order.is_null() || count == 0
+        || !(0..=1).contains(&has_context) { return -1; }
+    let Some(texts) = (unsafe { tab_separated(texts, length, count) }) else { return -1 };
+    let scores = unsafe { std::slice::from_raw_parts(scores, count) };
+    if !scores.iter().all(|value| value.is_finite()) { return -1; }
+    let homophone: Vec<bool> = unsafe { std::slice::from_raw_parts(homophone, count) }.iter().map(|&b| b != 0).collect();
+    let ranked = ranking::contextual_group_order(&texts, scores, &homophone, has_context != 0);
+    unsafe { std::ptr::copy_nonoverlapping(ranked.as_ptr(), order, count) };
+    0
+}
+
+#[unsafe(no_mangle)]
 /// Builds the owner's settled habits from their local quality records (JSON lines).
 /// # Safety
 /// `records` readable for `length` bytes.
@@ -782,8 +1018,8 @@ pub unsafe extern "C" fn aim_session_lead_with_composition(
 }
 
 #[unsafe(no_mangle)]
-/// Shows one of the current alternatives in the last slot of the first page when none
-/// leads (0 on success).
+/// Offers a current C3 alternative or full-reading-validated Zhiju result in the
+/// last slot of the first page (0 on success). The first four slots stay fixed.
 /// # Safety
 /// `session` must be live and exclusively accessed; `text` readable for `length` bytes.
 pub unsafe extern "C" fn aim_session_offer_composition(
@@ -802,6 +1038,33 @@ pub unsafe extern "C" fn aim_session_offer_composition(
         Ok(()) => 0,
         Err(status) => status,
     }
+}
+
+#[unsafe(no_mangle)]
+/// Bounded off-page dictionary alternatives for short initials, UTF-8 TSV.
+/// # Safety
+/// `session` must be live and exclusive; `buffer` writable for `capacity` bytes,
+/// or null with capacity zero to query the negated required size.
+pub unsafe extern "C" fn aim_session_abbreviation_alternatives(
+    session: *mut AimSession, buffer: *mut u8, capacity: usize,
+) -> isize {
+    if session.is_null() { return 0; }
+    let text = unsafe { &*session }.inner.abbreviation_alternatives().join("\t");
+    if text.len() > capacity || buffer.is_null() { return -(text.len() as isize); }
+    unsafe { ptr::copy_nonoverlapping(text.as_ptr(), buffer, text.len()) };
+    text.len() as isize
+}
+
+#[unsafe(no_mangle)]
+/// Offers a currently eligible dictionary word in the last first-page slot.
+/// # Safety
+/// `session` must be live and exclusive; `text` readable for `length` bytes.
+pub unsafe extern "C" fn aim_session_offer_abbreviation(
+    session: *mut AimSession, text: *const u8, length: usize,
+) -> i32 {
+    if session.is_null() || text.is_null() { return -1; }
+    let Ok(text) = std::str::from_utf8(unsafe { slice::from_raw_parts(text, length) }) else { return -1; };
+    unsafe { &mut *session }.inner.offer_abbreviation(text).err().unwrap_or(0)
 }
 
 #[unsafe(no_mangle)]
@@ -1306,6 +1569,109 @@ mod ffi_tests {
     }
 
     #[test]
+    fn ffi_zhiju_dictionary_whole_rejection_keeps_the_entire_page() {
+        use crate::zhixu::loader::{DictionaryData, Entry};
+        let dictionary = std::sync::Arc::new(crate::zhixu::Index::from_data(DictionaryData {
+            entries: [("乱七八糟", "luan qi ba zao", 100000), ("老", "lao", 10), ("钱", "qian", 10),
+                ("别", "bie", 10), ("追", "zhui", 10)].into_iter().map(|(text, reading, weight)| Entry {
+                text: text.into(), reading: reading.into(), weight, layer: "fixture".into(),
+            }).collect(),
+        }));
+        crate::zhixu::with_index(dictionary.clone(), || {
+            let app_id = "ffi.zhiju-dictionary-whole".to_string();
+            let mut session = AimSession { inner: Session::new_native(app_id.clone(),
+                std::sync::Arc::new(std::sync::Mutex::new(crate::blacklist::Store::default())), dictionary).unwrap(), app_id };
+            let path = std::env::temp_dir().join(format!("zhiju-word-guard-{}.json", std::process::id()));
+            std::fs::write(&path, serde_json::to_vec(&["<pad>", "<bos>", "<unk>", "老", "钱", "别", "追"]).unwrap()).unwrap();
+            session.inner.set_zhiju_vocab(&path).unwrap();
+            std::fs::remove_file(path).unwrap();
+            for ch in "lqbz".chars() {
+                session.inner.process(KeyEvent { kind: KeyKind::Text, text: ch.to_string(), modifiers: 0,
+                    security: SecurityState::NonSecure, delivery_id: 0 });
+            }
+            unsafe extern "C" fn scorer(_: *mut c_void, _: *const i32, rows: usize, _: usize,
+                out: *mut f32, vocab: usize) -> i32 {
+                unsafe { std::slice::from_raw_parts_mut(out, rows * vocab) }.fill(-1.0);
+                0
+            }
+            let mut output = [0; 2048];
+            let mut length = output.len();
+            assert_eq!(unsafe { aim_session_zhiju_search(&mut session, Some(scorer), ptr::null_mut(),
+                8, 10000, output.as_mut_ptr(), &mut length) }, 0);
+            assert!(std::str::from_utf8(&output[..length]).unwrap().starts_with("老钱别追\t"));
+            let mut before = AimResult::default();
+            assert_eq!(unsafe { aim_session_current_page(&mut session, &mut before) }, 0);
+            let first = unsafe { &*before.candidates };
+            assert_eq!(unsafe { utf8_argument(first.text, first.text_len) }.unwrap(), "乱七八糟");
+            let target = "老钱别追";
+            assert_eq!(unsafe { aim_session_lead_with_composition(&mut session, target.as_ptr(), target.len()) },
+                mixer::LEAD_OUTRANKED_BY_DICTIONARY_WHOLE);
+            let mut after = AimResult::default();
+            assert_eq!(unsafe { aim_session_current_page(&mut session, &mut after) }, 0);
+            assert_same_ffi_page(&after, &before);
+            unsafe { aim_result_free(&mut before); aim_result_free(&mut after); }
+        });
+    }
+
+    #[test]
+    fn ffi_zhiju_search_result_can_lead_and_commit_the_real_page() {
+        use crate::zhixu::loader::{DictionaryData, Entry};
+        let dictionary = std::sync::Arc::new(crate::zhixu::Index::from_data(DictionaryData {
+            entries: [
+                ("我们", "wo men"), ("我", "wo"), ("外", "wai"),
+                ("为", "wei"), ("问", "wen"), ("晚", "wan"),
+                ("们", "men"), ("没", "mei"), ("明", "ming"), ("面", "mian"), ("蛮", "man"),
+                ("想", "xiang"), ("下", "xia"), ("先", "xian"), ("小", "xiao"), ("玄", "xuan"),
+                ("吃", "chi"), ("次", "ci"), ("从", "cong"), ("才", "cai"), ("醋", "cu"),
+            ].into_iter().enumerate().map(|(at, (text, reading))| Entry {
+                text: text.into(), reading: reading.into(), weight: 100_000 / (at as u32 + 1), layer: "fixture".into(),
+            }).collect(),
+        }));
+        crate::zhixu::with_index(dictionary.clone(), || {
+            let app_id = "ffi.zhiju-lead".to_string();
+            let mut session = AimSession { inner: Session::new_native(app_id.clone(),
+                std::sync::Arc::new(std::sync::Mutex::new(crate::blacklist::Store::default())), dictionary.clone()).unwrap(), app_id };
+            let path = std::env::temp_dir().join(format!("zhiju-accept-{}.json", std::process::id()));
+            std::fs::write(&path, br#"["<pad>","<bos>","<unk>","\u665a","\u86ee","\u7384","\u918b","\u5916"]"#).unwrap();
+            session.inner.set_zhiju_vocab(&path).unwrap();
+            std::fs::remove_file(path).unwrap();
+            for ch in "wmxc".chars() {
+                session.inner.process(KeyEvent { kind: KeyKind::Text, text: ch.to_string(), modifiers: 0,
+                    security: SecurityState::NonSecure, delivery_id: 0 });
+            }
+            let target = "晚蛮玄醋";
+            assert!(!session.inner.composition_alternatives().iter().any(|text| text == target));
+            assert_eq!(session.inner.lead_with_composition(target), Err(mixer::LEAD_NOT_AN_ALTERNATIVE));
+            unsafe extern "C" fn scorer(_: *mut c_void, _: *const i32, rows: usize, _: usize,
+                out: *mut f32, vocab: usize) -> i32 {
+                unsafe { std::slice::from_raw_parts_mut(out, rows * vocab) }.fill(-1.0);
+                0
+            }
+            let before = session.inner.current_result();
+            let mut output = [0; 2048];
+            let mut length = 1;
+            assert_eq!(unsafe { aim_session_zhiju_search(&mut session, Some(scorer), ptr::null_mut(),
+                8, 10000, output.as_mut_ptr(), &mut length) }, -6);
+            assert_eq!(session.inner.lead_with_composition(target), Err(mixer::LEAD_NOT_AN_ALTERNATIVE),
+                "an unsuccessful FFI return does not admit search results");
+            length = output.len();
+            assert_eq!(unsafe { aim_session_zhiju_search(&mut session, Some(scorer), ptr::null_mut(),
+                8, 10000, output.as_mut_ptr(), &mut length) }, 0);
+            assert!(std::str::from_utf8(&output[..length]).unwrap().lines().any(|line| line.starts_with(target)));
+            assert_eq!(session.inner.current_result().candidates, before.candidates, "search does not change the page");
+            assert_eq!(session.inner.lead_with_composition("外蛮玄醋"), Ok(()), "all returned top-K sentences are eligible");
+            assert_eq!(session.inner.lead_with_composition(target), Ok(()));
+            let page = session.inner.current_result();
+            assert_eq!(page.candidates[0].text, target);
+            let committed = session.inner.process(KeyEvent { kind: KeyKind::Text, text: "1".into(), modifiers: 0,
+                security: SecurityState::NonSecure, delivery_id: 0xA1_9100 });
+            assert_eq!(committed.commit_text, target);
+            assert!(committed.marked_text.is_empty());
+            assert!(committed.candidates.is_empty());
+        });
+    }
+
+    #[test]
     fn ffi_correction_settings_and_fractional_costs_round_trip() {
         // The settings are process-wide; exercise the public setter in a child so
         // the rest of the parallel suite retains its own defaults.
@@ -1589,7 +1955,9 @@ mod ffi_tests {
             aim_context_model_snapshot_destroy(model);
             aim_session_destroy(session);
         }
-        std::fs::remove_dir_all(root).unwrap();
+        assert!(zhixu::index_cache::flush(Duration::from_millis(2_000)),
+            "the background index cache must settle before removing its user directory");
+        remove_dir_all_settled(root);
     }
 }
 

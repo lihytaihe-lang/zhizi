@@ -203,10 +203,34 @@ class AppendOwnerWordsTests(unittest.TestCase):
         self.assertTrue(summary["dry_run"])
         self.assertEqual(self.dict_path.read_text(encoding="utf-8"), LAYER)
         self.assertEqual(self.prov_path.read_text(encoding="utf-8"), LAYER_PROVENANCE)
-        # the reported sha256 values are the would-be ones: not the untouched file's, but exactly a real run's
+        # The report predicts exactly the files a real run would write.
         self.assertNotEqual(summary["newwords_sha256"], hashlib.sha256(LAYER.encode()).hexdigest())
         summary_real, _ = self.run_append()
         self.assertEqual(summary["newwords_sha256"], summary_real["newwords_sha256"])
+
+    def test_reviewed_compounds_keep_numeral_guard_and_honest_provenance(self):
+        reviewed = self.root / "reviewed.tsv"
+        reviewed.write_text("text\treading\tkind\treason\n"
+                            "二十几天\ter shi ji tian\tnumeral-unit\tquantity\n"
+                            "预约制\tyu yue zhi\tX制\tsystem\n", encoding="utf-8")
+        summary, _ = self.run_append("--reviewed-compounds", str(reviewed))
+        self.assertEqual(summary["appended"], 6)
+        self.assertIn("二十几天\ter shi ji tian\t250\n", self.dict_path.read_text(encoding="utf-8"))
+        self.assertNotIn("两千块\t", self.dict_path.read_text(encoding="utf-8"))
+        self.assertIn("project\tcoverage-gap\t0\t0\t" + append_owner_words.REVIEWED_COMPOUND_SOURCE,
+                      self.prov_path.read_text(encoding="utf-8"))
+        again, _ = self.run_append("--reviewed-compounds", str(reviewed))
+        self.assertEqual(again["appended"], 0)
+
+    def test_reviewed_compounds_reject_model_numbers_and_wrong_unit_reading(self):
+        reviewed = self.root / "reviewed.tsv"
+        for text, reading in [("麒麟九千零一", "qi lin jiu qian ling yi"),
+                              ("二十几天", "er shi ji dian")]:
+            reviewed.write_text(f"text\treading\tkind\treason\n{text}\t{reading}\tnumeral-unit\ttest\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "outside reviewed grammar"):
+                self.run_append("--reviewed-compounds", str(reviewed))
+            self.assertEqual(self.dict_path.read_text(encoding="utf-8"), LAYER)
+        self.assertEqual(self.prov_path.read_text(encoding="utf-8"), LAYER_PROVENANCE)
 
     def test_provenance_stays_row_aligned(self):
         self.run_append()

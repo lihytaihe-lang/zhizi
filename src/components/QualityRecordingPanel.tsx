@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AlertTriangle, Download, PlayCircle, RefreshCw, ScanSearch, ShieldCheck,
   Sparkles, Trash2, Undo2,
@@ -7,9 +7,9 @@ import {
   applyPersonalProfileAutoUpdate, compileLexiconSnapshot,
   compileLexiconSnapshotWithOverride, declareOwnerDisambiguation,
   deleteQualityRecord, deleteQualityRecords, deleteQualityRecordsByApp,
-  deleteQualityRecordsByTimeRange, downloadJSON, exportQualityRecords,
+  deleteQualityRecordsByTimeRange, countQualityRecords, exportQualityRecordsFile,
   freezeReplayGoldenSet, grantQualityRecordingConsent, listPersonalProfileAutoUpdates,
-  listQualityRecords, nextSnapshotVersion, personalProfileIntrospection,
+  qualityRecordsPage, qualityRecordsOverview, nextSnapshotVersion, personalProfileIntrospection,
   qualityRecordingConsentStatus, qualityRecordingStatus, revokePersonalProfileAutoUpdate,
   revokeQualityRecordingConsent, runPersonalReplayGate, setQualityRecording,
   type FrozenGoldenMeta, type PersonalProfileAutoUpdateItem,
@@ -92,6 +92,13 @@ export function QualityRecordingPanel() {
   const [status, setStatus] = useState<QualityRecordingStatus>({ enabled: false, expiresAtMs: 0, continuous: false });
   const [consent, setConsent] = useState<QualityRecordingConsent>({ granted: false, grantedAtMs: 0, noticeVersion: "w7-v1" });
   const [records, setRecords] = useState<QualityRecordingEvent[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [olderPage, setOlderPage] = useState(false);
+  const [recordsLoading, setRecordsLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [rangeCount, setRangeCount] = useState<number | null>(null);
+  const recordsRequest = useRef(0);
   const [rangeStart, setRangeStart] = useState("");
   const [rangeEnd, setRangeEnd] = useState("");
   const [notice, setNotice] = useState("");
@@ -112,17 +119,31 @@ export function QualityRecordingPanel() {
     setTechnicalNotice(message(error));
   };
 
+  async function loadRecords(cursor: string | null = null, rawOnly = showRawOnly) {
+    const request = ++recordsRequest.current;
+    setRecordsLoading(true);
+    const [page, overview] = await Promise.allSettled([
+      qualityRecordsPage(cursor, rawOnly), qualityRecordsOverview(),
+    ]);
+    if (request !== recordsRequest.current) return;
+    if (page.status === "fulfilled") {
+      setRecords(page.value.records); setNextCursor(page.value.nextCursor); setOlderPage(cursor !== null);
+    } else { reportError(page.reason); }
+    if (overview.status === "fulfilled") setTotalCount(overview.value.totalCount);
+    else reportError(overview.reason);
+    setRecordsLoading(false);
+  }
+
   async function refresh() {
     try {
-      const [nextStatus, nextConsent, nextRecords, nextIntrospection, nextAutoUpdates] = await Promise.all([
-        qualityRecordingStatus(), qualityRecordingConsentStatus(), listQualityRecords(),
-        personalProfileIntrospection(), listPersonalProfileAutoUpdates(),
+      const [nextStatus, nextConsent, nextIntrospection, nextAutoUpdates] = await Promise.allSettled([
+        qualityRecordingStatus(), qualityRecordingConsentStatus(),
+        personalProfileIntrospection(), listPersonalProfileAutoUpdates(), loadRecords(),
       ]);
-      setStatus(nextStatus);
-      setConsent(nextConsent);
-      setRecords(nextRecords);
-      setIntrospection(nextIntrospection);
-      setAutoUpdates(nextAutoUpdates);
+      if (nextStatus.status === "fulfilled") setStatus(nextStatus.value); else reportError(nextStatus.reason);
+      if (nextConsent.status === "fulfilled") setConsent(nextConsent.value); else reportError(nextConsent.reason);
+      if (nextIntrospection.status === "fulfilled") setIntrospection(nextIntrospection.value); else reportError(nextIntrospection.reason);
+      if (nextAutoUpdates.status === "fulfilled") setAutoUpdates(nextAutoUpdates.value); else reportError(nextAutoUpdates.reason);
     } catch (error) { reportError(error); }
   }
 
@@ -171,7 +192,7 @@ export function QualityRecordingPanel() {
   }
 
   async function refreshRecords() {
-    setRecords(await listQualityRecords());
+    await loadRecords();
     setIntrospection(await personalProfileIntrospection());
   }
 
@@ -194,14 +215,13 @@ export function QualityRecordingPanel() {
   async function revokeConsent(deleteRecords: boolean) {
     try {
       if (deleteRecords) {
-        const current = await listQualityRecords();
-        setRecords(current);
-        if (!window.confirm(permanentDeletionConfirmation(current.length, true))) return;
+        const count = await countQualityRecords();
+        if (!window.confirm(permanentDeletionConfirmation(count, true))) return;
       }
       const result = await revokeQualityRecordingConsent(deleteRecords);
       setConsent(result.consent);
       setStatus({ enabled: false, expiresAtMs: 0, continuous: false });
-      if (deleteRecords) setRecords([]);
+      if (deleteRecords) { setRecords([]); setTotalCount(0); setNextCursor(null); }
       setNotice(deleteRecords
         ? `已撤回同意并永久删除 ${result.deletedCount} 条记录。`
         : "已撤回同意并停止记录；以前的记录仍保留在这台机器上。");
@@ -210,11 +230,11 @@ export function QualityRecordingPanel() {
 
   async function deleteAllRecords() {
     try {
-      const current = await listQualityRecords();
-      setRecords(current);
-      if (!window.confirm(permanentDeletionConfirmation(current.length))) return;
+      const currentCount = await countQualityRecords();
+      if (!window.confirm(permanentDeletionConfirmation(currentCount))) return;
       const count = await deleteQualityRecords();
       setRecords([]);
+      setTotalCount(0); setNextCursor(null);
       setIntrospection(await personalProfileIntrospection());
       setNotice(`已永久删除 ${count} 条记录。`);
     } catch (error) { reportError(error); }
@@ -227,11 +247,7 @@ export function QualityRecordingPanel() {
       return;
     }
     try {
-      const current = await listQualityRecords();
-      setRecords(current);
-      const count = current.filter((record) =>
-        record.recordedAtMs >= range.startMs && record.recordedAtMs <= range.endMs
-      ).length;
+      const count = await countQualityRecords(range);
       if (!window.confirm(permanentDeletionConfirmation(count))) return;
       const deleted = await deleteQualityRecordsByTimeRange(range.startMs, range.endMs);
       await refreshRecords();
@@ -240,6 +256,15 @@ export function QualityRecordingPanel() {
   }
 
   useEffect(() => { void refresh(); }, []);
+  useEffect(() => {
+    const range = rangeMilliseconds(rangeStart, rangeEnd);
+    setRangeCount(null);
+    if (!range) return;
+    let active = true;
+    void countQualityRecords(range).then((count) => { if (active) setRangeCount(count); })
+      .catch((error) => { if (active) reportError(error); });
+    return () => { active = false; };
+  }, [rangeStart, rangeEnd, records]);
   useEffect(() => {
     const timer = window.setInterval(() => setNowMs(Date.now()), 30_000);
     return () => window.clearInterval(timer);
@@ -252,10 +277,7 @@ export function QualityRecordingPanel() {
   const lastAutomaticUpdate = activeLearned.reduce<number | null>(
     (latest, item) => Math.max(latest ?? 0, item.lastRefreshedAtMs), null,
   );
-  const rangeCount = countQualityRecordsInRange(records, rangeStart, rangeEnd);
-  const displayedRecords = showRawOnly
-    ? records.filter((record) => record.selectedText === record.pinyin)
-    : records;
+  const displayedRecords = records;
   const percent = (value: number) => `${(value * 100).toFixed(2)}%`;
 
   return <div className="settings-section quality-section">
@@ -275,12 +297,14 @@ export function QualityRecordingPanel() {
     </section>
 
     <div className="quality-primary-actions">
-      <button className="primary-button" onClick={async () => {
+      <button className="primary-button" disabled={exporting} onClick={async () => {
+        setExporting(true);
         try {
-          downloadJSON(`quality-golden-${Date.now()}.json`, await exportQualityRecords());
-          setNotice("记录已导出。");
+          const exported = await exportQualityRecordsFile();
+          if (exported) setNotice(`已导出 ${exported.count} 条记录到 ${exported.path}。`);
         } catch (error) { reportError(error); }
-      }} type="button"><Download size={15} />导出记录</button>
+        finally { setExporting(false); }
+      }} type="button"><Download size={15} />{exporting ? "正在导出…" : "导出记录"}</button>
     </div>
 
     <div className="profile-introspection" aria-labelledby="profile-introspection-title">
@@ -329,6 +353,7 @@ export function QualityRecordingPanel() {
           </div>
           <button className="text-button" onClick={() => {
             setShowRawOnly(true);
+            void loadRecords(null, true);
             document.getElementById("quality-records")?.scrollIntoView({ behavior: "smooth" });
           }} type="button">反馈还打不出的</button>
         </section>
@@ -355,8 +380,8 @@ export function QualityRecordingPanel() {
       <summary><AlertTriangle aria-hidden="true" size={15} />更多记录操作</summary>
       <p>删除后无法恢复。每次删除前都会再次显示准确条数，请你确认。</p>
       <div className="danger-actions">
-        <button className="secondary-button danger-button" disabled={!records.length} onClick={() => void deleteAllRecords()} type="button"><Trash2 size={14} />全部删除</button>
-        <button className="secondary-button danger-button" disabled={!consent.granted || !records.length} onClick={() => void revokeConsent(true)} type="button"><Trash2 size={14} />撤回并删除全部记录</button>
+        <button className="secondary-button danger-button" disabled={!totalCount} onClick={() => void deleteAllRecords()} type="button"><Trash2 size={14} />全部删除</button>
+        <button className="secondary-button danger-button" disabled={!consent.granted || !totalCount} onClick={() => void revokeConsent(true)} type="button"><Trash2 size={14} />撤回并删除全部记录</button>
       </div>
       <div className="quality-time-delete" aria-label="按时间删除记录">
         <label>开始时间<input aria-label="删除开始时间" onChange={(event) => setRangeStart(event.currentTarget.value)} type="datetime-local" value={rangeStart} /></label>
@@ -371,8 +396,12 @@ export function QualityRecordingPanel() {
     <div className="quality-records" id="quality-records" aria-label="逐条打字记录">
       <div className="records-heading">
         <strong>{showRawOnly ? "还没打出来的记录" : "最近的打字记录"}</strong>
-        {showRawOnly ? <button className="text-button" onClick={() => setShowRawOnly(false)} type="button">显示全部</button> : null}
+        <span>共 {totalCount} 条，本页 {records.length} 条</span>
+        {showRawOnly ? <button className="text-button" onClick={() => { setShowRawOnly(false); void loadRecords(null, false); }} type="button">显示全部</button> : null}
+        {olderPage ? <button className="text-button" disabled={recordsLoading} onClick={() => void loadRecords()} type="button">返回最近</button> : null}
+        {nextCursor ? <button className="text-button" disabled={recordsLoading} onClick={() => void loadRecords(nextCursor)} type="button">更早的记录</button> : null}
       </div>
+      {recordsLoading ? <p role="status">正在读取记录…</p> : null}
       {displayedRecords.map((record) => <article className="quality-record" key={record.id}>
         <strong>{record.pinyin} → {record.selectedText}</strong>
         <span>时间：{new Date(record.recordedAtMs).toLocaleString()}</span>

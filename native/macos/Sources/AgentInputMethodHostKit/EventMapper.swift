@@ -17,7 +17,9 @@ public final class EventMapper {
 
     public func map(_ event: NSEvent) -> MappedIMEEvent? {
         guard event.type == .keyDown || event.type == .flagsChanged else {
-            shiftPressedAlone = false
+            if event.type != .keyUp {
+                shiftPressedAlone = false
+            }
             return nil
         }
         let deliveryID = EventDeliveryIDFactory.identifier(for: event)

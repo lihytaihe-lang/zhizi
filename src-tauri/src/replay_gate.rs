@@ -44,6 +44,7 @@ pub enum ContextModelOutcome {
     Error,
     Unchanged,
     Reordered,
+    Composed,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -702,23 +703,19 @@ pub fn append_override_audit(
     Ok(entry_hash)
 }
 
-pub fn read_quality_events(quality_root: &Path) -> Result<Vec<RecordedQualityEvent>, String> {
-    let path = quality_root.join("events.jsonl");
-    let Some(data) = read_bounded_regular(&path, MAXIMUM_GOLDEN_BYTES, "质量记录")? else {
-        return Ok(Vec::new());
-    };
-    let text = std::str::from_utf8(&data).map_err(|_| "质量记录不是有效 UTF-8。".to_string())?;
-    text.lines()
-        .map(|line| {
-            let event: RecordedQualityEvent =
-                serde_json::from_str(line).map_err(|_| "质量记录包含无效行。".to_string())?;
-            validate_event(&event)?;
-            Ok(event)
-        })
-        .collect()
+pub fn stream_quality_events(quality_root: &Path) -> Result<impl Iterator<Item = Result<RecordedQualityEvent, String>>, String> {
+    Ok(crate::quality_log::records(quality_root, None, false)?.map(|record| {
+        let event = record?.event;
+        validate_event(&event)?;
+        Ok(event)
+    }))
 }
 
-fn validate_event(event: &RecordedQualityEvent) -> Result<(), String> {
+pub fn read_quality_events(quality_root: &Path) -> Result<Vec<RecordedQualityEvent>, String> {
+    stream_quality_events(quality_root)?.collect()
+}
+
+pub(crate) fn event_validation_issue(event: &RecordedQualityEvent) -> Option<&'static str> {
     let valid_pinyin = !event.pinyin.is_empty()
         && event.pinyin.len() <= 128
         && event
@@ -750,16 +747,21 @@ fn validate_event(event: &RecordedQualityEvent) -> Result<(), String> {
             .active_project
             .as_ref()
             .is_none_or(|project| !project.trim().is_empty() && project.len() <= 256);
-    if event.id.trim().is_empty()
-        || event.recorded_at_ms < 0
-        || !valid_pinyin
-        || !valid_candidates
-        || !valid_selected
-        || !valid_hash
-        || !valid_context
-        || event.max_page > 10_000
-        || (event.candidate_count != 0 && event.candidate_count < event.candidates.len())
-    {
+    [
+        (event.id.trim().is_empty(), "id"),
+        (event.recorded_at_ms < 0, "timestamp"),
+        (!valid_pinyin, "pinyin"),
+        (!valid_candidates, "candidates"),
+        (!valid_selected, "selected"),
+        (!valid_hash, "app_hash"),
+        (!valid_context, "context"),
+        (event.max_page > 10_000, "page"),
+        (event.candidate_count != 0 && event.candidate_count < event.candidates.len(), "candidate_count"),
+    ].into_iter().find_map(|(failed, reason)| failed.then_some(reason))
+}
+
+fn validate_event(event: &RecordedQualityEvent) -> Result<(), String> {
+    if event_validation_issue(event).is_some() {
         return Err("质量记录未通过 Replay Gate 脱敏/结构校验。".into());
     }
     Ok(())

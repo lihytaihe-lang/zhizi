@@ -127,17 +127,44 @@ public struct ContextModelObservation: Codable, Equatable, Sendable {
     /// clocked-down engine (owner: keep inference speed in the logs for tuning).
     public let latencyMs: Double?
     public let cold: Bool?
+    /// Absent in historical/standalone observations; CoreSession supplies the current state.
+    public let zhijuOutcome: ZhijuOutcome?
+    public let zhijuLatencyMs: Double?
 
     public static let disabled = ContextModelObservation(enabled: false, outcome: .disabled)
 
     init(enabled: Bool = true, outcome: ContextModelOutcome, baseOrder: [Int]? = nil, groupSize: Int? = nil,
-         latencyMs: Double? = nil, cold: Bool? = nil) {
+         latencyMs: Double? = nil, cold: Bool? = nil,
+         zhijuOutcome: ZhijuOutcome? = nil, zhijuLatencyMs: Double? = nil) {
         self.enabled = enabled
         self.outcome = outcome
         self.baseOrder = outcome == .reordered ? baseOrder : nil
         self.groupSize = enabled ? groupSize : nil
         self.latencyMs = latencyMs.map { ($0 * 100).rounded() / 100 }
         self.cold = cold
+        self.zhijuOutcome = zhijuOutcome
+        self.zhijuLatencyMs = zhijuLatencyMs.map { ($0 * 100).rounded() / 100 }
+    }
+
+    func withZhiju(outcome: ZhijuOutcome?, latencyMs: Double?) -> Self {
+        Self(enabled: enabled, outcome: self.outcome, baseOrder: baseOrder, groupSize: groupSize,
+             latencyMs: self.latencyMs, cold: cold, zhijuOutcome: outcome, zhijuLatencyMs: latencyMs)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case enabled, outcome, baseOrder, groupSize, latencyMs, cold, zhijuOutcome, zhijuLatencyMs
+    }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(enabled: try values.decode(Bool.self, forKey: .enabled),
+                  outcome: try values.decode(ContextModelOutcome.self, forKey: .outcome),
+                  baseOrder: try values.decodeIfPresent([Int].self, forKey: .baseOrder),
+                  groupSize: try values.decodeIfPresent(Int.self, forKey: .groupSize),
+                  latencyMs: try values.decodeIfPresent(Double.self, forKey: .latencyMs),
+                  cold: try values.decodeIfPresent(Bool.self, forKey: .cold),
+                  zhijuOutcome: try values.decodeIfPresent(ZhijuOutcome.self, forKey: .zhijuOutcome),
+                  zhijuLatencyMs: try values.decodeIfPresent(Double.self, forKey: .zhijuLatencyMs))
     }
 
     // QualityRecorder may omit unsafe candidates and append secondary/raw slots.
@@ -148,7 +175,8 @@ public struct ContextModelObservation: Codable, Equatable, Sendable {
         guard let baseOrder, outcome == .reordered else { return self }
         func fallback(_ site: QualityAnomalySite) -> Self {
             anomaly(site)
-            return Self(enabled: enabled, outcome: outcome, groupSize: groupSize, latencyMs: latencyMs, cold: cold)
+            return Self(enabled: enabled, outcome: outcome, groupSize: groupSize, latencyMs: latencyMs, cold: cold,
+                        zhijuOutcome: zhijuOutcome, zhijuLatencyMs: zhijuLatencyMs)
         }
         guard candidateCount >= displayedIndices.count else { return fallback(.invalidCount) }
         guard displayedIndices.allSatisfy({ baseOrder.indices.contains($0) }) else { return fallback(.outOfRange) }
@@ -164,7 +192,8 @@ public struct ContextModelObservation: Codable, Equatable, Sendable {
             order.append(position)
         }
         order += Array(displayedIndices.count..<candidateCount)
-        return Self(outcome: .reordered, baseOrder: order, groupSize: groupSize, latencyMs: latencyMs, cold: cold)
+        return Self(outcome: .reordered, baseOrder: order, groupSize: groupSize, latencyMs: latencyMs, cold: cold,
+                    zhijuOutcome: zhijuOutcome, zhijuLatencyMs: zhijuLatencyMs)
     }
 
     func includingAppendedCandidate(count: Int, anomaly: (QualityAnomalySite) -> Void = { _ in }) -> Self {
@@ -172,11 +201,12 @@ public struct ContextModelObservation: Codable, Equatable, Sendable {
         guard count >= baseOrder.count, Set(baseOrder).count == baseOrder.count,
               baseOrder.allSatisfy({ baseOrder.indices.contains($0) }) else {
             anomaly(.appendedMismatch)
-            return Self(enabled: enabled, outcome: outcome, groupSize: groupSize, latencyMs: latencyMs, cold: cold)
+            return Self(enabled: enabled, outcome: outcome, groupSize: groupSize, latencyMs: latencyMs, cold: cold,
+                        zhijuOutcome: zhijuOutcome, zhijuLatencyMs: zhijuLatencyMs)
         }
         guard count > baseOrder.count else { return self }
         return Self(outcome: .reordered, baseOrder: baseOrder + Array(baseOrder.count..<count), groupSize: groupSize,
-                    latencyMs: latencyMs, cold: cold)
+                    latencyMs: latencyMs, cold: cold, zhijuOutcome: zhijuOutcome, zhijuLatencyMs: zhijuLatencyMs)
     }
 }
 
@@ -265,9 +295,9 @@ public final class ContextRankingScorer: @unchecked Sendable {
 
     /// C2/C1 order of a group whose first is `texts[0]` (`agent_ime_core::ranking`, shared
     /// with the Windows host): another reading or length leads only when its score - 6 x
-    /// rank beats the first, same-reading homophones swap by score - 2 x rank, and the
-    /// owner's settled habits keep their first.
-    public static func groupOrder(texts: [String], scores: [Double], homophone: [Bool]) -> [Int] {
+    /// rank beats the first. Homophones use score - 2 x rank without Han context;
+    /// with Han context the prior is capped at two. Settled habits keep their first.
+    public static func groupOrder(texts: [String], scores: [Double], homophone: [Bool], context: String = "", contextualPriorAllowed: Bool = true) -> [Int] {
         precondition(texts.count == scores.count && scores.count == homophone.count)
         let joined = Array(texts.joined(separator: "\t").utf8)
         let flags = homophone.map { UInt8($0 ? 1 : 0) }
@@ -276,8 +306,9 @@ public final class ContextRankingScorer: @unchecked Sendable {
             scores.withUnsafeBufferPointer { score in
                 flags.withUnsafeBufferPointer { flag in
                     order.withUnsafeMutableBufferPointer { out in
-                        aim_ranking_group_order(text.baseAddress, text.count, score.baseAddress, flag.baseAddress,
-                                                scores.count, out.baseAddress)
+                        let hasContext = contextualPriorAllowed && context.unicodeScalars.contains { (0x3400...0x9fff).contains($0.value) }
+                        return aim_ranking_contextual_group_order(text.baseAddress, text.count, score.baseAddress, flag.baseAddress,
+                                                scores.count, hasContext ? 1 : 0, out.baseAddress)
                     }
                 }
             }
@@ -578,7 +609,7 @@ struct ContextRankingSession {
     /// `cold` marks a call that starts on a clocked-down engine (no inference for over a
     /// second). Its slowness says nothing about the machine, so it never moves the
     /// consecutive counter that pauses the model.
-    mutating func order(context: String, candidates: [String], startedNanoseconds: UInt64? = nil, cold: Bool = false, homophone: [Bool]? = nil, apply: ([Int]) -> Bool = { _ in true }, score: (String, [String]) throws -> [Double]) -> [Int]? {
+    mutating func order(context: String, candidates: [String], startedNanoseconds: UInt64? = nil, cold: Bool = false, homophone: [Bool]? = nil, contextualPriorAllowed: Bool = true, apply: ([Int]) -> Bool = { _ in true }, score: (String, [String]) throws -> [Double]) -> [Int]? {
         guard enabled else { lastOutcome = .disabled; return nil }
         if let until = pausedUntil {
             guard now() >= until else { lastOutcome = .suspended; return nil }
@@ -606,7 +637,7 @@ struct ContextRankingSession {
         }
         let order = ContextRankingScorer.groupOrder(
             texts: candidates, scores: scores,
-            homophone: homophone ?? Array(repeating: true, count: candidates.count)
+            homophone: homophone ?? Array(repeating: true, count: candidates.count), context: context, contextualPriorAllowed: contextualPriorAllowed
         )
         lastElapsedNanoseconds = now() &- started
         if lastElapsedNanoseconds > Self.hardCapNanoseconds {

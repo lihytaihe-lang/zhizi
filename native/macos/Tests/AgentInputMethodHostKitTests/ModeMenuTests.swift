@@ -7,6 +7,35 @@ import XCTest
 /// pre-retirement preferences are ignored rather than applied.
 final class ModeMenuTests: XCTestCase {
     @MainActor
+    func testZhijuMenuPersistsAndUpdatesOtherLiveControllers() throws {
+        let previous = UserDefaults.standard.object(forKey: ZhijuPreferences.defaultsKey)
+        UserDefaults.standard.removeObject(forKey: ZhijuPreferences.defaultsKey)
+        defer { UserDefaults.standard.set(previous, forKey: ZhijuPreferences.defaultsKey) }
+        let directories = try RealZhixuProcessFixture.directories.get()
+        let client = SerializationTextInputClient()
+        let first = try XCTUnwrap(AgentInputController(
+            performanceSharedDirectory: directories.shared, userDirectory: directories.user,
+            appIdentifier: "test.zhiju-menu-first", client: client
+        ))
+        let second = try XCTUnwrap(AgentInputController(
+            performanceSharedDirectory: directories.shared, userDirectory: directories.user,
+            appIdentifier: "test.zhiju-menu-second", client: client
+        ))
+        defer { first.inputControllerWillClose(); second.inputControllerWillClose() }
+        let item = try XCTUnwrap(first.menu().items.first { $0.title == "知句（本地造词）" })
+        XCTAssertEqual(item.state, .on)
+        _ = first.perform(try XCTUnwrap(item.action), with: item)
+        XCTAssertFalse(ZhijuPreferences.isEnabled())
+        XCTAssertEqual(first.zhijuEnabledForTesting, false)
+        XCTAssertEqual(second.zhijuEnabledForTesting, false)
+        XCTAssertEqual(second.menu().items.first { $0.title == item.title }?.state, .off)
+        _ = first.perform(try XCTUnwrap(item.action), with: item)
+        XCTAssertTrue(ZhijuPreferences.isEnabled())
+        XCTAssertEqual(first.zhijuEnabledForTesting, true)
+        XCTAssertEqual(second.zhijuEnabledForTesting, true)
+    }
+
+    @MainActor
     func testMenuOmitsTheRetiredLearningAndWholeSwitchEntries() throws {
         let directories = try RealZhixuProcessFixture.directories.get()
         let client = SerializationTextInputClient()

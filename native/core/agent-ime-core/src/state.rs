@@ -331,6 +331,9 @@ pub trait Decoder: Send {
     fn context_complete_mask(&self) -> u32 {
         0
     }
+    fn contextual_prior_allowed(&self) -> bool { false }
+    fn abbreviation_alternatives(&self) -> Vec<String> { Vec::new() }
+    fn offer_abbreviation(&mut self, _text: &str) -> Result<(), i32> { Err(-10) }
     fn reorder_context_candidates(&mut self, _order: &[usize]) -> Result<(), i32> {
         Err(-10)
     }
@@ -352,6 +355,15 @@ pub trait Decoder: Send {
     /// The typed letters are not whole pinyin, so the first is a guess as well.
     fn composition_guessed(&self) -> bool {
         false
+    }
+    /// Successful sentence search results for this input/page only: text, consumed keys, full reading.
+    fn remember_zhiju_results(&mut self, _results: Vec<(String, usize, String)>) {}
+    /// One application transaction; returns the same page that validated the lead.
+    fn apply_zhiju_results(&mut self, results: Vec<(String, usize, String)>) -> (Result<(), i32>, DecoderSnapshot) {
+        let text = results.first().map(|(text, _, _)| text.clone());
+        self.remember_zhiju_results(results);
+        let status = text.map_or(Ok(()), |text| self.lead_with_composition(&text));
+        (status, self.snapshot())
     }
     fn lead_with_composition(&mut self, _text: &str) -> Result<(), i32> {
         Err(-10)
@@ -626,11 +638,66 @@ pub struct Session {
     previous_text_kind: PreviousTextKind,
     host_previous_text_kind: Option<PreviousTextKind>,
     host_preceding_text: Option<String>,
+    zhiju: Option<crate::zhixu::zhiju::Search>,
+    zhiju_identity: Arc<()>,
+    zhiju_generation: u64,
+    zhiju_pending: Option<(Arc<crate::zhixu::Index>, crate::zhixu::zhiju::Progress)>,
     pending_selection_event_id: Cell<u64>,
     secure_degraded: bool,
     /// Inline English started by a Shift+letter: following letters keep
     /// typing English (`LoRA`, `GPT4`) until Space/Enter commits it.
     inline_ascii: String,
+}
+
+/// An immutable input/dictionary capture; only the worker's progress is mutable.
+/// No decoder, session or process-global runtime is accessed during expansion.
+pub(crate) struct ZhijuSnapshot {
+    dictionary: Arc<crate::zhixu::Index>,
+    keys: String,
+    context: String,
+    identity: Arc<()>,
+    generation: u64,
+    progress: Option<crate::zhixu::zhiju::Progress>,
+    pub(crate) results: Option<Vec<crate::zhixu::zhiju::Candidate>>,
+}
+
+impl ZhijuSnapshot {
+    pub(crate) fn prepare(&self, search: &mut crate::zhixu::zhiju::Search) {
+        search.prepare(&self.dictionary);
+    }
+
+    pub(crate) fn step(&mut self, search: &mut crate::zhixu::zhiju::Search, beam: usize,
+        budget: std::time::Duration, scores: &[f32], mut request: impl FnMut(&[i32], usize, usize))
+        -> Result<Option<Vec<crate::zhixu::zhiju::Candidate>>, i32> {
+        use crate::zhixu::zhiju::SearchError;
+        let started = std::time::Instant::now();
+        if let Some(results) = &self.results {
+            return if scores.is_empty() { Ok(Some(results.clone())) } else { Err(-2) };
+        }
+        if self.progress.is_none() {
+            if !scores.is_empty() { return Err(-2); }
+            if (if beam == 0 { 8 } else { beam }).checked_mul(search.vocabulary_count()).is_none() { return Err(-2); }
+            if started.elapsed() >= budget {
+                self.results = Some(Vec::new());
+                return Ok(self.results.clone());
+            }
+            self.progress = Some(search.begin(&self.dictionary, &self.keys, &self.context, beam).map_err(|_| -2)?);
+        }
+        let progress = self.progress.as_mut().unwrap();
+        if !scores.is_empty() {
+            search.advance(&self.dictionary, progress, scores).map_err(|error| match error {
+                SearchError::Scorer => -5, _ => -2,
+            })?;
+        } else if progress.rows() != 0 && started.elapsed() < budget {
+            return Err(-2);
+        }
+        if started.elapsed() < budget && let Some(tokens) = progress.next_tokens(search) {
+            request(tokens, tokens.len() / 40, search.vocabulary_count());
+            return Ok(None);
+        }
+        self.results = Some(progress.finish());
+        Ok(self.results.clone())
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -839,6 +906,10 @@ impl Session {
             previous_text_kind: PreviousTextKind::None,
             host_previous_text_kind: None,
             host_preceding_text: None,
+            zhiju: None,
+            zhiju_identity: Arc::new(()),
+            zhiju_generation: 0,
+            zhiju_pending: None,
             pending_selection_event_id: Cell::new(0),
             secure_degraded: false,
             inline_ascii: String::new(),
@@ -891,7 +962,117 @@ impl Session {
     }
 
     pub fn apply_lexicon(&mut self, lexicon: Arc<MixerLexicon>) {
+        self.invalidate_zhiju_search();
         self.decoder.apply_lexicon(lexicon);
+    }
+
+    pub(crate) fn set_zhiju_vocab(&mut self, path: &std::path::Path) -> Result<(), String> {
+        let vocab = crate::zhixu::zhiju::Vocabulary::load(path)?;
+        let mut search = crate::zhixu::zhiju::Search::new(vocab);
+        // Prepare the dictionary caches with the vocabulary, before the timed key search.
+        if let Some(dictionary) = self.decoder.dictionary_snapshot() { search.prepare(&dictionary); }
+        self.invalidate_zhiju_search();
+        self.zhiju = Some(search);
+        Ok(())
+    }
+
+    fn invalidate_zhiju_search(&mut self) {
+        self.zhiju_pending = None;
+        self.zhiju_generation = self.zhiju_generation.wrapping_add(1).max(1);
+    }
+
+    pub(crate) fn zhiju_snapshot(&self) -> Result<ZhijuSnapshot, i32> {
+        if self.mode != InputMode::Chinese || self.secure_degraded || !self.inline_ascii.is_empty() { return Err(-3); }
+        let boundary = self.decoder.composition_boundary(BoundaryPurpose::Mixing).ok_or(-3)?;
+        if !crate::mixer::sentence_abbreviation(&boundary.unconfirmed_raw) { return Err(-3); }
+        Ok(ZhijuSnapshot {
+            dictionary: self.decoder.dictionary_snapshot().ok_or(-7)?,
+            keys: boundary.unconfirmed_raw,
+            context: self.host_preceding_text.clone().unwrap_or_default() + &boundary.confirmed,
+            identity: self.zhiju_identity.clone(), generation: self.zhiju_generation,
+            progress: None, results: None,
+        })
+    }
+
+    pub(crate) fn apply_zhiju_snapshot(&mut self, snapshot: &ZhijuSnapshot, promote: bool) -> Result<(i32, ResultModel), i32> {
+        if !Arc::ptr_eq(&self.zhiju_identity, &snapshot.identity) || self.zhiju_generation != snapshot.generation
+            || self.decoder.dictionary_snapshot().is_none_or(|dictionary| !Arc::ptr_eq(&dictionary, &snapshot.dictionary)) {
+            return Err(-8);
+        }
+        if promote {
+            let results = snapshot.results.as_ref().ok_or(-2)?;
+            let (status, page) = self.decoder.apply_zhiju_results(results.iter()
+                .map(|candidate| (candidate.text.clone(), candidate.consumed, candidate.reading.clone())).collect());
+            return Ok((status.err().unwrap_or(0), self.result_from_snapshot(page, false, String::new(), 0)));
+        }
+        Ok((0, self.current_result()))
+    }
+
+    pub(crate) fn zhiju_step(&mut self, generation: &mut u64, beam: usize, budget: std::time::Duration,
+        scores: &[f32], mut request: impl FnMut(&[i32], usize, usize))
+        -> Result<Option<Vec<crate::zhixu::zhiju::Candidate>>, i32> {
+        use crate::zhixu::zhiju::SearchError;
+        let started = std::time::Instant::now();
+        if *generation == 0 {
+            if !scores.is_empty() { return Err(-2); }
+            self.invalidate_zhiju_search();
+            if self.mode != InputMode::Chinese || self.secure_degraded || !self.inline_ascii.is_empty() { return Err(-3); }
+            let boundary = self.decoder.composition_boundary(BoundaryPurpose::Mixing).ok_or(-3)?;
+            if !crate::mixer::sentence_abbreviation(&boundary.unconfirmed_raw) { return Err(-3); }
+            let context = self.host_preceding_text.clone().unwrap_or_default() + &boundary.confirmed;
+            let dictionary = self.decoder.dictionary_snapshot().ok_or(-7)?;
+            let search = self.zhiju.as_mut().ok_or(-4)?;
+            if (if beam == 0 { 8 } else { beam }).checked_mul(search.vocabulary_count()).is_none() { return Err(-2); }
+            if started.elapsed() >= budget { return Ok(Some(Vec::new())); }
+            *generation = self.zhiju_generation;
+            let progress = search.begin(&dictionary, &boundary.unconfirmed_raw, &context, beam).map_err(|_| -2)?;
+            self.zhiju_pending = Some((dictionary, progress));
+        } else {
+            if *generation != self.zhiju_generation || self.zhiju_pending.is_none() { return Err(-8); }
+            let dictionary_generation = self.zhiju_pending.as_ref().unwrap().0.generation;
+            if self.decoder.dictionary_snapshot().is_none_or(|dictionary| dictionary.generation != dictionary_generation) {
+                self.invalidate_zhiju_search();
+                return Err(-8);
+            }
+        }
+        let search = self.zhiju.as_ref().ok_or(-4)?;
+        let (dictionary, progress) = self.zhiju_pending.as_mut().unwrap();
+        if !scores.is_empty() {
+            search.advance(dictionary, progress, scores).map_err(|error| match error {
+                SearchError::Scorer => -5, _ => -2,
+            })?;
+        } else if progress.rows() != 0 && started.elapsed() < budget {
+            return Err(-2);
+        }
+        // Apply a completed prediction first, even when the remaining budget is zero.
+        // The next request is emitted only after that expansion has been saved.
+        if started.elapsed() < budget && let Some(tokens) = progress.next_tokens(search) {
+            request(tokens, tokens.len() / 40, search.vocabulary_count());
+            return Ok(None);
+        }
+        Ok(Some(progress.finish()))
+    }
+
+    pub(crate) fn zhiju_search(&mut self, beam: usize, budget: std::time::Duration,
+        scorer: impl FnMut(&[i32], usize, usize, &mut [f32], usize) -> Result<(), ()>)
+        -> Result<Vec<crate::zhixu::zhiju::Candidate>, i32> {
+        use crate::zhixu::zhiju::SearchError;
+        self.invalidate_zhiju_search();
+        let started = std::time::Instant::now();
+        if self.mode != InputMode::Chinese || self.secure_degraded || !self.inline_ascii.is_empty() {
+            return Err(-3);
+        }
+        let boundary = self.decoder.composition_boundary(BoundaryPurpose::Mixing).ok_or(-3)?;
+        if !crate::mixer::sentence_abbreviation(&boundary.unconfirmed_raw) { return Err(-3); }
+        let context = self.host_preceding_text.clone().unwrap_or_default() + &boundary.confirmed;
+        let dictionary = self.decoder.dictionary_snapshot().ok_or(-7)?;
+        self.zhiju.as_mut().ok_or(-4)?.run(&dictionary, &boundary.unconfirmed_raw, &context, beam,
+            budget.saturating_sub(started.elapsed()), scorer)
+            .map_err(|error| match error {
+                SearchError::NotApplicable => -3,
+                SearchError::Scorer => -5,
+                SearchError::Invalid => -2,
+            })
     }
 
     pub fn context_group_mask(&self) -> u32 {
@@ -900,6 +1081,20 @@ impl Session {
 
     pub fn context_complete_mask(&self) -> u32 {
         self.decoder.context_complete_mask()
+    }
+
+    pub fn contextual_prior_allowed(&self) -> bool {
+        self.decoder.contextual_prior_allowed()
+    }
+
+    pub fn abbreviation_alternatives(&self) -> Vec<String> {
+        if !self.inline_ascii.is_empty() { return Vec::new(); }
+        self.decoder.abbreviation_alternatives()
+    }
+
+    pub fn offer_abbreviation(&mut self, text: &str) -> Result<(), i32> {
+        if !self.inline_ascii.is_empty() { return Err(-10); }
+        self.decoder.offer_abbreviation(text)
     }
 
     pub fn set_correction_settings(&mut self, settings: crate::ranking::CorrectionSettings) {
@@ -944,6 +1139,11 @@ impl Session {
 
     pub fn lead_with_composition(&mut self, text: &str) -> Result<(), i32> {
         self.decoder.lead_with_composition(text)
+    }
+
+    pub(crate) fn remember_zhiju_results(&mut self, results: &[crate::zhixu::zhiju::Candidate]) {
+        self.decoder.remember_zhiju_results(results.iter()
+            .map(|candidate| (candidate.text.clone(), candidate.consumed, candidate.reading.clone())).collect());
     }
 
     pub fn offer_composition(&mut self, text: &str) -> Result<(), i32> {
@@ -1022,6 +1222,7 @@ impl Session {
     }
 
     pub fn set_mode(&mut self, mode: InputMode) {
+        self.invalidate_zhiju_search();
         self.decoder.clear();
         self.mode = mode;
         if let Ok(mut modes) = app_modes().lock() {
@@ -1141,6 +1342,21 @@ impl Session {
         }
     }
 
+    fn take_raw_composition(&mut self) -> CompositionBoundary {
+        // Native decoders expose the selected Chinese and the remaining
+        // original spelling separately. Read that boundary before clearing;
+        // a raw commit must never select or learn the highlighted candidate.
+        let parts = self.decoder.composition_boundary(BoundaryPurpose::Editing)
+            .unwrap_or_else(|| CompositionBoundary {
+                confirmed: String::new(),
+                unconfirmed_raw: self.decoder.snapshot().raw_input,
+            });
+        // Enter's raw path also learns English words. Switching to a literal
+        // identifier must not learn its unfinished prefix as a separate word.
+        self.decoder.clear();
+        parts
+    }
+
     fn should_use_fullwidth(&self, immediate_context: PreviousTextKind) -> bool {
         match self.context_profile.punctuation_policy {
             PunctuationPolicy::FixedFullwidth => true,
@@ -1196,6 +1412,7 @@ impl Session {
     }
 
     pub fn process(&mut self, event: KeyEvent) -> ResultModel {
+        self.invalidate_zhiju_search();
         self.decoder.learning_key(&event, crate::personal_picks::now_ms());
         let host_previous_text_kind = self.host_previous_text_kind.take();
         let security = event.security;
@@ -1258,7 +1475,8 @@ impl Session {
 
         if event.kind == KeyKind::ShiftTap {
             let commit = if self.composing() {
-                self.current_or_raw(event.delivery_id)
+                let parts = self.take_raw_composition();
+                parts.confirmed + &parts.unconfirmed_raw
             } else {
                 String::new()
             };
@@ -1396,6 +1614,12 @@ impl Session {
     ) -> ResultModel {
         if text.is_empty() {
             return self.finish(false, String::new(), 0, security);
+        }
+        if text == "_" && self.composing() {
+            let parts = self.take_raw_composition();
+            self.inline_ascii = parts.unconfirmed_raw;
+            self.inline_ascii.push('_');
+            return self.finish(true, parts.confirmed, 0, security);
         }
         let mut chars = text.chars();
         let first = chars.next().unwrap_or_default();
@@ -2353,9 +2577,38 @@ mod tests {
         let mut session = session();
         type_text(&mut session, "ni");
         let toggled = session.process(event(KeyKind::ShiftTap, ""));
-        assert_eq!(toggled.commit_text, "你");
+        assert_eq!(toggled.commit_text, "ni");
         assert_eq!(toggled.mode, InputMode::DirectEnglish);
         assert!(!session.process(event(KeyKind::Text, "a")).consumed);
+    }
+
+    #[test]
+    fn keyboard037_shift_commits_raw_instead_of_highlighted_chinese() {
+        let mut value = session();
+        type_text(&mut value, "ni");
+        value.process(event(KeyKind::Down, ""));
+        let result = value.process(event(KeyKind::ShiftTap, ""));
+        assert_eq!(result.commit_text, "ni");
+        assert_eq!(result.mode, InputMode::DirectEnglish);
+        assert!(result.marked_text.is_empty() && result.candidates.is_empty());
+        assert_eq!(result.selection_event_id, 0);
+        assert!(!value.composing());
+    }
+
+    #[test]
+    fn keyboard037_underscore_opens_a_literal_identifier_without_selecting_chinese() {
+        let mut value = session();
+        type_text(&mut value, "ni");
+        let opened = value.process(shift_key("_"));
+        assert_eq!(opened.commit_text, "");
+        assert_eq!(opened.marked_text, "ni_");
+        assert!(opened.candidates.is_empty());
+        let continued = type_text(&mut value, "test2");
+        assert_eq!(continued.marked_text, "ni_test2");
+        let committed = value.process(event(KeyKind::Space, ""));
+        assert_eq!(committed.commit_text, "ni_test2");
+        assert_eq!(committed.mode, InputMode::Chinese);
+        assert!(committed.marked_text.is_empty());
     }
 
     #[test]
@@ -2939,7 +3192,7 @@ mod tests {
                     let mut value = session();
                     type_text(&mut value, "ni");
                     let result = value.process(event(KeyKind::ShiftTap, ""));
-                    result.commit_text == "你" && result.mode == InputMode::DirectEnglish
+                    result.commit_text == "ni" && result.mode == InputMode::DirectEnglish
                 }
                 "shift-letter" => {
                     let mut value = session();
@@ -3129,6 +3382,8 @@ mod tests {
         existing_key_test!(empty_digit_slot_on_chinese_page_is_consumed_without_mutating_composition);
         existing_key_test!(apostrophe_stays_in_composition_but_idle_quote_pairs);
         existing_key_test!(shift_commits_composition_and_toggles_mode);
+        existing_key_test!(keyboard037_shift_commits_raw_instead_of_highlighted_chinese);
+        existing_key_test!(keyboard037_underscore_opens_a_literal_identifier_without_selecting_chinese);
         existing_key_test!(command_option_control_pass_through_without_ending_composition);
         existing_key_test!(secure_and_unknown_are_marked_fail_closed);
         existing_key_test!(preceding_text_is_frozen_for_one_composition_and_cleared_for_secure_input);
@@ -3149,6 +3404,41 @@ mod tests {
         existing_key_test!(host_context_digits_and_space_select_displayed_order_while_enter_remains_raw);
         existing_key_test!(decimal_period_stays_ascii_while_chinese_sentence_period_is_full_width);
         existing_key_test!(frozen_context_punctuation_examples_are_stable);
+
+        #[test]
+        fn keyboard037_shift_keeps_selected_chinese_and_only_raw_suffix() {
+            fixture(|| {
+                let mut value = session();
+                type_text(&mut value, "nihaoma");
+                let shown = value.decoder.snapshot();
+                let slot = shown.candidates.iter().position(|item| item.text == "你好").unwrap();
+                let partial = value.process(event(KeyKind::Text, &(slot + 1).to_string()));
+                assert!(partial.commit_text.is_empty() && partial.marked_text.starts_with("你好"));
+                let committed = value.process(event(KeyKind::ShiftTap, ""));
+                assert_eq!(committed.commit_text, "你好ma");
+                assert_eq!(committed.mode, InputMode::DirectEnglish);
+                assert!(committed.marked_text.is_empty() && committed.candidates.is_empty());
+            });
+        }
+
+        #[test]
+        fn keyboard037_underscore_keeps_selected_chinese_once() {
+            fixture(|| {
+                let mut value = session();
+                type_text(&mut value, "nihaoma");
+                let shown = value.decoder.snapshot();
+                let slot = shown.candidates.iter().position(|item| item.text == "你好").unwrap();
+                value.process(event(KeyKind::Text, &(slot + 1).to_string()));
+                let opened = value.process(shift_key("_"));
+                assert_eq!(opened.commit_text, "你好");
+                assert_eq!(opened.marked_text, "ma_");
+                let continued = type_text(&mut value, "test");
+                assert_eq!(continued.marked_text, "ma_test");
+                let committed = value.process(event(KeyKind::ShiftTap, ""));
+                assert_eq!(committed.commit_text, "ma_test");
+                assert!(committed.marked_text.is_empty());
+            });
+        }
         existing_key_test!(secure_and_unknown_security_states_disable_context_routing);
         existing_key_test!(no_chinese_page_allows_alphanumeric_digit_extension);
         existing_key_test!(blacklist_action_is_exact_and_secure_unknown_fail_closed);

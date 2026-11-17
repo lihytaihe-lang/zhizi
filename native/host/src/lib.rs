@@ -9,6 +9,7 @@
 pub mod quality;
 pub mod ranking;
 pub mod settings;
+pub mod zhiju;
 
 /// The learning provider: Zhixu only. The retired Rime rule stays rejected by the
 /// core ABI (`aim_session_set_learning(0)` answers -2).
@@ -852,7 +853,7 @@ mod page_texts_tests {
             let view = apply_scores(host, view, Some(("再等我一下", 40.0)), None);
             assert_eq!(host.observation.outcome, "composed");
             assert_eq!(view.candidates[0].text, "再等我一下");
-            assert_eq!(view.candidates[0].comment, "备选 · 顺手·知序");
+            assert_eq!(view.candidates[0].comment, agent_ime_core::ranking::COMPOSITION_COMMENT);
             assert_core_page(host, &view);
         });
     }

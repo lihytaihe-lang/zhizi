@@ -42,6 +42,10 @@ const internalSourcePaths = new Set([
   "src-tauri/src/skin_catalog.rs",
   "src-tauri/src/skin_packages.rs",
   "src-tauri/src/context_model.rs",
+  // Record paging/serialization and its fixtures are implementation vocabulary.
+  "src-tauri/src/quality_log.rs",
+  "src-tauri/src/quality_records.rs",
+  "src-tauri/src/quality_records_tests.rs",
 ]);
 // This page records the generator's own before/after terms and checksums.
 // Counting it would make the evidence mutate the surface it is proving.

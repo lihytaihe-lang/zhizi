@@ -38,6 +38,8 @@ HAN_CHAR = re.compile(r"[一-鿿]")
 RUN_SOURCE = "deepseek-flash generation, 3-pass review"
 OWNER_SOURCE = "owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked"
 # Everyday colloquial words the owner typed that the DeepSeek pass dropped as dialect/narrow (11-06); the owner confirmed them as ordinary speech.
+PATTERN_SOURCE = "rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed"
+REVIEWED_COMPOUND_SOURCE = "reviewed productive compounds (quality/corpus/coverage-compounds-0.3.34.tsv), no usage-frequency evidence"
 OWNER_CONFIRMED_SOURCE = "owner input records (owner-approved for public use), owner-confirmed colloquial, not DeepSeek-approved"
 
 
@@ -50,7 +52,7 @@ def first_choice_top(existing):
     return top
 
 
-def owner_row(text, reading, occurrences, seen, existing, top, stats):
+def owner_row(text, reading, occurrences, seen, existing, top, stats, *, numeral_unit=False):
     """One owner-sourced candidate through the merge rules; shared with append_owner_words.py.
 
     Returns (row, reason): row is the provenance-shaped tuple to keep, or None; reason is
@@ -68,7 +70,7 @@ def owner_row(text, reading, occurrences, seen, existing, top, stats):
         stats["duplicate_across_runs"] += 1
         return None, None
     seen.add(text)
-    if NUMERALS.search(text):
+    if NUMERALS.search(text) and not numeral_unit:
         stats["spelled_out_numbers"] += 1
         return None, None
     if text in existing:

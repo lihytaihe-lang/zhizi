@@ -1,4 +1,30 @@
 #[test]
+fn contextual_prior_retains_one_matching_pick_without_a_new_hard_lock() {
+    let mut mixer = MixerDecoder::new(Box::new(ListDecoder::with("jishi", &[
+        ("几十", "ji shi"), ("即使", "ji shi"), ("及时", "ji shi")])), "public039".into());
+    mixer.configure_learning(crate::zhixu::learning::LearningMode::Zhixu).unwrap();
+    assert!(mixer.contextual_prior_allowed());
+    mixer.learning.remember_for_test("shi shi", "实时", personal_picks::now_ms());
+    assert!(mixer.contextual_prior_allowed(), "another reading must not disable the contextual prior");
+    mixer.learning.remember_for_test("ji shi", "几十", personal_picks::now_ms());
+    assert_eq!(mixer.snapshot().candidates[0].text, "几十");
+    assert!(!mixer.contextual_prior_allowed(), "one selected first keeps the original positional prior");
+    assert_eq!(ranking::model_first_order(&[-10.0, -20.0, 0.0], &[true; 3])[0], 2,
+        "the legacy soft prior still lets sufficiently strong model evidence lead");
+}
+
+#[test]
+fn contextual_prior_preserves_global_learning_imported_from_another_app() {
+    let mut mixer = MixerDecoder::new(Box::new(ListDecoder::with("jishi", &[
+        ("几十", "ji shi"), ("即使", "ji shi"), ("及时", "ji shi")])), "public039".into());
+    mixer.configure_learning(crate::zhixu::learning::LearningMode::Zhixu).unwrap();
+    let choice = Choice { app: "another-app".into(), raw: "jishi".into(), reading: "ji shi".into(),
+        text: "几十".into(), target: 0, count: 1, last_ms: personal_picks::now_ms(), alternatives: vec!["及时".into()] };
+    mixer.learning.import_choices(vec![choice.clone()]);
+    assert!(!mixer.contextual_prior_allowed(), "import_choices created a matching global learned entry");
+}
+
+#[test]
 fn learning_whole_words_beat_partial_only_after_learning() {
     use crate::zhixu::learning::LearningMode;
     for (raw, partial, whole, reading) in [("zaigao", "再", "再搞", "zai gao"), ("caiwo", "裁", "裁我", "cai wo")] {

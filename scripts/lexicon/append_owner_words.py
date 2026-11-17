@@ -27,8 +27,10 @@ ROOT = Path(__file__).resolve().parents[2]
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from build_general_lexicon import existing_entries  # noqa: E402
-from export_new_words import HAN_CHAR, OWNER_CONFIRMED_SOURCE, first_choice_top, owner_row, provenance_line, run_row  # noqa: E402
+from export_new_words import HAN_CHAR, OWNER_CONFIRMED_SOURCE, PATTERN_SOURCE, first_choice_top, owner_row, provenance_line, run_row  # noqa: E402
 from check_contribution import SYLLABLES  # noqa: E402
+from export_new_words import REVIEWED_COMPOUND_SOURCE  # noqa: E402
+from gen_numeral_unit_words import matches_word  # noqa: E402
 
 DICT_NAME = "agent_newwords.dict.yaml"
 # added under the existing header notes once owner-sourced words are appended
@@ -57,10 +59,14 @@ def main():
                     help="owner input records; columns text/reading/occurrences/review, as in export_new_words.py")
     ap.add_argument("--run-words", metavar="TSV",
                     help="gen_category_words.py new_words.tsv (text/reading/year/domain/wiki/synth); merged with the category-word rules")
+    ap.add_argument("--reviewed-compounds", metavar="TSV",
+                    help="reviewed text/reading/kind/reason rows; numeral-unit or X制, weight 250, no fabricated usage counts")
     ap.add_argument("--rime", default=str(ROOT / "native/resources/Rime"))
     ap.add_argument("--provenance", default=str(ROOT / "quality/corpus/agent-newwords-provenance.tsv"))
     ap.add_argument("--owner-confirmed", action="store_true",
                     help="label the --owner-sourced rows as owner-confirmed colloquial words that the DeepSeek pass dropped")
+    ap.add_argument("--pattern-generated", action="store_true",
+                    help="label the --owner-sourced rows as rule-generated numeral x measure-word words (not owner records)")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
@@ -92,8 +98,21 @@ def main():
     top = first_choice_top(existing)
 
     new_rows, stats, seen = [], Counter(), set()
-    if not (args.owner_sourced or args.run_words):
-        ap.error("give --owner-sourced or --run-words")
+    if not (args.owner_sourced or args.run_words or args.reviewed_compounds):
+        ap.error("give --owner-sourced, --run-words or --reviewed-compounds")
+    if args.reviewed_compounds:
+        with open(args.reviewed_compounds, encoding="utf-8") as fh:
+            for number, r in enumerate(csv.DictReader(fh, delimiter="\t"), 2):
+                text, reading = r["text"], r["reading"]
+                numeral_unit = r["kind"] == "numeral-unit" and matches_word(text, reading)
+                suffix = r["kind"] == "X制" and 3 <= len(text) <= 4 and text.endswith("制") and reading.endswith(" zhi")
+                if not r["reason"].strip() or not (numeral_unit or suffix):
+                    raise ValueError(f"{args.reviewed_compounds}:{number}: compound or reading outside reviewed grammar")
+                row, reason = owner_row(text, reading, "0", seen, existing, top, stats, numeral_unit=numeral_unit)
+                if reason:
+                    raise ValueError(f"{args.reviewed_compounds}:{number}: {reason}")
+                if row:
+                    new_rows.append(row[:3] + ("project", "coverage-gap", "0", "0", REVIEWED_COMPOUND_SOURCE))
     if args.owner_sourced:
         with open(args.owner_sourced, encoding="utf-8") as fh:
             for number, r in enumerate(csv.DictReader(fh, delimiter="\t"), 2):  # header on line 1
@@ -101,6 +120,8 @@ def main():
                 if row:
                     if args.owner_confirmed:
                         row = row[:7] + (OWNER_CONFIRMED_SOURCE,)
+                    elif args.pattern_generated:
+                        row = row[:7] + (PATTERN_SOURCE,)
                     new_rows.append(row)
                 elif reason:
                     print(f"{args.owner_sourced}:{number}: {reason}", file=sys.stderr)

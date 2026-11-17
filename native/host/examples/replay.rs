@@ -7,6 +7,10 @@
 use std::io::Write;
 use zhizi_host::{Host, HostConfig, Key};
 
+fn supported_raw(raw: &str) -> bool {
+    raw.bytes().all(|b| b.is_ascii_lowercase() || b == b'\'')
+}
+
 fn main() {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
     let (shared, user, events, out) = (&arguments[0], &arguments[1], &arguments[2], &arguments[3]);
@@ -27,7 +31,7 @@ fn main() {
         let raw = event["pinyin"].as_str().unwrap_or_default();
         let chosen = event["selectedText"].as_str().unwrap_or_default();
         let context = event["precedingText"].as_str().unwrap_or_default();
-        if raw.len() < std::env::var("ZHIZI_MIN_KEYS").ok().and_then(|v| v.parse().ok()).unwrap_or(4) || chosen.is_empty() || !raw.bytes().all(|b| b.is_ascii_lowercase()) {
+        if raw.len() < std::env::var("ZHIZI_MIN_KEYS").ok().and_then(|v| v.parse().ok()).unwrap_or(4) || chosen.is_empty() || !supported_raw(raw) {
             continue;
         }
         if !seen.insert((raw.to_string(), context.to_string(), chosen.to_string())) {
@@ -73,4 +77,12 @@ fn main() {
         });
         writeln!(output, "{record}").unwrap();
     }
+}
+
+#[test]
+fn replay_accepts_explicit_syllable_boundaries() {
+    assert!(supported_raw("que'shi's'shou"));
+    assert!(supported_raw("queshishunsh"));
+    assert!(!supported_raw("que1shi"));
+    assert!(!supported_raw("确实"));
 }

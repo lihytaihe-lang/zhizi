@@ -95,6 +95,18 @@
       "status": "locked",
       "bytes": 1105,
       "sha256": "1e6c90014b4912815c296ee64bb6f6280af47e6d4c5d80e86232dfc5defe764c"
+    },
+    {
+      "component": "Zhizi word bigram table notice",
+      "versionOrCommit": "word-bigram-v1",
+      "license": "CC BY-SA 4.0 (Wikipedia-derived statistics); Apache-2.0 (ASAP); CC BY 2.0 FR (Tatoeba)",
+      "sourceUrl": null,
+      "sourceKind": "project-authored",
+      "repositoryPath": "native/resources/WordBigram/NOTICE.txt",
+      "bundleFilename": "word-bigram-NOTICE.txt",
+      "status": "locked",
+      "bytes": 749,
+      "sha256": "e46b55605f55e5d6faf2cd5ec8ad62bcf41196b01cc9bd946986738e14a7bb68"
     }
   ]
 }

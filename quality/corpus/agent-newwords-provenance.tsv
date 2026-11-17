@@ -3658,6 +3658,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 登机箱	deng ji xiang	250	物品	鞋帽、包和配饰	0	88	deepseek-flash generation, 3-pass review	project-authored
 登记在册	deng ji zai ce	60	jieba	201	0	0	jieba 0.42.1 dict.txt (MIT), DeepSeek-judged, 2-pass	MIT
 等级制	deng ji zhi	60	jieba	163	0	0	jieba 0.42.1 dict.txt (MIT), DeepSeek-judged, 2-pass	MIT
+登记制	deng ji zhi	59	project	coverage-gap	0	0	reviewed productive compounds (quality/corpus/coverage-compounds-0.3.34.tsv), no usage-frequency evidence	project-authored
 等结果	deng jie guo	400	常用的动作、做法和动词短语	医疗看病与健康	8	35	deepseek-flash generation, 3-pass review	project-authored
 瞪羚	deng ling	250	动物	野生哺乳动物	187	0	deepseek-flash generation, 3-pass review	project-authored
 瞪羚企业	deng ling qi ye	400	2023	社会热点、政策与经济	1	0	deepseek-flash generation, 3-pass review	project-authored
@@ -4754,6 +4755,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 耳膜	er mo	250	身体与健康	人体部位和器官	32	0	deepseek-flash generation, 3-pass review	project-authored
 耳旁风	er pang feng	60	jieba	26	0	0	jieba 0.42.1 dict.txt (MIT), DeepSeek-judged, 2-pass	MIT
 耳饰	er shi	400	日常口语里常说的说法和短语	美妆、穿搭与个人护理	29	0	deepseek-flash generation, 3-pass review	project-authored
+二十几天	er shi ji tian	250	project	coverage-gap	0	0	reviewed productive compounds (quality/corpus/coverage-compounds-0.3.34.tsv), no usage-frequency evidence	project-authored
 二手货	er shou huo	60	jieba	14	0	0	jieba 0.42.1 dict.txt (MIT), DeepSeek-judged, 2-pass	MIT
 二手杰作	er shou jie zuo	250	2024	游戏、影视与娱乐	0	0	deepseek-flash generation, 3-pass review	project-authored
 二手经济	er shou jing ji	250	2026	社会热点、政策与经济	0	0	deepseek-flash generation, 3-pass review	project-authored
@@ -8073,6 +8075,71 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 活字典	huo zi dian	60	jieba	5	0	0	jieba 0.42.1 dict.txt (MIT), DeepSeek-judged, 2-pass	MIT
 集安	ji an	122	景区	辽宁、吉林、黑龙江的旅游景区、名山、湖泊、古镇、古城和寺庙道观（游客常去的）	118	0	deepseek-flash generation, 3-pass review	project-authored
 系安全带	ji an quan dai	400	日常口语里常说的说法和短语	交通出行与驾车	27	3	deepseek-flash generation, 3-pass review	project-authored
+几百倍	ji bai bei	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百本	ji bai ben	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百笔	ji bai bi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百遍	ji bai bian	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百步	ji bai bu	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百部	ji bai bu	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百层	ji bai ceng	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百场	ji bai chang	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百处	ji bai chu	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百次	ji bai ci	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百点	ji bai dian	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百度	ji bai du	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百吨	ji bai dun	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百份	ji bai fen	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百分	ji bai fen	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百分钟	ji bai fen zhong	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百封	ji bai feng	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百伏	ji bai fu	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百个点	ji bai ge dian	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百个人	ji bai ge ren	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百个月	ji bai ge yue	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百个字	ji bai ge zi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百个字符	ji bai ge zi fu	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百根	ji bai gen	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百公斤	ji bai gong jin	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百公里	ji bai gong li	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百行	ji bai hang	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百行代码	ji bai hang dai ma	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百号	ji bai hao	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百毫安	ji bai hao an	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百毫米	ji bai hao mi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百毫秒	ji bai hao miao	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百赫兹	ji bai he zi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百家	ji bai jia	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百件	ji bai jian	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百斤	ji bai jin	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百句	ji bai ju	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百局	ji bai ju	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百块钱	ji bai kuai qian	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百里	ji bai li	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百厘米	ji bai li mi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百辆	ji bai liang	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百轮	ji bai lun	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百秒	ji bai miao	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百名	ji bai ming	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百篇	ji bai pian	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百岁	ji bai sui	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百台	ji bai tai	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百套	ji bai tao	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百天	ji bai tian	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百条	ji bai tiao	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百条日志	ji bai tiao ri zhi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百瓦	ji bai wa	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百位	ji bai wei	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百项	ji bai xiang	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百小时	ji bai xiao shi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百页	ji bai ye	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百亿	ji bai yi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百元	ji bai yuan	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百张	ji bai zhang	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百兆	ji bai zhao	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百帧	ji bai zhen	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百只	ji bai zhi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百种	ji bai zhong	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几百周	ji bai zhou	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
 挤爆了	ji bao le	400	日常口语里常说的说法和短语	交通出行与驾车	0	11	deepseek-flash generation, 3-pass review	project-authored
 基本词汇	ji ben ci hui	60	jieba	9	0	0	jieba 0.42.1 dict.txt (MIT), DeepSeek-judged, 2-pass	MIT
 记笔记	ji bi ji	400	常用的动作、做法和动词短语	学校、学习与考试	5	5	deepseek-flash generation, 3-pass review	project-authored
@@ -8126,6 +8193,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 鸡粉	ji fen	250	食物	调味品和酱料	0	0	deepseek-flash generation, 3-pass review	project-authored
 积分器	ji fen qi	60	jieba	5	0	0	jieba 0.42.1 dict.txt (MIT), DeepSeek-judged, 2-pass	MIT
 积分政策	ji fen zheng ce	400	2025	手机、汽车与科技硬件	0	1	deepseek-flash generation, 3-pass review	project-authored
+积分制	ji fen zhi	250	project	coverage-gap	0	0	reviewed productive compounds (quality/corpus/coverage-compounds-0.3.34.tsv), no usage-frequency evidence	project-authored
 急风暴雨	ji feng bao yu	60	jieba	17	0	0	jieba 0.42.1 dict.txt (MIT), DeepSeek-judged, 2-pass	MIT
 季风区	ji feng qu	60	jieba	47	0	0	jieba 0.42.1 dict.txt (MIT), DeepSeek-judged, 2-pass	MIT
 急风骤雨	ji feng zhou yu	60	jieba	8	0	0	jieba 0.42.1 dict.txt (MIT), DeepSeek-judged, 2-pass	MIT
@@ -8221,7 +8289,74 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 机器人同事	ji qi ren tong shi	250	2024	当年的年度十大流行语、年度热词、年度网络用语（如遥遥领先、情绪价值、松弛感、city不city 里的中文部分）	0	0	deepseek-flash generation, 3-pass review	project-authored
 机器人养老	ji qi ren yang lao	250	2026	社会热点、政策与经济	0	0	deepseek-flash generation, 3-pass review	project-authored
 机器审核	ji qi shen he	250	2024	互联网产品、平台与应用	0	0	deepseek-flash generation, 3-pass review	project-authored
+几千倍	ji qian bei	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千本	ji qian ben	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千笔	ji qian bi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千遍	ji qian bian	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千步	ji qian bu	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千部	ji qian bu	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千层	ji qian ceng	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千场	ji qian chang	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千处	ji qian chu	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千次	ji qian ci	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千点	ji qian dian	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千度	ji qian du	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千吨	ji qian dun	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千份	ji qian fen	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千分	ji qian fen	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千分钟	ji qian fen zhong	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千封	ji qian feng	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千伏	ji qian fu	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千个	ji qian ge	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千个点	ji qian ge dian	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千个人	ji qian ge ren	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千个月	ji qian ge yue	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千个字	ji qian ge zi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千个字符	ji qian ge zi fu	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千根	ji qian gen	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千公斤	ji qian gong jin	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千公里	ji qian gong li	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千行	ji qian hang	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千行代码	ji qian hang dai ma	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千号	ji qian hao	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千毫安	ji qian hao an	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千毫米	ji qian hao mi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千毫秒	ji qian hao miao	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千赫兹	ji qian he zi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千家	ji qian jia	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千件	ji qian jian	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千斤	ji qian jin	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千句	ji qian ju	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千局	ji qian ju	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千块钱	ji qian kuai qian	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千里	ji qian li	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千厘米	ji qian li mi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千辆	ji qian liang	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千轮	ji qian lun	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千米	ji qian mi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千秒	ji qian miao	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千名	ji qian ming	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千篇	ji qian pian	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千人	ji qian ren	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
 季前赛	ji qian sai	250	文化娱乐	体育项目和赛事	92	0	deepseek-flash generation, 3-pass review	project-authored
+几千岁	ji qian sui	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千台	ji qian tai	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千套	ji qian tao	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千天	ji qian tian	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千条日志	ji qian tiao ri zhi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千瓦	ji qian wa	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千位	ji qian wei	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千项	ji qian xiang	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千小时	ji qian xiao shi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千页	ji qian ye	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千亿	ji qian yi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千元	ji qian yuan	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千张	ji qian zhang	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千兆	ji qian zhao	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千帧	ji qian zhen	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千只	ji qian zhi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千种	ji qian zhong	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几千周	ji qian zhou	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
 继任计划	ji ren ji hua	250	2024	职场与办公	0	0	deepseek-flash generation, 3-pass review	project-authored
 祭日	ji ri	250	生活	节日、习俗和日期的叫法	93	0	deepseek-flash generation, 3-pass review	project-authored
 鸡肉串	ji rou chuan	250	食物	火锅和烧烤食材	5	0	deepseek-flash generation, 3-pass review	project-authored
@@ -8235,16 +8370,76 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 脊神经	ji shen jing	60	jieba	31	0	0	jieba 0.42.1 dict.txt (MIT), DeepSeek-judged, 2-pass	MIT
 寄生蜂	ji sheng feng	250	动物	昆虫和小虫子	17	0	deepseek-flash generation, 3-pass review	project-authored
 极石	ji shi	400	2023	国产新能源汽车品牌、车型和智驾系统的中文名（如问界、尊界、智界、极氪、小米汽车）	4	0	deepseek-flash generation, 3-pass review	project-authored
+几十倍	ji shi bei	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十本	ji shi ben	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十笔	ji shi bi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十遍	ji shi bian	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十步	ji shi bu	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十部	ji shi bu	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十层	ji shi ceng	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十场	ji shi chang	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十处	ji shi chu	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十次	ji shi ci	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十点	ji shi dian	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
 即时电商	ji shi dian shang	250	2024	社会热点、政策与经济	0	0	deepseek-flash generation, 3-pass review	project-authored
+几十度	ji shi du	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十吨	ji shi dun	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十份	ji shi fen	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十分	ji shi fen	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十分钟	ji shi fen zhong	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十封	ji shi feng	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十伏	ji shi fu	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十个点	ji shi ge dian	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十个人	ji shi ge ren	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十个月	ji shi ge yue	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十个字	ji shi ge zi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十个字符	ji shi ge zi fu	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十根	ji shi gen	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十公斤	ji shi gong jin	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十公里	ji shi gong li	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十行	ji shi hang	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十行代码	ji shi hang dai ma	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十号	ji shi hao	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十毫安	ji shi hao an	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十毫米	ji shi hao mi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十毫秒	ji shi hao miao	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十赫兹	ji shi he zi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
 挤时间	ji shi jian	400	日常口语里常说的说法和短语	工作职场与开会	2	0	deepseek-flash generation, 3-pass review	project-authored
+几十件	ji shi jian	399	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十斤	ji shi jin	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十句	ji shi ju	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十局	ji shi ju	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十块钱	ji shi kuai qian	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十里	ji shi li	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十厘米	ji shi li mi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十辆	ji shi liang	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
 即时零售	ji shi ling shou	250	2023	社会热点、政策与经济	0	0	deepseek-flash generation, 3-pass review	project-authored
+几十轮	ji shi lun	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
 即时满足	ji shi man zu	400	2023	消费、生活方式与旅游	1	1	deepseek-flash generation, 3-pass review	project-authored
 集市贸易	ji shi mao yi	60	jieba	21	0	0	jieba 0.42.1 dict.txt (MIT), DeepSeek-judged, 2-pass	MIT
+几十秒	ji shi miao	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十名	ji shi ming	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
 即时配送	ji shi pei song	400	2024	互联网产品、平台与应用	3	1	deepseek-flash generation, 3-pass review	project-authored
+几十篇	ji shi pian	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十岁	ji shi sui	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十台	ji shi tai	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十套	ji shi tao	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十天	ji shi tian	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十条日志	ji shi tiao ri zhi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
 基石投资	ji shi tou zi	400	2024	金融与投资	5	1	deepseek-flash generation, 3-pass review	project-authored
 即时团购	ji shi tuan gou	250	2026	消费、生活方式与旅游	0	0	deepseek-flash generation, 3-pass review	project-authored
+几十瓦	ji shi wa	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十位	ji shi wei	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十项	ji shi xiang	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
 即时消费	ji shi xiao fei	400	2024	消费、生活方式与旅游	1	0	deepseek-flash generation, 3-pass review	project-authored
+几十小时	ji shi xiao shi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
 计时芯片	ji shi xin pian	250	2025	健康与运动	0	0	deepseek-flash generation, 3-pass review	project-authored
+几十页	ji shi ye	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十张	ji shi zhang	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十兆	ji shi zhao	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十帧	ji shi zhen	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十只	ji shi zhi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几十周	ji shi zhou	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
 技术产业	ji shu chan ye	60	jieba	11	0	0	jieba 0.42.1 dict.txt (MIT), DeepSeek-judged, 2-pass	MIT
 技术犯规	ji shu fan gui	250	文化娱乐	球类运动的术语	19	0	deepseek-flash generation, 3-pass review	project-authored
 技术岗	ji shu gang	400	2026	职场与办公	6	0	deepseek-flash generation, 3-pass review	project-authored
@@ -8276,6 +8471,76 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 鸡腿蘑	ji tui mo	250	植物	菌菇	0	0	deepseek-flash generation, 3-pass review	project-authored
 鸡娃	ji wa	400	常用的动作、做法和动词短语	人际关系与情绪感受	0	4	deepseek-flash generation, 3-pass review	project-authored
 吉娃娃	ji wa wa	250	动物	宠物狗的品种	31	0	deepseek-flash generation, 3-pass review	project-authored
+几万倍	ji wan bei	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万本	ji wan ben	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万笔	ji wan bi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万遍	ji wan bian	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万步	ji wan bu	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万部	ji wan bu	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万层	ji wan ceng	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万场	ji wan chang	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万处	ji wan chu	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万次	ji wan ci	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万点	ji wan dian	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万度	ji wan du	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万吨	ji wan dun	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万份	ji wan fen	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万分	ji wan fen	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万分钟	ji wan fen zhong	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万封	ji wan feng	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万伏	ji wan fu	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万个	ji wan ge	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万个点	ji wan ge dian	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万个人	ji wan ge ren	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万个月	ji wan ge yue	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万个字	ji wan ge zi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万个字符	ji wan ge zi fu	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万根	ji wan gen	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万公斤	ji wan gong jin	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万公里	ji wan gong li	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万行	ji wan hang	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万行代码	ji wan hang dai ma	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万号	ji wan hao	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万毫安	ji wan hao an	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万毫米	ji wan hao mi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万毫秒	ji wan hao miao	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万赫兹	ji wan he zi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万家	ji wan jia	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万件	ji wan jian	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万斤	ji wan jin	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万句	ji wan ju	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万局	ji wan ju	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万块	ji wan kuai	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万块钱	ji wan kuai qian	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万里	ji wan li	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万厘米	ji wan li mi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万辆	ji wan liang	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万轮	ji wan lun	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万米	ji wan mi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万秒	ji wan miao	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万名	ji wan ming	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万年	ji wan nian	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万篇	ji wan pian	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万人	ji wan ren	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万岁	ji wan sui	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万台	ji wan tai	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万套	ji wan tao	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万天	ji wan tian	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万条	ji wan tiao	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万条日志	ji wan tiao ri zhi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万瓦	ji wan wa	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万位	ji wan wei	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万项	ji wan xiang	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万小时	ji wan xiao shi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万页	ji wan ye	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万亿	ji wan yi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万元	ji wan yuan	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万张	ji wan zhang	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万兆	ji wan zhao	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万帧	ji wan zhen	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万只	ji wan zhi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万种	ji wan zhong	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+几万周	ji wan zhou	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
 机位经济	ji wei jing ji	250	2024	消费、生活方式与旅游	0	0	deepseek-flash generation, 3-pass review	project-authored
 鸡尾酒会	ji wei jiu hui	60	jieba	10	0	0	jieba 0.42.1 dict.txt (MIT), DeepSeek-judged, 2-pass	MIT
 肌无力	ji wu li	60	jieba	23	0	0	jieba 0.42.1 dict.txt (MIT), DeepSeek-judged, 2-pass	MIT
@@ -15618,6 +15883,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 三人篮球	san ren lan qiu	250	文化娱乐	体育项目和赛事	13	0	deepseek-flash generation, 3-pass review	project-authored
 三色堇	san se jin	250	植物	花卉	8	0	deepseek-flash generation, 3-pass review	project-authored
 散射光	san she guang	60	jieba	39	0	0	jieba 0.42.1 dict.txt (MIT), DeepSeek-judged, 2-pass	MIT
+三十几分钟	san shi ji fen zhong	250	project	coverage-gap	0	0	reviewed productive compounds (quality/corpus/coverage-compounds-0.3.34.tsv), no usage-frequency evidence	project-authored
 三室一厅	san shi yi ting	60	jieba	12	0	0	jieba 0.42.1 dict.txt (MIT), DeepSeek-judged, 2-pass	MIT
 三刷	san shua	400	2025	游戏、影视与娱乐	7	0	deepseek-flash generation, 3-pass review	project-authored
 三双	san shuang	250	文化娱乐	球类运动的术语	85	63	deepseek-flash generation, 3-pass review	project-authored
@@ -16142,6 +16408,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 审批流	shen pi liu	400	2026	职场与办公	7	345	deepseek-flash generation, 3-pass review	project-authored
 审批权	shen pi quan	60	jieba	17	0	0	jieba 0.42.1 dict.txt (MIT), DeepSeek-judged, 2-pass	MIT
 审批一下	shen pi yi xia	400	日常口语里常说的说法和短语	工作职场与开会	0	62	deepseek-flash generation, 3-pass review	project-authored
+审批制	shen pi zhi	250	project	coverage-gap	0	0	reviewed productive compounds (quality/corpus/coverage-compounds-0.3.34.tsv), no usage-frequency evidence	project-authored
 申请量	shen qing liang	60	jieba	20	0	0	jieba 0.42.1 dict.txt (MIT), DeepSeek-judged, 2-pass	MIT
 申请退款	shen qing tui kuan	400	常用的动作、做法和动词短语	吃喝与餐饮外卖	10	29	deepseek-flash generation, 3-pass review	project-authored
 申请执行	shen qing zhi xing	250	日常口语里常说的说法和短语	政务办事与法律常识	0	0	deepseek-flash generation, 3-pass review	project-authored
@@ -16417,10 +16684,60 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 视黄醇	shi huang chun	250	物品	化妆品和护肤品	16	0	deepseek-flash generation, 3-pass review	project-authored
 石灰粉	shi hui fen	60	jieba	6	0	0	jieba 0.42.1 dict.txt (MIT), DeepSeek-judged, 2-pass	MIT
 识货	shi huo	187	2025	App、小程序与互联网服务的中文名	3	0	deepseek-flash generation, 3-pass review	project-authored
+十几倍	shi ji bei	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几本	shi ji ben	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几笔	shi ji bi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几遍	shi ji bian	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几步	shi ji bu	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几部	shi ji bu	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几层	shi ji ceng	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几场	shi ji chang	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几点	shi ji dian	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几度	shi ji du	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几吨	shi ji dun	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几份	shi ji fen	253	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几封	shi ji feng	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几伏	shi ji fu	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几个点	shi ji ge dian	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几个月	shi ji ge yue	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几个字	shi ji ge zi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几个字符	shi ji ge zi fu	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几根	shi ji gen	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几公斤	shi ji gong jin	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
 世纪公园	shi ji gong yuan	250	景区	上海、江苏的旅游景区、名山、湖泊、古镇、古城和寺庙道观（游客常去的）	12	0	deepseek-flash generation, 3-pass review	project-authored
 实际工资	shi ji gong zi	60	jieba	21	0	0	jieba 0.42.1 dict.txt (MIT), DeepSeek-judged, 2-pass	MIT
+十几行	shi ji hang	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几行代码	shi ji hang dai ma	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几号	shi ji hao	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几毫安	shi ji hao an	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几毫米	shi ji hao mi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几毫秒	shi ji hao miao	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几赫兹	shi ji he zi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几家	shi ji jia	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几件	shi ji jian	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几斤	shi ji jin	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
 市集经济	shi ji jing ji	400	2023	消费、生活方式与旅游	2	0	deepseek-flash generation, 3-pass review	project-authored
+十几句	shi ji ju	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几局	shi ji ju	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几里	shi ji li	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几厘米	shi ji li mi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几辆	shi ji liang	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几轮	shi ji lun	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几名	shi ji ming	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几台	shi ji tai	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几套	shi ji tao	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几天	shi ji tian	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几条日志	shi ji tiao ri zhi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几瓦	shi ji wa	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几位	shi ji wei	160	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几项	shi ji xiang	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几小时	shi ji xiao shi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
 实际续航	shi ji xu hang	250	2024	手机、汽车与科技硬件	0	0	deepseek-flash generation, 3-pass review	project-authored
+十几页	shi ji ye	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几亿	shi ji yi	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几兆	shi ji zhao	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几帧	shi ji zhen	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
+十几周	shi ji zhou	400	owner	owner-gap	0	0	rule-generated numeral x measure-word combinations (scripts/lexicon/gen_numeral_unit_words.py), pinyin hand-listed	project-authored
 释迦	shi jia	250	植物	水果	1225	0	deepseek-flash generation, 3-pass review	project-authored
 石家大院	shi jia da yuan	250	景区	北京、天津、河北的旅游景区、名山、湖泊、古镇、古城和寺庙道观（游客常去的）	27	0	deepseek-flash generation, 3-pass review	project-authored
 释迦塔	shi jia ta	250	景区	中国著名的寺庙、道观、石窟和古塔	0	0	deepseek-flash generation, 3-pass review	project-authored
@@ -16445,6 +16762,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 屎壳郎	shi ke lang	250	动物	昆虫和小虫子	4	0	deepseek-flash generation, 3-pass review	project-authored
 市侩	shi kuai	60	jieba	23	0	0	jieba 0.42.1 dict.txt (MIT), DeepSeek-judged, 2-pass	MIT
 实况窗	shi kuang chuang	250	2024	互联网产品、平台与应用	0	0	deepseek-flash generation, 3-pass review	project-authored
+十来个人	shi lai ge ren	250	project	coverage-gap	0	0	reviewed productive compounds (quality/corpus/coverage-compounds-0.3.34.tsv), no usage-frequency evidence	project-authored
 史莱姆	shi lai mu	250	物品	玩具和游戏机	65	6	deepseek-flash generation, 3-pass review	project-authored
 适老化	shi lao hua	400	2023	社会热点、政策与经济	8	1	deepseek-flash generation, 3-pass review	project-authored
 适老化改造	shi lao hua gai zao	400	2026	社会热点、政策与经济	2	0	deepseek-flash generation, 3-pass review	project-authored
@@ -21622,6 +21940,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 摇钱树	yao qian shu	60	jieba	52	0	0	jieba 0.42.1 dict.txt (MIT), DeepSeek-judged, 2-pass	MIT
 邀请码	yao qing ma	400	owner	owner-gap	0	0	owner input records (owner-approved for public use), DeepSeek-reviewed, human-checked	project-authored
 邀请信	yao qing xin	60	jieba	7	0	0	jieba 0.42.1 dict.txt (MIT), DeepSeek-judged, 2-pass	MIT
+邀请制	yao qing zhi	250	project	coverage-gap	0	0	reviewed productive compounds (quality/corpus/coverage-compounds-0.3.34.tsv), no usage-frequency evidence	project-authored
 药球	yao qiu	400	2024	健康与运动	3	0	deepseek-flash generation, 3-pass review	project-authored
 尧山	yao shan	106	景区	山东、河南的旅游景区、名山、湖泊、古镇、古城和寺庙道观（游客常去的）	24	0	deepseek-flash generation, 3-pass review	project-authored
 腰伤	yao shang	60	jieba	14	0	0	jieba 0.42.1 dict.txt (MIT), DeepSeek-judged, 2-pass	MIT
@@ -22713,6 +23032,7 @@ text	reading	weight	year	domain	wiki_hits	synth_hits	source	license
 预约办理	yu yue ban li	400	常用的动作、做法和动词短语	政务办事与法律常识	2	0	deepseek-flash generation, 3-pass review	project-authored
 预约挂号	yu yue gua hao	400	常用的动作、做法和动词短语	医疗看病与健康	0	65	deepseek-flash generation, 3-pass review	project-authored
 预约码	yu yue ma	400	常见事物、物品、地点和机构的名称	微信聊天与社交网络	0	8	deepseek-flash generation, 3-pass review	project-authored
+预约制	yu yue zhi	250	project	coverage-gap	0	0	reviewed productive compounds (quality/corpus/coverage-compounds-0.3.34.tsv), no usage-frequency evidence	project-authored
 玉簪	yu zan	250	植物	花卉	36	1	deepseek-flash generation, 3-pass review	project-authored
 遇真宫	yu zhen gong	250	景区	湖北、湖南的旅游景区、名山、湖泊、古镇、古城和寺庙道观（游客常去的）	0	0	deepseek-flash generation, 3-pass review	project-authored
 预制菜	yu zhi cai	400	2023	社会热点、政策与经济	21	16	deepseek-flash generation, 3-pass review	project-authored

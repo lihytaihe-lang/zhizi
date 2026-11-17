@@ -24,7 +24,7 @@ use std::time::{Duration, SystemTime};
 
 pub(super) const FILE_NAME: &str = "agent_zhixu_index_cache_v1.bin";
 const MAGIC: &[u8; 4] = b"AZXI";
-pub(super) const CACHE_VERSION: u32 = 1;
+pub(super) const CACHE_VERSION: u32 = 2;
 /// The deployed dictionary text stays under 64 MiB; the frozen index with its
 /// tries and whole-reading structures needs a wider bound, still far below any
 /// allocation a damaged header could trick the reader into.
@@ -37,10 +37,14 @@ pub(super) fn core_build_id() -> u64 {
     *BUILD_ID.get_or_init(|| u64::from_str_radix(env!("AGENT_IME_CORE_BUILD_ID"), 16).unwrap())
 }
 
-fn fnv1a64(bytes: &[u8]) -> u64 {
-    bytes.iter().fold(0xcbf2_9ce4_8422_2325u64, |hash, &byte| {
-        (hash ^ u64::from(byte)).wrapping_mul(0x0000_0100_0000_01b3)
-    })
+/// The derived-index integrity checksum, not the runtime bundle SHA256: the
+/// standard library's `DefaultHasher` over the raw body. A future standard
+/// library hasher change can alter the digest; that at worst causes a cache
+/// miss and rebuild, never a trusted bad body.
+fn body_checksum(bytes: &[u8]) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    std::hash::Hasher::write(&mut hasher, bytes);
+    std::hash::Hasher::finish(&hasher)
 }
 
 pub(crate) struct Writer {
@@ -310,7 +314,7 @@ pub(super) fn load(user_dir: &Path, key: &[u8]) -> Option<Index> {
         let body_len = header.count(header.remaining().saturating_sub(8)).ok()?;
         let body = header.bytes(body_len).ok()?;
         let checksum = header.u64().ok()?;
-        if !header.at_end() || fnv1a64(body) != checksum {
+        if !header.at_end() || body_checksum(body) != checksum {
             return None;
         }
         let mut body_reader = Reader::new(body);
@@ -331,7 +335,7 @@ pub(super) fn save(user_dir: &Path, key: &[u8], index: &Index) -> io::Result<()>
     file.u64(key.len() as u64);
     file.bytes(key);
     file.u64(body.len() as u64);
-    let checksum = fnv1a64(&body);
+    let checksum = body_checksum(&body);
     file.bytes(&body);
     file.u64(checksum);
     let bytes = file.into_bytes();
@@ -725,6 +729,12 @@ mod tests {
         newer[4..8].copy_from_slice(&(CACHE_VERSION + 1).to_le_bytes());
         fs::write(&path, &newer).unwrap();
         assert!(load(&directory, &key).is_none(), "a newer format version must miss");
+        // The prior format version (header 1, FNV1a64 checksum semantics) is
+        // refused too; its old file must miss and rebuild, never be trusted.
+        let mut prior = bytes.clone();
+        prior[4..8].copy_from_slice(&1u32.to_le_bytes());
+        fs::write(&path, &prior).unwrap();
+        assert!(load(&directory, &key).is_none(), "a prior format version must miss");
         fs::remove_dir_all(directory).unwrap();
     }
 
