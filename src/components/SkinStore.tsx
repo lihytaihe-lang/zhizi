@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { candidateSkinCatalog } from "../domain/skinCatalog";
-import type { CandidateSkinCatalogSnapshot } from "../lib/lexicon";
 import {
   getSkinStoreSettings, getSkinStorePreview, installStoreSkin, listStoreSkins,
   purchaseStoreSkin, refreshSkinStore, setSkinStoreUrl,
@@ -10,11 +9,9 @@ import { SkinStoreCard, type SkinStoreOperation } from "./SkinStoreCard";
 import { SkinStoreDetails } from "./SkinStoreDetails";
 
 type SkinStoreProps = {
-  currentSkinId: string;
-  onUseSkin: (id: string) => Promise<void>;
-  onCatalogChange: (catalog: CandidateSkinCatalogSnapshot) => void;
-  onUninstallSkin: (id: string) => Promise<void>;
   onBusyChange?: (busy: boolean) => void;
+  onOpenAccount?: () => void;
+  focusProduct?: {id: string; nonce: number};
   localCatalogRevision?: number;
   busy?: boolean;
 };
@@ -33,7 +30,7 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-export function SkinStore({ currentSkinId, onUseSkin, onCatalogChange, onUninstallSkin, onBusyChange, localCatalogRevision = 0, busy = false }: SkinStoreProps) {
+export function SkinStore({ onBusyChange, onOpenAccount, focusProduct, localCatalogRevision = 0, busy = false }: SkinStoreProps) {
   const [settings, setSettings] = useState<SkinStoreSettings>({ indexUrl: "", lastRefreshedAtMs: null });
   const [url, setUrl] = useState("");
   const [snapshot, setSnapshot] = useState(emptySnapshot);
@@ -48,10 +45,8 @@ export function SkinStore({ currentSkinId, onUseSkin, onCatalogChange, onUninsta
   const [actionError, setActionError] = useState("");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<typeof filters[number]>("全部");
+  useEffect(() => { if (focusProduct) { setQuery(focusProduct.id); setFilter("全部"); } }, [focusProduct]);
   const [detailsId, setDetailsId] = useState<string | null>(null);
-  const [removeId, setRemoveId] = useState<string | null>(null);
-  const removeConfirmation = useRef<HTMLButtonElement>(null);
-  const removeTrigger = useRef<HTMLElement | null>(null);
   const observedCatalogRevision = useRef(localCatalogRevision);
   const [previewsEnabled, setPreviewsEnabled] = useState(false);
   const [previewEpoch, setPreviewEpoch] = useState(0);
@@ -91,12 +86,6 @@ export function SkinStore({ currentSkinId, onUseSkin, onCatalogChange, onUninsta
       });
     return () => { active = false; };
   }, [localCatalogRevision]);
-
-  useEffect(() => {
-    if (removeId === null) return;
-    removeConfirmation.current?.focus();
-    removeConfirmation.current?.scrollIntoView?.({ block: "nearest" });
-  }, [removeId]);
 
   async function refresh() {
     if (refreshLock.current || operationLocks.current.size || cacheReading.current || busy || loading) return;
@@ -140,25 +129,18 @@ export function SkinStore({ currentSkinId, onUseSkin, onCatalogChange, onUninsta
     return loader;
   }
 
-  async function runAction(skin: StoreSkin, uninstall = false) {
+  async function runAction(skin: StoreSkin) {
     if (operationLocks.current.size || refreshLock.current || cacheReading.current || busy || loading) return;
-    const operation: SkinStoreOperation = uninstall ? "uninstall"
-      : skin.state === "updateAvailable" ? "update"
-      : skin.state === "installed" ? "use"
+    if (skin.state === "installed" || skin.state === "needsAppUpgrade" || skin.state === "unsupportedPlatform") return;
+    const operation: SkinStoreOperation = skin.state === "updateAvailable" ? "update"
       : skin.tier === "paid" && skin.owned !== true ? "purchase" : "install";
-    if (!uninstall && (skin.state === "needsAppUpgrade" || (skin.state === "installed" && skin.id === currentSkinId))) return;
     operationLocks.current.add(skin.id);
     setOperations((previous) => ({ ...previous, [skin.id]: operation }));
     onBusyChange?.(true);
     setActionError("");
     setMessage("");
     try {
-      if (operation === "use") await onUseSkin(skin.id);
-      else if (operation === "uninstall") {
-        await onUninstallSkin(skin.id);
-        setSnapshot((previous) => ({ ...previous, skins: previous.skins.map((item) => item.id === skin.id
-          ? { ...item, state: item.state === "needsAppUpgrade" ? item.state : "notInstalled", installedVersion: null } : item) }));
-      } else if (operation === "purchase") {
+      if (operation === "purchase") {
         const result = await purchaseStoreSkin(skin.id);
         setMessage(result.message);
         if (result.ok) {
@@ -167,13 +149,12 @@ export function SkinStore({ currentSkinId, onUseSkin, onCatalogChange, onUninsta
         }
       } else {
         const catalog = await installStoreSkin(skin.id);
-        onCatalogChange(catalog);
         if (!catalog.skins.some((entry) => entry.id === skin.id && entry.status === "ready" && entry.origin === "external")) {
           throw new Error("皮肤安装未完成，请查看皮肤校验报告。");
         }
         setSnapshot((previous) => ({ ...previous, skins: previous.skins.map((item) => item.id === skin.id
           ? { ...item, state: "installed", installedVersion: item.version } : item) }));
-        setMessage("皮肤已安装；无需重新构建 App，可直接设为当前。");
+        setMessage("皮肤已安装。打开输入法菜单中的「皮肤管理…」即可换肤。");
       }
     } catch (error) { setActionError(errorMessage(error)); }
     finally {
@@ -190,17 +171,16 @@ export function SkinStore({ currentSkinId, onUseSkin, onCatalogChange, onUninsta
     if (filter === "付费" && skin.tier !== "paid") return false;
     if (filter === "动画" && !skin.animated) return false;
     if (filter === "已安装" && skin.installedVersion === null) return false;
-    return `${skin.name.zh} ${skin.name.en} ${skin.author} ${skin.description}`.toLocaleLowerCase().includes(search);
+    return `${skin.name.zh} ${skin.name.en} ${skin.author} ${skin.description} ${skin.productId}`.toLocaleLowerCase().includes(search);
   });
   const selected = storeSkins.find((skin) => skin.id === detailsId);
-  const removing = storeSkins.find((skin) => skin.id === removeId);
   const disabled = busy || refreshing || loading || Object.keys(operations).length > 0;
   const timestamp = snapshot.refreshedAtMs ?? settings.lastRefreshedAtMs;
   return (
     <section className="skin-store" aria-label="皮肤商店">
       <div className="skin-store-header">
         <h3>皮肤商店</h3>
-        <button className="secondary-button skin-store-account" type="button" onClick={() => setMessage("账号功能尚未开放")}>登录</button>
+        <button className="secondary-button skin-store-account" type="button" disabled={disabled} onClick={() => { if (onOpenAccount) onOpenAccount(); else setMessage("请打开账号与订单登录。"); }}>登录</button>
       </div>
       <div className="skin-store-toolbar">
         <input className="skin-store-search" type="search" aria-label="搜索皮肤" placeholder="搜索名称、作者" value={query}
@@ -246,24 +226,12 @@ export function SkinStore({ currentSkinId, onUseSkin, onCatalogChange, onUninsta
       ) : visible.length === 0 ? <p className="empty-state">没有符合条件的皮肤</p> : (
         <div className="skin-store-grid">
           {visible.map((skin) => <SkinStoreCard key={`${skin.id}:${skin.version}:${previewEpoch}`} skin={skin}
-            current={skin.id === currentSkinId} disabled={disabled} operation={operations[skin.id]}
+            disabled={disabled} operation={operations[skin.id]}
             previewEnabled={previewsEnabled} loadPreview={previewFor(skin)}
-            onAction={() => void runAction(skin)} onOpen={() => setDetailsId(skin.id)} onUninstall={() => {
-              removeTrigger.current = document.activeElement as HTMLElement | null;
-              setRemoveId(skin.id);
-            }} />)}
+            onAction={() => void runAction(skin)} onOpen={() => setDetailsId(skin.id)} />)}
         </div>
       )}
-      {removing ? (
-        <div className="skin-store-confirm" role="group" aria-label={`确认卸载 ${removing.name.zh}`}>
-          <p>卸载「{removing.name.zh}」？{currentSkinId === removing.id ? "当前皮肤将回落简洁。" : ""}</p>
-          <button className="secondary-button" type="button" disabled={disabled || Boolean(operations[removing.id])}
-            ref={removeConfirmation}
-            onClick={() => { setRemoveId(null); void runAction(removing, true); }}>确认卸载</button>
-          <button className="secondary-button" type="button" onClick={() => { setRemoveId(null); removeTrigger.current?.focus(); }}>取消</button>
-        </div>
-      ) : null}
-      {selected ? <SkinStoreDetails key={`${selected.id}:${previewEpoch}`} skin={selected} current={selected.id === currentSkinId}
+      {selected ? <SkinStoreDetails key={`${selected.id}:${previewEpoch}`} skin={selected}
         disabled={disabled} operation={operations[selected.id]} previewEnabled={previewsEnabled}
         message={message} error={actionError}
         loadPreview={previewFor(selected)} onAction={() => void runAction(selected)} onClose={closeDetails} /> : null}

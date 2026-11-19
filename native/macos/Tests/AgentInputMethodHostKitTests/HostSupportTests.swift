@@ -92,6 +92,74 @@ final class HostSupportTests: XCTestCase {
         }
     }
 
+    func testShiftSlashUsesTheCurrentLayoutOnlyForAnUnmodifiedShiftChord() throws {
+        func key(_ keyCode: UInt16, _ modifiers: NSEvent.ModifierFlags) throws -> NSEvent {
+            try XCTUnwrap(NSEvent.keyEvent(
+                with: .keyDown, location: .zero, modifierFlags: modifiers, timestamp: 3,
+                windowNumber: 0, context: nil, characters: "/", charactersIgnoringModifiers: "/",
+                isARepeat: false, keyCode: keyCode
+            ))
+        }
+        let mapper = EventMapper()
+        let slash = try key(44, .shift)
+        let questionMarkOnThisLayout = slash.characters(byApplyingModifiers: .shift) == "?"
+        let mapped = try XCTUnwrap(mapper.map(slash))
+        XCTAssertEqual(mapped.text, questionMarkOnThisLayout ? "?" : "/")
+        XCTAssertEqual(mapped.repairedShiftSlash, questionMarkOnThisLayout)
+        XCTAssertEqual(mapper.map(try key(44, []))?.text, "/")
+        XCTAssertEqual(mapper.map(try key(44, [.shift, .command]))?.text, "/")
+        XCTAssertEqual(mapper.map(try key(69, .shift))?.text, "+")
+    }
+
+    @MainActor
+    func testShiftSlashIsDeliveredThroughTheControllerInChineseAndEnglish() throws {
+        func event(_ type: NSEvent.EventType, _ code: UInt16, _ text: String = "",
+                   _ flags: NSEvent.ModifierFlags = []) throws -> NSEvent {
+            try XCTUnwrap(NSEvent.keyEvent(
+                with: type, location: .zero, modifierFlags: flags, timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: 0, context: nil, characters: text, charactersIgnoringModifiers: text,
+                isARepeat: false, keyCode: code
+            ))
+        }
+        let slash = try event(.keyDown, 44, "/", .shift)
+        try XCTSkipUnless(slash.characters(byApplyingModifiers: .shift) == "?", "Requires a slash/question-mark key")
+        let directories = try RealZhixuProcessFixture.directories.get()
+        for (shift, policy, composing, expected) in [
+            (UInt16(56), 1, false, "？"), (60, 1, true, "你好？"),
+            (56, 2, false, "?"), (60, 2, true, "你好?"),
+        ] {
+            let app = "com.zhizi.shift-slash-test.\(UUID().uuidString)"
+            let client = SyntheticTextInputClient(appIdentifier: app)
+            let controller = try XCTUnwrap(AgentInputController(
+                performanceSharedDirectory: directories.shared, userDirectory: directories.user,
+                appIdentifier: app, client: client, securityStateProvider: { _ in .nonSecure }
+            ))
+            defer {
+                controller.inputControllerWillClose()
+                UserDefaults.standard.removeObject(forKey: "punctuationPolicy.\(app)")
+                UserDefaults.standard.removeObject(forKey: "directEnglishMode.\(app)")
+            }
+            let menu = try XCTUnwrap(controller.menu()?.item(withTitle: "标点行为")?.submenu)
+            let item = try XCTUnwrap(menu.item(withTag: policy))
+            _ = controller.perform(try XCTUnwrap(item.action), with: item)
+            XCTAssertFalse(controller.handle(try event(.keyDown, 44, "/"), client: client))
+            if composing {
+                for (code, text) in [(UInt16(45), "n"), (34, "i"), (4, "h"), (0, "a"), (31, "o")] {
+                    XCTAssertTrue(controller.handle(try event(.keyDown, code, text), client: client))
+                }
+            }
+            XCTAssertFalse(controller.handle(try event(.flagsChanged, shift, "", .shift), client: client))
+            XCTAssertTrue(controller.handle(try event(.keyDown, 44, "/", .shift), client: client))
+            XCTAssertFalse(controller.handle(try event(.flagsChanged, shift), client: client))
+            XCTAssertEqual(client.documentSuffixForTesting, expected)
+
+            XCTAssertFalse(controller.handle(try event(.flagsChanged, shift, "", .shift), client: client))
+            XCTAssertTrue(controller.handle(try event(.flagsChanged, shift), client: client))
+            XCTAssertTrue(controller.handle(try event(.keyDown, 44, "/", .shift), client: client))
+            XCTAssertEqual(client.documentSuffixForTesting, expected + "?")
+        }
+    }
+
     func testShiftWithSystemModifierNeverEmitsModeToggle() throws {
         let mapper = EventMapper()
         func flags(_ keyCode: UInt16, _ modifiers: NSEvent.ModifierFlags) throws -> NSEvent {

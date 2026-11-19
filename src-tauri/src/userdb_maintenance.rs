@@ -1,486 +1,156 @@
+//! Current native learning management; all edits share the core's file lock.
+//! The legacy UserDbBackupItem name is retained for existing SQLite undo batches.
+use agent_ime_core::{blacklist, zhixu::learning::{self, LearningWordBackup, ManagementKey}};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::{
-    fs::{self, OpenOptions},
-    io::Write,
-    os::unix::fs::{MetadataExt, OpenOptionsExt},
-    path::{Path, PathBuf},
-    process::{Command, Stdio},
-    thread,
-    time::Duration,
-};
-
-const HOST_STOP_ATTEMPTS: usize = 20;
-const BLACKLIST_FILE_NAME: &str = "agent_personal_blacklist_v1.json";
-const BLACKLIST_FORMAT_VERSION: u32 = 1;
-const MAX_BLACKLIST_ENTRIES: usize = 4096;
-const MAX_BLACKLIST_BYTES: u64 = 1024 * 1024;
-
-unsafe extern "C" {
-    fn geteuid() -> u32;
-}
+use std::{io, path::{Path, PathBuf}};
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct Item {
-    pub id: String,
-    pub reading: String,
-    pub text: String,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
-struct BlacklistEntry {
-    reading: String,
-    text: String,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
-struct BlacklistDocument {
-    format_version: u32,
-    entries: Vec<BlacklistEntry>,
-}
+pub struct Item { pub id: String, pub reading: String, pub text: String }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct UserDbBackupItem {
-    pub id: String,
-    pub text: String,
-    pub pinyin: String,
-    pub entry_line: String,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct HelperItem {
-    id: Option<String>,
-    text: String,
-    pinyin: String,
-    entry_line: String,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-struct HelperResponse {
-    items: Vec<HelperItem>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct HelperRequest<'a> {
-    id: &'a str,
-    text: &'a str,
-    pinyin: &'a str,
-    entry_line: Option<&'a str>,
-}
+pub struct UserDbBackupItem { pub id: String, pub text: String, pub pinyin: String, pub entry_line: String }
 
 fn stable_id(text: &str, pinyin: &str) -> String {
-    let mut digest = Sha256::new();
-    digest.update(b"agent-ime-userdb-item-v1\0");
-    digest.update(text.as_bytes());
-    digest.update(b"\0");
-    digest.update(pinyin.as_bytes());
+    let mut digest = Sha256::new(); digest.update(b"agent-ime-userdb-item-v1\0");
+    digest.update(text.as_bytes()); digest.update(b"\0"); digest.update(pinyin.as_bytes());
     format!("userdb:{:x}", digest.finalize())
 }
-
 fn blacklist_id(reading: &str, text: &str) -> String {
-    let mut digest = Sha256::new();
-    digest.update(b"agent-ime-blacklist-item-v1\0");
-    digest.update(reading.as_bytes());
-    digest.update(b"\0");
-    digest.update(text.as_bytes());
+    let mut digest = Sha256::new(); digest.update(b"agent-ime-blacklist-item-v1\0");
+    digest.update(reading.as_bytes()); digest.update(b"\0"); digest.update(text.as_bytes());
     format!("blacklist:{:x}", digest.finalize())
 }
-
-fn blacklist_path() -> Result<PathBuf, String> {
-    let helper = helper_path()?;
-    let (_, user_directory) = runtime_paths(&helper)?;
-    Ok(user_directory.join(BLACKLIST_FILE_NAME))
+pub fn runtime_directory() -> Result<PathBuf, String> {
+    #[cfg(target_os = "macos")]
+    { Ok(PathBuf::from(std::env::var_os("HOME").ok_or("无法确定本地用户目录。")?)
+        .join("Library/Application Support/AgentInputMethod/Rime")) }
+    #[cfg(not(target_os = "macos"))]
+    { Err("此管理台尚未配置当前系统的输入法学习目录。".into()) }
 }
-
-fn parse_blacklist(bytes: &[u8]) -> Result<BlacklistDocument, String> {
-    let document: BlacklistDocument =
-        serde_json::from_slice(bytes).map_err(|error| format!("永久屏蔽列表格式无效：{error}"))?;
-    if document.format_version != BLACKLIST_FORMAT_VERSION
-        || document.entries.len() > MAX_BLACKLIST_ENTRIES
-        || document.entries.iter().any(|entry| {
-            entry.reading.is_empty()
-                || entry.reading.len() > 256
-                || !entry.reading.bytes().all(|byte| byte.is_ascii_lowercase())
-                || entry.text.is_empty()
-                || entry.text.len() > 1024
-        })
-    {
-        return Err("永久屏蔽列表版本、数量或条目无效。".into());
-    }
-    Ok(document)
-}
-
-fn read_blacklist_document(path: &Path) -> Result<BlacklistDocument, String> {
-    let metadata = match fs::symlink_metadata(path) {
-        Ok(metadata) => metadata,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return Ok(BlacklistDocument {
-                format_version: BLACKLIST_FORMAT_VERSION,
-                entries: Vec::new(),
-            });
-        }
-        Err(error) => return Err(format!("无法读取永久屏蔽列表：{error}")),
+fn explain(error: io::Error) -> String {
+    let detail = match error.kind() {
+        io::ErrorKind::WouldBlock => "输入法正在保存，请稍后重试",
+        io::ErrorKind::StorageFull => "合并将超过学习容量，现有记录未改动",
+        io::ErrorKind::NotFound => "所选记录已变化，请刷新后重试",
+        io::ErrorKind::InvalidData | io::ErrorKind::PermissionDenied => "学习文件、权限或备份校验失败，现有记录未改动",
+        _ => "本地学习操作未完成",
     };
-    let uid = unsafe { geteuid() };
-    if !metadata.file_type().is_file()
-        || metadata.uid() != uid
-        || metadata.nlink() != 1
-        || metadata.mode() & 0o077 != 0
-        || metadata.len() > MAX_BLACKLIST_BYTES
-    {
-        return Err("永久屏蔽列表未通过文件类型、所有者、链接、权限或大小校验。".into());
-    }
-    let bytes = fs::read(path).map_err(|error| format!("无法读取永久屏蔽列表：{error}"))?;
-    parse_blacklist(&bytes)
+    format!("{detail}：{error}")
 }
-
-fn write_blacklist_document(path: &Path, document: &BlacklistDocument) -> Result<(), String> {
-    let bytes = serde_json::to_vec_pretty(document)
-        .map_err(|error| format!("无法编码永久屏蔽列表：{error}"))?;
-    if bytes.len() as u64 > MAX_BLACKLIST_BYTES {
-        return Err("永久屏蔽列表超过大小上限。".into());
-    }
-    let parent = path
-        .parent()
-        .ok_or_else(|| "永久屏蔽列表路径无效。".to_string())?;
-    let metadata = fs::metadata(parent).map_err(|error| format!("永久屏蔽目录不可用：{error}"))?;
-    if !metadata.is_dir() || metadata.uid() != unsafe { geteuid() } {
-        return Err("永久屏蔽目录不是当前用户拥有的真实目录。".into());
-    }
-    let temporary = parent.join(format!(
-        ".{BLACKLIST_FILE_NAME}.{}.manager.tmp",
-        std::process::id()
-    ));
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .open(&temporary)
-        .map_err(|error| format!("无法创建永久屏蔽临时文件：{error}"))?;
-    let result = (|| -> Result<(), String> {
-        file.write_all(&bytes)
-            .map_err(|error| format!("无法写入永久屏蔽列表：{error}"))?;
-        file.sync_all()
-            .map_err(|error| format!("无法同步永久屏蔽列表：{error}"))?;
-        fs::rename(&temporary, path)
-            .map_err(|error| format!("无法原子替换永久屏蔽列表：{error}"))?;
-        fs::File::open(parent)
-            .and_then(|directory| directory.sync_all())
-            .map_err(|error| format!("无法同步永久屏蔽目录：{error}"))
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(&temporary);
-    }
-    result
+fn backup_item(word: LearningWordBackup) -> Result<UserDbBackupItem, String> {
+    Ok(UserDbBackupItem { id: stable_id(&word.key.text, &word.key.reading),
+        text: word.key.text.clone(), pinyin: word.key.reading.clone(),
+        entry_line: serde_json::to_string(&word).map_err(|e| e.to_string())? })
 }
-
-pub fn list_blacklist() -> Result<Vec<Item>, String> {
-    let document = read_blacklist_document(&blacklist_path()?)?;
-    Ok(document
-        .entries
-        .into_iter()
-        .map(|entry| Item {
-            id: blacklist_id(&entry.reading, &entry.text),
-            reading: entry.reading,
-            text: entry.text,
-        })
-        .collect())
+fn keys(items: &[UserDbBackupItem]) -> Result<Vec<ManagementKey>, String> {
+    items.iter().map(|item| {
+        if item.id != stable_id(&item.text, &item.pinyin) { return Err("学习条目 ID 与内容不一致。".into()); }
+        Ok(ManagementKey { reading: item.pinyin.clone(), text: item.text.clone() })
+    }).collect()
 }
-
-pub fn remove_blacklist(ids: &[String]) -> Result<usize, String> {
-    if ids.is_empty() {
-        return Ok(0);
-    }
-    let helper = helper_path()?;
-    stop_matching_host(&helper)?;
-    let path = blacklist_path()?;
-    let mut document = read_blacklist_document(&path)?;
-    let before = document.entries.len();
-    document
-        .entries
-        .retain(|entry| !ids.contains(&blacklist_id(&entry.reading, &entry.text)));
-    let removed = before.saturating_sub(document.entries.len());
-    if removed != 0 {
-        write_blacklist_document(&path, &document)?;
-    }
-    Ok(removed)
+fn list_at(directory: &Path) -> Result<Vec<UserDbBackupItem>, String> {
+    learning::management_list(directory).map_err(explain)?.items.into_iter().map(backup_item).collect()
 }
-
-fn helper_path() -> Result<PathBuf, String> {
-    if let Some(path) = std::env::var_os("AGENT_IME_USERDB_HELPER") {
-        let path = PathBuf::from(path);
-        return path
-            .is_file()
-            .then_some(path)
-            .ok_or_else(|| "AGENT_IME_USERDB_HELPER 指向的文件不存在。".into());
-    }
-    let home = std::env::var_os("HOME").ok_or_else(|| "无法确定用户目录。".to_string())?;
-    let names = ["Agent Input Method.app", "Agent Input Method.inputmethod"];
-    let mut candidates = Vec::new();
-    for name in names {
-        candidates.push(
-            PathBuf::from(&home)
-                .join("Library/Input Methods")
-                .join(name)
-                .join("Contents/MacOS/AgentIMEUserDBCtl"),
-        );
-        candidates.push(
-            PathBuf::from("/Library/Input Methods")
-                .join(name)
-                .join("Contents/MacOS/AgentIMEUserDBCtl"),
-        );
-    }
-    if cfg!(debug_assertions) {
-        for configuration in ["debug", "release"] {
-            candidates.push(
-                std::env::current_dir()
-                    .unwrap_or_default()
-                    .join(format!(
-                        "build/native/{configuration}/Agent Input Method.inputmethod/Contents/MacOS/AgentIMEUserDBCtl"
-                    )),
-            );
-        }
-    }
-    candidates
-        .into_iter()
-        .find(|path| path.is_file())
-        .ok_or_else(|| "未找到随输入法安装的 AgentIMEUserDBCtl；UserDB 维护已阻止。".into())
+fn delete_at(directory: &Path, items: &[UserDbBackupItem]) -> Result<Vec<UserDbBackupItem>, String> {
+    if items.is_empty() { return Ok(Vec::new()); }
+    learning::management_delete(directory, &keys(items)?).map_err(explain)?
+        .into_iter().map(backup_item).collect()
 }
-
-fn runtime_paths(helper: &Path) -> Result<(PathBuf, PathBuf), String> {
-    let contents = helper
-        .parent()
-        .and_then(Path::parent)
-        .ok_or_else(|| "UserDB helper bundle 路径无效。".to_string())?;
-    let shared = contents.join("Resources/Rime");
-    if !shared.is_dir() {
-        return Err("UserDB helper 缺少同包 Rime 资源。".into());
-    }
-    let home = std::env::var_os("HOME").ok_or_else(|| "无法确定用户目录。".to_string())?;
-    Ok((
-        shared,
-        PathBuf::from(home).join("Library/Application Support/AgentInputMethod/Rime"),
-    ))
+fn restore_at(directory: &Path, items: &[UserDbBackupItem]) -> Result<(), String> {
+    if items.is_empty() { return Ok(()); }
+    let expected = keys(items)?;
+    let words = items.iter().zip(expected).map(|(item, expected)| {
+        let word: LearningWordBackup = serde_json::from_str(&item.entry_line)
+            .map_err(|_| "该撤销批次属于旧版 Rime 格式，不能写入当前学习文件。".to_string())?;
+        if word.key != expected { return Err("学习恢复内容与所选条目不一致。".into()); }
+        Ok(word)
+    }).collect::<Result<Vec<_>, String>>()?;
+    learning::management_restore(directory, &words).map(|_| ()).map_err(explain)
 }
-
-fn running_host_pids() -> Result<Vec<u32>, String> {
-    let uid = Command::new("/usr/bin/id")
-        .arg("-u")
-        .output()
-        .map_err(|error| format!("无法读取当前用户 ID：{error}"))?;
-    if !uid.status.success() {
-        return Err("无法读取当前用户 ID。".into());
-    }
-    let uid = String::from_utf8_lossy(&uid.stdout).trim().to_string();
-    let output = Command::new("/usr/bin/pgrep")
-        .args(["-U", &uid, "-x", "AgentInputMethod"])
-        .output()
-        .map_err(|error| format!("无法查询输入法进程：{error}"))?;
-    if output.status.code() == Some(1) {
-        return Ok(Vec::new());
-    }
-    if !output.status.success() {
-        return Err("无法查询输入法进程。".into());
-    }
-    String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .map(|line| {
-            line.trim()
-                .parse::<u32>()
-                .map_err(|_| "输入法进程 ID 无效。".to_string())
-        })
-        .collect()
+pub fn list() -> Result<Vec<UserDbBackupItem>, String> { list_at(&runtime_directory()?) }
+pub fn delete(items: &[UserDbBackupItem]) -> Result<Vec<UserDbBackupItem>, String> { delete_at(&runtime_directory()?, items) }
+pub fn delete_journaled(items: &[UserDbBackupItem], journal: impl FnOnce(Vec<UserDbBackupItem>) -> Result<(), String>) -> Result<(), String> {
+    learning::management_delete_journaled(&runtime_directory()?, &keys(items)?, |words| {
+        let payload = words.iter().cloned().map(backup_item).collect::<Result<Vec<_>, _>>().map_err(io::Error::other)?;
+        journal(payload).map_err(io::Error::other)
+    }).map(|_| ()).map_err(explain)
 }
-
-fn stop_matching_host(helper: &Path) -> Result<(), String> {
-    if std::env::var_os("AGENT_IME_USERDB_HELPER").is_some() {
-        return Ok(());
-    }
-    let expected = helper
-        .parent()
-        .ok_or_else(|| "UserDB helper 路径无效。".to_string())?
-        .join("AgentInputMethod")
-        .canonicalize()
-        .map_err(|error| format!("无法确认输入法宿主路径：{error}"))?;
-    let pids = running_host_pids()?;
-    for pid in &pids {
-        let output = Command::new("/bin/ps")
-            .args(["-p", &pid.to_string(), "-o", "comm="])
-            .output()
-            .map_err(|error| format!("无法确认输入法进程 {pid}：{error}"))?;
-        let actual = PathBuf::from(String::from_utf8_lossy(&output.stdout).trim());
-        let actual = actual
-            .canonicalize()
-            .map_err(|error| format!("无法确认输入法进程 {pid} 路径：{error}"))?;
-        if actual != expected {
-            return Err(format!("拒绝停止非同包输入法进程：{pid}。"));
-        }
-    }
-    for pid in pids {
-        let status = Command::new("/bin/kill")
-            .args(["-TERM", &pid.to_string()])
-            .status()
-            .map_err(|error| format!("无法停止输入法进程 {pid}：{error}"))?;
-        if !status.success() {
-            return Err(format!("输入法进程 {pid} 未接受维护停止请求。"));
-        }
-    }
-    for _ in 0..HOST_STOP_ATTEMPTS {
-        if running_host_pids()?.is_empty() {
-            return Ok(());
-        }
-        thread::sleep(Duration::from_millis(50));
-    }
-    Err("输入法宿主未在 1 秒内退出，UserDB 维护已阻止。".into())
+pub fn restore(items: &[UserDbBackupItem]) -> Result<(), String> { restore_at(&runtime_directory()?, items) }
+pub fn status() -> Result<learning::LearningStatus, String> {
+    Ok(learning::management_list(&runtime_directory()?).map_err(explain)?.status)
 }
-
-fn invoke(operation: &str, request: Option<String>) -> Result<Vec<HelperItem>, String> {
-    let helper = helper_path()?;
-    let (shared, user) = runtime_paths(&helper)?;
-    stop_matching_host(&helper)?;
-    let mut command = Command::new(&helper);
-    command.arg(operation).arg(shared).arg(user);
-    command.stdout(Stdio::piped()).stderr(Stdio::piped());
-    if request.is_some() {
-        command.stdin(Stdio::piped());
-    }
-    let mut child = command
-        .spawn()
-        .map_err(|error| format!("无法运行 UserDB helper：{error}"))?;
-    if let Some(request) = request {
-        let write_result = child
-            .stdin
-            .take()
-            .ok_or_else(|| "无法打开 UserDB helper 请求管道。".to_string())
-            .and_then(|mut stdin| {
-                stdin
-                    .write_all(request.as_bytes())
-                    .map_err(|error| format!("无法发送 UserDB helper 请求：{error}"))
-            });
-        if let Err(error) = write_result {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err(error);
-        }
-    }
-    let output = child
-        .wait_with_output()
-        .map_err(|error| format!("无法等待 UserDB helper：{error}"))?;
-    if !output.status.success() {
-        let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        return Err(if detail.is_empty() {
-            "UserDB helper 执行失败。".into()
-        } else {
-            format!("UserDB helper 执行失败：{detail}")
-        });
-    }
-    serde_json::from_slice::<HelperResponse>(&output.stdout)
-        .map(|response| response.items)
-        .map_err(|error| format!("UserDB helper 返回无效：{error}"))
+pub fn export_learning() -> Result<String, String> { learning::management_export(&runtime_directory()?).map_err(explain) }
+pub fn preview_learning(document: &str) -> Result<learning::LearningImportPreview, String> {
+    learning::management_preview(&runtime_directory()?, document).map_err(explain)
 }
-
-pub fn list() -> Result<Vec<UserDbBackupItem>, String> {
-    invoke("list", None)?
-        .into_iter()
-        .map(|item| {
-            let id = stable_id(&item.text, &item.pinyin);
-            Ok(UserDbBackupItem {
-                id,
-                text: item.text,
-                pinyin: item.pinyin,
-                entry_line: item.entry_line,
-            })
-        })
-        .collect()
+pub fn import_learning(document: &str) -> Result<learning::LearningImportPreview, String> {
+    learning::management_import(&runtime_directory()?, document).map_err(explain)
 }
-
-pub fn delete(items: &[UserDbBackupItem]) -> Result<Vec<UserDbBackupItem>, String> {
-    let request = items
-        .iter()
-        .map(|item| HelperRequest {
-            id: &item.id,
-            text: &item.text,
-            pinyin: &item.pinyin,
-            entry_line: None,
-        })
-        .collect::<Vec<_>>();
-    let document = serde_json::to_string(&request)
-        .map_err(|error| format!("无法编码 UserDB 删除请求：{error}"))?;
-    invoke("delete", Some(document))?
-        .into_iter()
-        .map(|item| {
-            let id = item
-                .id
-                .ok_or_else(|| "UserDB helper 未返回条目 ID。".to_string())?;
-            Ok(UserDbBackupItem {
-                id,
-                text: item.text,
-                pinyin: item.pinyin,
-                entry_line: item.entry_line,
-            })
-        })
-        .collect()
+fn list_blacklist_at(directory: &Path) -> Result<Vec<Item>, String> {
+    Ok(blacklist::managed_list(directory).map_err(explain)?.into_iter().map(|e|
+        Item { id: blacklist_id(&e.reading, &e.text), reading: e.reading, text: e.text }).collect())
 }
-
-pub fn restore(items: &[UserDbBackupItem]) -> Result<(), String> {
-    if items.is_empty() {
-        return Ok(());
-    }
-    let request = items
-        .iter()
-        .map(|item| HelperRequest {
-            id: &item.id,
-            text: &item.text,
-            pinyin: &item.pinyin,
-            entry_line: Some(&item.entry_line),
-        })
-        .collect::<Vec<_>>();
-    let document = serde_json::to_string(&request)
-        .map_err(|error| format!("无法编码 UserDB 恢复请求：{error}"))?;
-    let restored = invoke("restore", Some(document))?;
-    if restored.len() != items.len()
-        || restored.iter().zip(items).any(|(actual, expected)| {
-            actual.id.as_deref() != Some(expected.id.as_str())
-                || actual.text != expected.text
-                || actual.pinyin != expected.pinyin
-        })
-    {
-        return Err("UserDB helper 恢复结果与请求不一致。".into());
-    }
-    Ok(())
+fn remove_blacklist_at(directory: &Path, ids: &[String]) -> Result<usize, String> {
+    if ids.is_empty() { return Ok(0); }
+    let all = list_blacklist_at(directory)?;
+    let selected = ids.iter().map(|id| all.iter().find(|item| &item.id == id)
+        .map(|e| blacklist::BlacklistEntry { reading: e.reading.clone(), text: e.text.clone() })
+        .ok_or_else(|| "永久屏蔽记录已变化，请刷新后重试。".to_string()))
+        .collect::<Result<Vec<_>, _>>()?;
+    blacklist::managed_remove(directory, &selected).map_err(explain)
 }
+pub fn list_blacklist() -> Result<Vec<Item>, String> { list_blacklist_at(&runtime_directory()?) }
+pub fn remove_blacklist(ids: &[String]) -> Result<usize, String> { remove_blacklist_at(&runtime_directory()?, ids) }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn stable_ids_bind_text_and_pinyin_without_learning_counts() {
-        assert_eq!(stable_id("所义", "suo yi"), stable_id("所义", "suo yi"));
-        assert_ne!(stable_id("所义", "suo yi"), stable_id("所以", "suo yi"));
-        assert_ne!(stable_id("所义", "suo yi"), stable_id("所义", "suo yì"));
-        assert!(stable_id("所义", "suo yi").starts_with("userdb:"));
+    use agent_ime_core::zhixu::learning::LearningStore;
+    use std::{fs, os::unix::fs::PermissionsExt, sync::atomic::{AtomicU64, Ordering}};
+    struct Scratch(PathBuf);
+    impl Scratch {
+        fn new() -> Self {
+            static NEXT: AtomicU64 = AtomicU64::new(0);
+            let path = std::env::temp_dir().join(format!("native-management-{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed)));
+            fs::create_dir(&path).unwrap(); fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap(); Self(path)
+        }
+        fn seed(&self) {
+            let mut store = LearningStore::load(&self.0, 100);
+            store.record("ni hao", "你好", 100); store.record("zhong guo", "中国", 101);
+            store.save(&self.0).unwrap();
+        }
     }
-
+    impl Drop for Scratch { fn drop(&mut self) { let _ = fs::remove_dir_all(&self.0); } }
     #[test]
-    fn blacklist_document_is_strict_and_ids_bind_reading_plus_text() {
-        let document = parse_blacklist(
-            r#"{"formatVersion":1,"entries":[{"reading":"zhge","text":"栅格"}]}"#.as_bytes(),
-        )
-        .unwrap();
-        assert_eq!(document.entries.len(), 1);
-        assert_eq!(blacklist_id("zhge", "栅格"), blacklist_id("zhge", "栅格"));
-        assert_ne!(blacklist_id("zhge", "栅格"), blacklist_id("shange", "栅格"));
-        assert!(parse_blacklist(
-            r#"{"formatVersion":1,"entries":[{"reading":"zhge","text":"栅格","count":32}]}"#
-                .as_bytes()
-        )
-        .is_err());
+    fn current_store_list_delete_undo_keeps_peer_learning() {
+        let dir = Scratch::new(); dir.seed(); let all = list_at(&dir.0).unwrap(); assert_eq!(all.len(), 2);
+        let deleted = delete_at(&dir.0, &all[..1]).unwrap(); assert_eq!(list_at(&dir.0).unwrap().len(), 1);
+        let mut peer = LearningStore::load(&dir.0, 102); peer.record("wo", "我", 102); peer.save(&dir.0).unwrap();
+        restore_at(&dir.0, &deleted).unwrap(); restore_at(&dir.0, &deleted).unwrap();
+        assert_eq!(list_at(&dir.0).unwrap().len(), 3);
+        let bytes = fs::read(dir.0.join(learning::FILE_NAME)).unwrap();
+        let mut bad = deleted; bad[0].entry_line = "legacy Rime row".into();
+        assert!(restore_at(&dir.0, &bad).is_err()); assert_eq!(bytes, fs::read(dir.0.join(learning::FILE_NAME)).unwrap());
+    }
+    #[test]
+    fn stale_or_tampered_selection_is_rejected_without_data_loss() {
+        let dir = Scratch::new(); dir.seed(); let mut items = list_at(&dir.0).unwrap();
+        let bytes = fs::read(dir.0.join(learning::FILE_NAME)).unwrap(); items[0].text = "替换".into();
+        assert!(delete_at(&dir.0, &items).is_err()); assert_eq!(bytes, fs::read(dir.0.join(learning::FILE_NAME)).unwrap());
+        assert!(list_blacklist_at(&dir.0).unwrap().is_empty()); assert_eq!(delete_at(&dir.0, &[]).unwrap().len(), 0);
+    }
+    #[test]
+    fn current_blacklist_lists_and_removes_without_retired_helper() {
+        let dir = Scratch::new(); let path = dir.0.join("agent_personal_blacklist_v1.json");
+        fs::write(&path, r#"{"formatVersion":1,"entries":[{"reading":"nihao","text":"你好"},{"reading":"wo","text":"我"}]}"#).unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+        let listed = list_blacklist_at(&dir.0).unwrap(); assert_eq!(listed.len(), 2);
+        assert_eq!(remove_blacklist_at(&dir.0, &[listed[0].id.clone()]).unwrap(), 1);
+        assert_eq!(list_blacklist_at(&dir.0).unwrap().len(), 1);
+        assert!(remove_blacklist_at(&dir.0, &[listed[0].id.clone()]).is_err());
+        assert_eq!(list_blacklist_at(&dir.0).unwrap().len(), 1);
     }
 }

@@ -3,7 +3,7 @@ import Foundation
 
 let arguments = CommandLine.arguments
 guard arguments.count >= 4 else {
-    fputs("usage: AgentIMECoreHarness <shared-rime-dir> <user-rime-dir-or-storage-root> <query> [--keys <text>] [--app <bundle-id>] [--commit] [--storage-fallback <parent>]\n", stderr)
+    fputs("usage: AgentIMECoreHarness <shared-rime-dir> <user-rime-dir-or-storage-root> <query> [--keys <text>] [--app <bundle-id>] [--preceding <text>] [--commit] [--storage-fallback <parent>]\n", stderr)
     exit(2)
 }
 
@@ -49,6 +49,13 @@ if let fuzzyIndex = arguments.firstIndex(of: "--fuzzy"), arguments.indices.conta
     guard status == 0 else {
         fputs("failed to configure fuzzy mask status \(status)\n", stderr)
         exit(6)
+    }
+}
+
+if let prefix = arguments.firstIndex(of: "--preceding") {
+    guard arguments.indices.contains(prefix + 1), session.setPrecedingText(arguments[prefix + 1]) else {
+        fputs("failed to configure preceding text\n", stderr)
+        exit(9)
     }
 }
 

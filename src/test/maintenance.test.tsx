@@ -31,6 +31,10 @@ async function mountMaintenance(
           return { appLearning: true, projectLearning: true, secureInputLearning: false, updatedAtMs: 0 };
         case "list_learning_cleanup_items": return listing;
         case "list_personal_blacklist": return [];
+        case "native_learning_status": {
+          const latest = calls.filter((call) => ["apply_learning_cleanup", "undo_learning_cleanup"].includes(call.command)).slice(-1)[0]?.command;
+          return { entries: latest === "apply_learning_cleanup" ? 1 : 2, choices: 0, actualBytes: 400, estimatedBytes: 800, maxBytes: 1048576, maxEntries: 4096, maxAgeDays: 45 };
+        }
         case "preview_learning_cleanup":
           return { entryCount: 1, entryIds: [modelItem.id], texts: [modelItem.text] };
         case "apply_learning_cleanup": return { batchId: "synthetic-batch", deletedCount: 1 };
@@ -141,11 +145,15 @@ test("model evidence uses the existing explicit selection preview apply and undo
     await click(apply);
     assert.deepEqual(calls.find((call) => call.command === "apply_learning_cleanup")?.args,
       { ids: [modelItem.id], domain: null });
+    const learningBackup = container.querySelectorAll("article").find((card) => card.textContent.includes("本地学习备份"));
+    assert.ok(learningBackup);
+    assert.match(learningBackup.textContent, /词条 1 条/, "cleanup refreshes the native capacity status");
     const undo = findButton(container, "撤销");
     assert.ok(undo);
     await click(undo);
     assert.deepEqual(calls.find((call) => call.command === "undo_learning_cleanup")?.args,
       { batchId: "synthetic-batch" });
     assert.match(container.textContent, /已恢复 1 条学习状态/);
+    assert.match(learningBackup.textContent, /词条 2 条/, "undo refreshes the native capacity status");
   });
 });

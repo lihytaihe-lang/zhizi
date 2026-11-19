@@ -2,30 +2,31 @@ import type { StoreSkin } from "../lib/skinStore";
 import { formatSkinPrice } from "../lib/skinStore";
 import { SkinStorePreview } from "./SkinStorePreview";
 
-export type SkinStoreOperation = "install" | "update" | "purchase" | "use" | "uninstall";
+export type SkinStoreOperation = "install" | "update" | "purchase";
 
 type SkinStoreActionProps = {
   skin: StoreSkin;
-  current: boolean;
   operation?: SkinStoreOperation;
   disabled: boolean;
   onAction: () => void;
 };
 
-export function SkinStoreAction({ skin, current, operation, disabled, onAction }: SkinStoreActionProps) {
+export function SkinStoreAction({ skin, operation, disabled, onAction }: SkinStoreActionProps) {
   const upgrade = skin.state === "needsAppUpgrade";
-  const using = skin.state === "installed" && current;
+  const incompatible = skin.state === "unsupportedPlatform";
+  const delisted = skin.availableForSale === false && skin.owned !== true && skin.state === "notInstalled";
+  const installed = skin.state === "installed";
   const busyLabels: Record<SkinStoreOperation, string> = {
-    install: "正在获取…", update: "正在更新…", purchase: "正在购买…", use: "正在切换…", uninstall: "正在卸载…",
+    install: "正在获取…", update: "正在更新…", purchase: "正在购买…",
   };
-  const label = operation ? busyLabels[operation] : upgrade ? "需要升级知字"
+  const label = operation ? busyLabels[operation] : incompatible ? "暂不支持当前系统" : delisted ? "已停止新购" : upgrade ? "需要升级知字"
     : skin.state === "updateAvailable" ? "更新"
-    : skin.state === "installed" ? using ? "使用中" : "设为当前"
-    : skin.tier === "paid" && skin.owned !== true ? `购买 ${formatSkinPrice(skin.priceCents)}` : "获取";
+    : installed ? "已安装"
+    : skin.tier === "paid" && skin.owned !== true ? `购买 ${formatSkinPrice(skin.priceCents, skin.currency)}` : "获取";
   return (
     <>
-      <button className={`primary-button skin-store-action${using ? " is-current" : ""}`}
-        disabled={disabled || Boolean(operation) || upgrade || using} aria-busy={Boolean(operation)}
+      <button className={`primary-button skin-store-action${installed ? " is-current" : ""}`}
+        disabled={disabled || Boolean(operation) || upgrade || incompatible || delisted || installed} aria-busy={Boolean(operation)}
         aria-label={`${label} ${skin.name.zh}`}
         onClick={onAction} type="button" title={upgrade ? `需要升级知字至 ${skin.minAppVersion} 或更高版本` : undefined}>
         {operation ? <span role="progressbar" aria-label={`${skin.name.zh} ${label}`} /> : null}
@@ -40,11 +41,10 @@ type SkinStoreCardProps = SkinStoreActionProps & {
   previewEnabled: boolean;
   loadPreview: () => Promise<string>;
   onOpen: () => void;
-  onUninstall: () => void;
 };
 
-export function SkinStoreCard({ previewEnabled, loadPreview, onOpen, onUninstall, ...action }: SkinStoreCardProps) {
-  const { skin, operation, disabled } = action;
+export function SkinStoreCard({ previewEnabled, loadPreview, onOpen, ...action }: SkinStoreCardProps) {
+  const { skin } = action;
   return (
     <article className="skin-store-card" onClick={onOpen}>
       {skin.state === "updateAvailable" ? <span className="skin-store-new">新版</span> : null}
@@ -56,12 +56,8 @@ export function SkinStoreCard({ previewEnabled, loadPreview, onOpen, onUninstall
         </span>
       </button>
       <div className="skin-store-card-footer" onClick={(event) => event.stopPropagation()}>
-        <span className="skin-store-price">{formatSkinPrice(skin.priceCents)}</span>
+        <span className="skin-store-price">{formatSkinPrice(skin.priceCents, skin.currency)}</span>
         <SkinStoreAction {...action} />
-        {skin.installedVersion !== null ? (
-          <button className="secondary-button" disabled={disabled || Boolean(operation)} onClick={onUninstall}
-            aria-label={`卸载 ${skin.name.zh}`} type="button">卸载</button>
-        ) : null}
       </div>
     </article>
   );

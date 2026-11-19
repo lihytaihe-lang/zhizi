@@ -7,6 +7,7 @@ pub struct CandidateSkinCatalogEntry {
     pub author: &'static str,
     pub description: &'static str,
     pub tags: &'static [&'static str],
+    pub animated: bool,
 }
 
 pub const CANDIDATE_SKIN_CATALOG: &[CandidateSkinCatalogEntry] = &[
@@ -17,6 +18,7 @@ pub const CANDIDATE_SKIN_CATALOG: &[CandidateSkinCatalogEntry] = &[
         author: "Agent Input Method",
         description: "默认皮肤：液态玻璃卡片，顶行显示拼音，右侧带知字水印；浅色下首选是亮珊瑚橙字衬一层很淡的粉底，深色下是青玉绿字（和玄墨一致）；跟随系统明暗。",
         tags: &["简约"],
+        animated: false,
     },
     CandidateSkinCatalogEntry {
         id: "xuanmo",
@@ -25,6 +27,7 @@ pub const CANDIDATE_SKIN_CATALOG: &[CandidateSkinCatalogEntry] = &[
         author: "Agent Input Method",
         description: "水墨卷轴：宣纸卷边框配墨色字，笔触飞白点缀；明暗外观下都保持宣纸色。",
         tags: &["简约"],
+        animated: false,
     },
     CandidateSkinCatalogEntry {
         id: "shuitun",
@@ -33,6 +36,7 @@ pub const CANDIDATE_SKIN_CATALOG: &[CandidateSkinCatalogEntry] = &[
         author: "Agent Input Method",
         description: "水豚趴在候选条上沿，轻轻呼吸、偶尔歪头眨眼；开启「减弱动态效果」时静止。",
         tags: &["萌宠"],
+        animated: true,
     },
     CandidateSkinCatalogEntry {
         id: "youzi",
@@ -41,6 +45,7 @@ pub const CANDIDATE_SKIN_CATALOG: &[CandidateSkinCatalogEntry] = &[
         author: "Agent Input Method",
         description: "柚子水豚泡在候选条下沿，呼吸时轻沉水面、偶尔睁眼，水波缓缓舒展；开启「减弱动态效果」时静止。",
         tags: &["萌宠"],
+        animated: true,
     },
     CandidateSkinCatalogEntry {
         id: "juzimao",
@@ -49,6 +54,7 @@ pub const CANDIDATE_SKIN_CATALOG: &[CandidateSkinCatalogEntry] = &[
         author: "Agent Input Method",
         description: "橘猫趴在候选条上沿，肚子轻轻起伏、尾巴慢摆，偶尔睁眼看看；开启「减弱动态效果」时静止。",
         tags: &["萌宠"],
+        animated: true,
     },
     CandidateSkinCatalogEntry {
         id: "chaiquan",
@@ -57,6 +63,7 @@ pub const CANDIDATE_SKIN_CATALOG: &[CandidateSkinCatalogEntry] = &[
         author: "Agent Input Method",
         description: "暖杏底，柴犬双爪搭在左上沿向右探头，会呼吸、偶尔歪头和眨眼；开启「减弱动态效果」时静止。",
         tags: &["萌宠"],
+        animated: true,
     },
     CandidateSkinCatalogEntry {
         id: "baitu",
@@ -65,6 +72,7 @@ pub const CANDIDATE_SKIN_CATALOG: &[CandidateSkinCatalogEntry] = &[
         author: "Agent Input Method",
         description: "白兔从候选条上沿探出耳朵，轻轻起伏、轮流抖耳，一只耳朵缓缓侧摆；开启「减弱动态效果」时静止。",
         tags: &["萌宠"],
+        animated: true,
     },
     CandidateSkinCatalogEntry {
         id: "yueye",
@@ -73,6 +81,7 @@ pub const CANDIDATE_SKIN_CATALOG: &[CandidateSkinCatalogEntry] = &[
         author: "Agent Input Method",
         description: "深蓝夜空，金色弯月微微漂浮发光，星星闪烁，偶尔有流星划过；开启「减弱动态效果」时静止。",
         tags: &["国风"],
+        animated: true,
     },
     CandidateSkinCatalogEntry {
         id: "luoying",
@@ -81,6 +90,7 @@ pub const CANDIDATE_SKIN_CATALOG: &[CandidateSkinCatalogEntry] = &[
         author: "Agent Input Method",
         description: "深梅紫底、金色细边，樱枝沿候选条上沿横展，花瓣从枝头缓缓飘落；开启「减弱动态效果」时静止。",
         tags: &["国风"],
+        animated: true,
     },
     CandidateSkinCatalogEntry {
         id: "fenghong",
@@ -89,6 +99,7 @@ pub const CANDIDATE_SKIN_CATALOG: &[CandidateSkinCatalogEntry] = &[
         author: "Agent Input Method",
         description: "暖棕红底，枫叶枝从右上角垂下轻摆，落叶缓缓飘落；开启「减弱动态效果」时静止。",
         tags: &["国风"],
+        animated: true,
     },
     CandidateSkinCatalogEntry {
         id: "denglong",
@@ -97,6 +108,7 @@ pub const CANDIDATE_SKIN_CATALOG: &[CandidateSkinCatalogEntry] = &[
         author: "Agent Input Method",
         description: "深红半透明底、金色细边，左右灯笼沿框外缘垂挂轻摆，暖光与金粉相映；开启「减弱动态效果」时静止。",
         tags: &["节日", "国风"],
+        animated: true,
     },
     CandidateSkinCatalogEntry {
         id: "songxue",
@@ -105,6 +117,7 @@ pub const CANDIDATE_SKIN_CATALOG: &[CandidateSkinCatalogEntry] = &[
         author: "Agent Input Method",
         description: "深青蓝夜色，覆雪的松枝从右上角垂下轻摆，雪花飘落；开启「减弱动态效果」时静止。",
         tags: &["国风"],
+        animated: true,
     },
     CandidateSkinCatalogEntry {
         id: "nihong",
@@ -113,6 +126,7 @@ pub const CANDIDATE_SKIN_CATALOG: &[CandidateSkinCatalogEntry] = &[
         author: "Agent Input Method",
         description: "近黑底，右侧一个霓虹线框超立方体持续旋转，扫过一道流光；开启「减弱动态效果」时静止。",
         tags: &[],
+        animated: true,
     },
 ];
 

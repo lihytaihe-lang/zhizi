@@ -9,7 +9,7 @@ export type LearningCleanupItem = {
   id: string;
   text: string;
   pinyin: string;
-  source: "sqlite_learned" | "rime_userdb";
+  source: "sqlite_learned" | "rime_userdb" | "zhixu_learning";
   domain: string | null;
   learnedAtMs: number | null;
   lastHitAtMs: number | null;
@@ -42,3 +42,10 @@ export const runIntegrityReport = () => invoke<IntegrityReport>("run_integrity_r
 export const runScaleProbe = () => invoke<ScaleProbeReport>("run_scale_probe");
 export const listPersonalBlacklist = () => invoke<PersonalBlacklistItem[]>("list_personal_blacklist");
 export const undoPersonalBlacklist = (ids: string[]) => invoke<number>("undo_personal_blacklist", { ids });
+
+export type NativeLearningStatus = { entries: number; choices: number; actualBytes: number; estimatedBytes: number; maxBytes: number; maxEntries: number; maxAgeDays: number };
+export type NativeLearningImportPreview = { entries: number; choices: number; estimatedBytes: number };
+export const nativeLearningStatus = () => invoke<NativeLearningStatus>("native_learning_status");
+export const exportNativeLearning = () => invoke<string>("export_native_learning");
+export const previewNativeLearningImport = (document: string) => invoke<NativeLearningImportPreview>("preview_native_learning_import", { document });
+export const mergeNativeLearningImport = (document: string) => invoke<{ words: number; choices: number }>("merge_native_learning_import", { document });

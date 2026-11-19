@@ -1,6 +1,7 @@
-param([string]$Root='H:\zhizi',[switch]$Package,[switch]$Public,[string]$StageDir='')
+param([string]$Root='H:\zhizi',[switch]$Package,[switch]$Public,[string]$StageDir='',[string]$SourceCommit='')
 if(!$StageDir){$StageDir=Join-Path $Root ('stage-'+(Get-Date -Format 'yyyyMMdd-HHmmss'))}
 $ErrorActionPreference='Stop'
+if($SourceCommit -and $SourceCommit -notmatch '^[a-f0-9]{40}$'){throw 'Invalid source commit'}
 [Console]::OutputEncoding=[Text.Encoding]::UTF8
 # public-check: invite guard begin (rejects environment input; never packaged)
 if($Public -and (Test-Path Env:ZHIZI_TEST_INVITE)){throw 'Public build rejects the test invite environment variable'}
@@ -41,7 +42,20 @@ $loaderDir="$StageDir.loader"; New-Item -ItemType Directory -Force $loaderDir | 
 Copy-Item "$Root\target\release\zhizi_loader.dll" "$loaderDir\zhizi_loader_1.dll" -Force
 Copy-Item "$Root\src\native\windows\zhizi-tsf\resources\zhizi.ico" "$StageDir" -Force
 New-Item -ItemType Directory -Force "$StageDir\Model","$StageDir\Rime" | Out-Null
-Copy-Item "$Root\model\zhizi30m_v2.onnx","$Root\model\itos.json" "$StageDir\Model" -Force
+$models=Get-Content -Raw "$Root\src\native\resources\WindowsModels.json" | ConvertFrom-Json
+foreach($property in $models.ranking.files.PSObject.Properties){
+ $source=Join-Path "$Root\model" $property.Name
+ if((Get-FileHash $source -Algorithm SHA256).Hash.ToLower() -ne $property.Value){throw "Ranking model checksum mismatch: $($property.Name)"}
+ Copy-Item $source "$StageDir\Model" -Force
+}
+New-Item -ItemType Directory -Force "$StageDir\ZhijuModel" | Out-Null
+foreach($property in $models.generation.files.PSObject.Properties){
+ if($property.Name -match '[\\/]' -or $property.Name -match '^\.'){throw 'Unsafe model manifest filename'}
+ $source=Join-Path "$Root\model\ZhijuModel" $property.Name
+ if((Get-FileHash $source -Algorithm SHA256).Hash.ToLower() -ne $property.Value){throw "Zhiju model checksum mismatch: $($property.Name)"}
+ Copy-Item $source "$StageDir\ZhijuModel" -Force
+}
+Copy-Item "$Root\src\native\resources\WindowsModels.json" "$StageDir" -Force
 # The dictionaries come from the synced source tree, the same files the Mac bundle ships (script/build_native.sh). Until 2026-10-17
 # they came from a hand-made copy in $Root\shared\Rime that stopped at 10-16, so the 0.1.3 package first built missed that day's
 # lexicon. Only the pinned upstream base table (pinyin_simp, not in the repository) still comes from there.
@@ -52,10 +66,31 @@ $rimeFiles='default.yaml','agent_pinyin.schema.yaml','agent_pinyin.dict.yaml','a
  'agent_pack_industry.dict.yaml','agent_owner_words.dict.yaml','agent_exact_readings.tsv'
 foreach($f in $rimeFiles){Copy-Item "$Root\src\native\resources\Rime\$f" "$StageDir\Rime\$f" -Force}
 Copy-Item "$Root\shared\Rime\pinyin_simp.dict.yaml" "$StageDir\Rime\pinyin_simp.dict.yaml" -Force
+$bigramManifest="$Root\src\native\resources\WordBigram\SHA256SUMS"
+foreach($line in Get-Content $bigramManifest){
+ if(!$line.Trim()){continue}
+ if($line -notmatch '^([a-f0-9]{64})\s+([a-z0-9]+/[a-z0-9_.]+)$'){throw 'Invalid word-bigram checksum manifest'}
+ $expected=$Matches[1];$relative=$Matches[2]
+ $source=Join-Path "$Root\shared\Rime\word-bigram" $relative
+ if((Get-FileHash $source -Algorithm SHA256).Hash.ToLower() -ne $expected){throw "Word-bigram checksum mismatch: $relative"}
+ $target=Join-Path "$StageDir\Rime\word-bigram" $relative
+ New-Item -ItemType Directory -Force (Split-Path $target) | Out-Null
+ Copy-Item $source $target -Force
+}
 $missing=Get-ChildItem "$Root\src\native\resources\Rime" -Filter '*.dict.yaml' | Where-Object {$rimeFiles -notcontains $_.Name}
 if($missing){throw ('Rime files not staged: '+($missing.Name -join ', '))}
 New-Item -ItemType Directory -Force "$StageDir\Licenses" | Out-Null
 Copy-Item "$Root\src\native\windows\licenses\*" "$StageDir\Licenses" -Force
+Copy-Item "$Root\src\native\resources\WordBigram\NOTICE.txt" "$StageDir\Licenses\word-bigram-NOTICE.txt" -Force
+if($SourceCommit){
+ [ordered]@{
+  version=(Get-Content -Raw "$Root\src\VERSION").Trim()
+  sourceCommit=$SourceCommit
+  coreABI=6
+  modelManifestSHA256=(Get-FileHash "$StageDir\WindowsModels.json" -Algorithm SHA256).Hash.ToLower()
+  publicBuild=[bool]$Public
+ } | ConvertTo-Json | Set-Content "$StageDir\BUILD-SOURCE.json" -Encoding UTF8
+}
 if($Public){ & "$PSScriptRoot\check_windows_public_package.ps1" -Path $StageDir }
 $manifestFiles=Get-ChildItem "$StageDir" -Recurse -File | Where-Object {$_.Name -ne 'SHA256SUMS.txt'} | ForEach-Object {
  $hash=Get-FileHash $_.FullName -Algorithm SHA256

@@ -1,0 +1,90 @@
+{
+  "files": [
+    {
+      "file": "rime-pinyin-simp-Apache-2.0.txt",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "source": "https://raw.githubusercontent.com/rime/rime-pinyin-simp/0c6861ef7420ee780270ca6d993d18d4101049d0/LICENSE"
+    },
+    {
+      "file": "rime-pinyin-simp-AUTHORS.txt",
+      "sha256": "f4cff0fcbca4668ac449c24a53be547e162bc60cce63fdc5d5906801a452edc4",
+      "source": "https://raw.githubusercontent.com/rime/rime-pinyin-simp/0c6861ef7420ee780270ca6d993d18d4101049d0/AUTHORS"
+    },
+    {
+      "file": "THUOCL-MIT.txt",
+      "sha256": "db4b8cca414db4cf487b933d07a0514f77caf44f9f3d392f2bc9d7ba0d511c58",
+      "source": "https://raw.githubusercontent.com/thunlp/THUOCL/a30ce79d895d01ab5132a5c74c29703ff7efb4cc/LICENSE"
+    },
+    {
+      "file": "Rust-standard-library-Apache-2.0.txt",
+      "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+      "source": ".build-deps/rust/1.94.1/licenses/LICENSE-APACHE"
+    },
+    {
+      "file": "Rust-standard-library-MIT.txt",
+      "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+      "source": ".build-deps/rust/1.94.1/licenses/LICENSE-MIT"
+    },
+    {
+      "file": "Rust-standard-library-COPYRIGHT.txt",
+      "sha256": "af70aaabed1b73e872f14f9130db37e09f3f4d73a5f7c598b9173697a5d2729f",
+      "source": ".build-deps/rust/1.94.1/licenses/COPYRIGHT-library.html"
+    },
+    {
+      "file": "jieba-MIT.txt",
+      "sha256": "18ba0984839f85853b29fadaf992f7dba8fd0ca0fbeae34de2b8735222dc7a37",
+      "source": "https://raw.githubusercontent.com/fxsjy/jieba/1e20c89b66f56c9301b0feed211733ffaa1bd72a/LICENSE"
+    },
+    {
+      "file": "pypinyin-MIT.txt",
+      "sha256": "1e6c90014b4912815c296ee64bb6f6280af47e6d4c5d80e86232dfc5defe764c",
+      "source": "https://raw.githubusercontent.com/mozillazg/python-pinyin/v0.55.0/LICENSE.txt"
+    },
+    {
+      "file": "word-bigram-NOTICE.txt",
+      "sha256": "e46b55605f55e5d6faf2cd5ec8ad62bcf41196b01cc9bd946986738e14a7bb68",
+      "source": "native/resources/WordBigram/NOTICE.txt"
+    },
+    {
+      "file": "windows-0.61.3-license-mit.txt",
+      "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383",
+      "source": "cargo-registry:windows-0.61.3/license-mit"
+    },
+    {
+      "file": "windows-0.61.3-license-apache-2.0.txt",
+      "sha256": "c16f8dcf1a368b83be78d826ea23de4079fe1b4469a0ab9ee20563f37ff3d44b",
+      "source": "cargo-registry:windows-0.61.3/license-apache-2.0"
+    },
+    {
+      "file": "ort-2.0.0-rc.13-LICENSE-MIT.txt",
+      "sha256": "6bba08de46289c40986a2e6b310e2da61fcea33b3c112c8320f6093f8f9cb71b",
+      "source": "cargo-registry:ort-2.0.0-rc.13/LICENSE-MIT"
+    },
+    {
+      "file": "ort-2.0.0-rc.13-LICENSE-APACHE.txt",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "source": "cargo-registry:ort-2.0.0-rc.13/LICENSE-APACHE"
+    },
+    {
+      "file": "CLIP-MIT.txt",
+      "source": "https://raw.githubusercontent.com/openai/CLIP/main/LICENSE",
+      "sha256": "987e63b32f6c89ff5160e429458a872ff048e6860b590a3912e938f9da8f14db"
+    },
+    {
+      "file": "PROJECT-LICENSE-Apache-2.0.txt",
+      "source": "existing-project-license-or-notices",
+      "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+    },
+    {
+      "file": "THIRD_PARTY_NOTICES.md",
+      "source": "existing-project-license-or-notices",
+      "sha256": "c6889944160dd18e9831748f6f55e3b639a6d3b35c1e1ff6c6d742ca1fb418c4"
+    },
+    {
+      "file": "onnxruntime-LICENSE.txt",
+      "source": "existing-project-license-or-notices",
+      "sha256": "c250d6278f0b47a6439fb7592b08b58a55eb9f535aa49a1db63211c3f982b674"
+    }
+  ],
+  "rawLicenseTextsUnmodified": true
+}

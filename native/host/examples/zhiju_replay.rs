@@ -49,11 +49,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     use zhizi_host::zhiju::onnx::OnnxDistribution;
 
     let args: Vec<_> = std::env::args().skip(1).collect();
-    if !(4..=6).contains(&args.len()) {
-        return Err("usage: zhiju_replay <shared> <blank-user> <cases.jsonl> <new-output.jsonl> [beam=8] [budget-ms=30000]".into());
+    if !(4..=7).contains(&args.len()) {
+        return Err("usage: zhiju_replay <shared> <blank-user> <cases.jsonl> <new-output.jsonl> [beam=8] [budget-ms=30000] [threads=4]".into());
     }
     let beam: usize = args.get(4).map(|s| s.parse()).transpose()?.unwrap_or(8);
     let budget_ms: u64 = args.get(5).map(|s| s.parse()).transpose()?.unwrap_or(30_000);
+    let threads: usize = args.get(6).map(|s| s.parse()).transpose()?.unwrap_or(4);
+    if !(1..=4).contains(&threads) { return Err("threads must be 1 through 4".into()); }
     let cases = read_cases(Path::new(&args[2]))?;
     let user = Path::new(&args[1]);
     if user.exists() && std::fs::read_dir(user)?.next().is_some() {
@@ -66,7 +68,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let required = |name: &str| std::env::var(name).map_err(|_| format!("missing {name}"));
     zhizi_host::ranking::onnx::init_runtime(Path::new(&required("ZHIZI_ORT")?))?;
     host.set_zhiju_vocab(Path::new(&required("ZHIZI_ITOS")?))?;
-    let mut model = OnnxDistribution::load(Path::new(&required("ZHIZI_MODEL")?), 4)?;
+    let mut model = OnnxDistribution::load(Path::new(&required("ZHIZI_MODEL")?), threads)?;
     let mut output = std::io::BufWriter::new(std::fs::OpenOptions::new().write(true).create_new(true).open(&args[3])?);
     for (index, case) in cases.iter().enumerate() {
         host.process(Key::Escape, 0, false);
@@ -94,6 +96,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "scores": candidates.iter().map(|c| c.score).collect::<Vec<_>>(),
             "consumed_keys": candidates.iter().map(|c| c.consumed).collect::<Vec<_>>(),
             "callback_calls": stats.callback_calls, "run_rows": stats.run_rows,
+            "cached_calls": stats.cached_calls, "threads": threads,
             "search_ms": search_ms,
         });
         writeln!(output, "{record}")?;

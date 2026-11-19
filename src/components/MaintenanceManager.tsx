@@ -8,6 +8,7 @@ import {
   Trash2,
   Undo2,
 } from "lucide-react";
+import { NativeLearningBackup } from "./NativeLearningBackup";
 import { downloadJSON } from "../lib/lexicon";
 import {
   applyLearningCleanup,
@@ -62,26 +63,29 @@ export function MaintenanceManager() {
   const [scale, setScale] = useState<ScaleProbeReport | null>(null);
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
+  const [learningRefreshVersion, setLearningRefreshVersion] = useState(0);
 
   async function reload() {
-    const [nextPreferences, listing, blocked] = await Promise.all([
-      learningPreferences(),
-      listLearningCleanupItems(),
-      listPersonalBlacklist(),
+    const [prefs, listing, blocked] = await Promise.allSettled([
+      learningPreferences(), listLearningCleanupItems(), listPersonalBlacklist(),
     ]);
-    const entries = listing.items;
-    setPreferences(nextPreferences);
-    setLearned(entries);
-    setUnmatchedModelAuditPairs(listing.unmatchedModelAuditPairs);
-    setBlacklist(blocked);
-    setSelectedIds((current) =>
-      new Set([...current].filter((id) => entries.some((entry) => entry.id === id))));
-    setSelectedBlacklistIds((current) =>
-      new Set([...current].filter((id) => blocked.some((entry) => entry.id === id))));
+    if (prefs.status === "fulfilled") setPreferences(prefs.value);
+    if (listing.status === "fulfilled") {
+      const entries = listing.value.items;
+      setLearned(entries);
+      setUnmatchedModelAuditPairs(listing.value.unmatchedModelAuditPairs);
+      setSelectedIds((current) => new Set([...current].filter((id) => entries.some((entry) => entry.id === id))));
+    }
+    if (blocked.status === "fulfilled") {
+      setBlacklist(blocked.value);
+      setSelectedBlacklistIds((current) => new Set([...current].filter((id) => blocked.value.some((entry) => entry.id === id))));
+    }
+    const errors = [prefs, listing, blocked].filter((item) => item.status === "rejected");
+    if (errors.length) throw new Error(errors.map((item) => errorText((item as PromiseRejectedResult).reason)).join("；"));
   }
 
   useEffect(() => {
-    void reload();
+    void reload().catch((error) => setMessage(errorText(error)));
   }, []);
 
   async function run(key: string, action: () => Promise<void>) {
@@ -90,6 +94,7 @@ export function MaintenanceManager() {
     try {
       await action();
       await reload();
+      setLearningRefreshVersion((current) => current + 1);
     } catch (error) {
       setMessage(errorText(error));
     } finally {
@@ -118,7 +123,7 @@ export function MaintenanceManager() {
   }
 
   function learningEntry(entry: LearningCleanupItem) {
-    const sourceLabel = entry.source === "rime_userdb" ? "输入习惯" : "个人词";
+    const sourceLabel = entry.source !== "sqlite_learned" ? "输入习惯" : "个人词";
     const excludedAttribution = entry.attribution === "needs-context"
       ? "需要上下文，本组不处理"
       : entry.attribution === "abbrev-competition"
@@ -165,6 +170,7 @@ export function MaintenanceManager() {
       <span className="status-pill">本地数据 · 危险动作先预览</span>
     </div>
     <div className="maintenance-grid">
+      <NativeLearningBackup onChanged={reload} refreshVersion={learningRefreshVersion} />
       <article className="maintenance-card">
         <h3>学习透明度</h3>
         <p>学习记录按可复算证据排序；清理只取消学习提升，基础词仍可选择并重新学习。安全输入学习永久关闭。</p>

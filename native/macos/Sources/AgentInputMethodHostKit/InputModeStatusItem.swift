@@ -43,9 +43,10 @@ private final class SystemInputModeStatusItemRenderer: InputModeStatusItemRender
         }
         item.length = NSStatusItem.variableLength
         item.menu = menu
-        item.button?.title = presentation.symbol
-        item.button?.toolTip = presentation.toolTip
-        item.button?.setAccessibilityLabel(presentation.accessibilityLabel)
+        let hasUpdate = ReleaseUpdateMonitor.shared.available != nil
+        item.button?.title = hasUpdate ? presentation.symbol + "·" : presentation.symbol
+        item.button?.toolTip = hasUpdate ? presentation.toolTip + " · 有新版本" : presentation.toolTip
+        item.button?.setAccessibilityLabel(hasUpdate ? presentation.accessibilityLabel + "，有新版本" : presentation.accessibilityLabel)
     }
 
     func remove() {
@@ -136,6 +137,10 @@ final class InputModeStatusItemCoordinator {
     func refreshMenu(owner: AnyObject) {
         pruneDeadRegistrations()
         guard activeIdentifier == ObjectIdentifier(owner) else { return }
+        renderActiveRegistration()
+    }
+
+    func refreshActiveMenu() {
         renderActiveRegistration()
     }
 

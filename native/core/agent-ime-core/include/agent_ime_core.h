@@ -8,6 +8,10 @@
 extern "C" {
 #endif
 
+/* ABI generation 6; version string is static, borrowed, and never freed. */
+#define AIM_CORE_ABI_VERSION 6u
+const char *aim_core_version(void);
+
 typedef struct AimSession AimSession;
 typedef struct AimLexiconSnapshot AimLexiconSnapshot;
 typedef struct AimContextModelSnapshot AimContextModelSnapshot;
@@ -33,7 +37,8 @@ typedef enum {
   AIM_KEY_SLEEP = 15,
   AIM_KEY_RESUME = 16,
   AIM_KEY_DELETE_CANDIDATE = 17,
-  AIM_KEY_UNSUPPORTED = 18,
+  AIM_KEY_BLACKLIST_CANDIDATE = 18,
+  AIM_KEY_UNSUPPORTED = 19,
   AIM_KEY_LINEAR_NEXT = 20,
   AIM_KEY_LINEAR_PREVIOUS = 21
 } AimKeyKind;
@@ -92,6 +97,9 @@ typedef struct {
   uint64_t core_elapsed_ns;
 } AimResult;
 
+/* Prepare explicit UTF-8 dictionary and private profile directories. Serialize
+ * creation and keep one (shared,user) deployment while any sessions are active.
+ * Each handle is sequential, non-reentrant, and released exactly once. */
 AimSession *aim_session_create(const uint8_t *shared_dir,
                                size_t shared_dir_len,
                                const uint8_t *user_dir,

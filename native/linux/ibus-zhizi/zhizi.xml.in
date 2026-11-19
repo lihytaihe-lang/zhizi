@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component>
+  <name>org.freedesktop.IBus.Zhizi</name>
+  <description>知字中文输入法</description>
+  <exec>/usr/lib/ibus/ibus-engine-zhizi --ibus</exec>
+  <version>@VERSION@</version>
+  <author>知字</author>
+  <license>Apache-2.0 AND MIT</license>
+  <homepage>https://zhizi.dabblecove.com</homepage>
+  <textdomain>ibus-zhizi</textdomain>
+  <engines>
+    <engine>
+      <name>zhizi</name>
+      <longname>知字</longname>
+      <description>本地中文全拼、简拼、学习与知句输入</description>
+      <language>zh_CN</language>
+      <license>Apache-2.0 AND MIT</license>
+      <author>知字</author>
+      <icon>/usr/share/icons/hicolor/128x128/apps/zhizi.png</icon>
+      <layout>us</layout>
+      <rank>80</rank>
+      <symbol>知</symbol>
+    </engine>
+  </engines>
+</component>

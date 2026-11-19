@@ -7,9 +7,9 @@
     "native/ipc/Cargo.lock"
   ],
   "generatedFromSha256": {
-    "package-lock.json": "02ac6aa5f4c9b93698e1e19701ea763f5dfec1ed86d24786023f2f29bbb82a18",
-    "src-tauri/Cargo.lock": "9f36319ac9994ea96240c8faf2d141704a008e00bdee777e680e086f9d4d3d08",
-    "native/core/Cargo.lock": "3472ca615c5272349d41f19effa03360ac6801f246a5000d569187ccc38d6668",
+    "package-lock.json": "69062fa97a17b749217ea483fb40a29c79480004845d581447d1f3429acef5c2",
+    "src-tauri/Cargo.lock": "fd89b475d1253f871f12414998b676faf91b0e15926cf1708b3faf7a24a2c700",
+    "native/core/Cargo.lock": "7569f41d9d66cb540129d6762397c2090799158020d3029a9a6730de97d3dfa9",
     "native/ipc/Cargo.lock": "c650a6d90eee45a8f56ac279770720e5230ca873a54f677179b5ff8802d9f868"
   },
   "generationMode": "cargo metadata --locked --offline; package-lock.json packages",

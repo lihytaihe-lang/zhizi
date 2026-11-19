@@ -5,7 +5,7 @@ use crate::secure_directory::{
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fs::{self, OpenOptions};
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 
@@ -16,9 +16,9 @@ const MAX_BLACKLIST_BYTES: u64 = 1024 * 1024;
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
-struct BlacklistEntry {
-    reading: String,
-    text: String,
+pub struct BlacklistEntry {
+    pub reading: String,
+    pub text: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -32,6 +32,7 @@ struct BlacklistDocument {
 pub(crate) struct Store {
     path: Option<PathBuf>,
     entries: HashSet<BlacklistEntry>,
+    management_revision: Option<String>,
 }
 
 impl Default for Store {
@@ -39,6 +40,7 @@ impl Default for Store {
         Self {
             path: None,
             entries: HashSet::new(),
+            management_revision: None,
         }
     }
 }
@@ -59,7 +61,23 @@ impl Store {
                         "blacklist file failed ownership, type, link, mode, or size validation",
                     ));
                 }
-                fs::read(&path)?
+                let mut options = OpenOptions::new();
+                options.read(true);
+                #[cfg(unix)] {
+                    use std::os::unix::fs::OpenOptionsExt;
+                    #[cfg(target_os = "macos")] options.custom_flags(0x100);
+                    #[cfg(target_os = "linux")] options.custom_flags(0x0002_0000);
+                }
+                let file = options.open(&path)?;
+                if !private_regular_file(&file.metadata()?) {
+                    return Err(io::Error::other("unsafe opened blacklist file"));
+                }
+                let mut bytes = Vec::new();
+                file.take(MAX_BLACKLIST_BYTES + 1).read_to_end(&mut bytes)?;
+                if bytes.len() as u64 > MAX_BLACKLIST_BYTES {
+                    return Err(io::Error::other("oversized blacklist file"));
+                }
+                bytes
             }
             Err(error) if error.kind() == io::ErrorKind::NotFound => Vec::new(),
             Err(error) => return Err(error),
@@ -87,6 +105,7 @@ impl Store {
         Ok(Self {
             path: Some(path),
             entries,
+            management_revision: None,
         })
     }
 
@@ -117,20 +136,44 @@ impl Store {
                 "blacklist entry is empty or too large",
             ));
         }
-        if self.entries.contains(&entry) {
+        let directory = self.directory();
+        let _lock = directory.as_ref().map(|dir|
+            crate::zhixu::learning::learning_lock::LearningLock::acquire(dir)).transpose()?;
+        // Rebase on the latest atomic file so an older host cannot resurrect a
+        // manager removal while learning an unrelated blacklist entry.
+        let current = match &directory {
+            Some(dir) => Self::open(dir)?.entries,
+            None => self.entries.clone(),
+        };
+        if current.contains(&entry) {
+            self.entries = current;
             return Ok(false);
         }
-        if self.entries.len() >= MAX_BLACKLIST_ENTRIES {
+        if current.len() >= MAX_BLACKLIST_ENTRIES {
             return Err(io::Error::new(
                 io::ErrorKind::StorageFull,
                 "blacklist entry cap reached",
             ));
         }
-        let mut next = self.entries.clone();
+        let mut next = current;
         next.insert(entry);
+        if let Some(dir) = &directory { crate::zhixu::learning::management::mark_management_change(dir)?; }
         self.persist(&next)?;
         self.entries = next;
         Ok(true)
+    }
+
+    pub(crate) fn refresh_managed(&mut self) -> io::Result<bool> {
+        let Some(directory) = self.directory() else { return Ok(false); };
+        let revision = crate::zhixu::learning::management::management_revision(&directory)?;
+        if revision == self.management_revision { return Ok(false); }
+        let _lock = crate::zhixu::learning::learning_lock::LearningLock::acquire(&directory)?;
+        let revision = crate::zhixu::learning::management::management_revision(&directory)?;
+        let entries = Self::open(&directory)?.entries;
+        let changed = self.entries != entries;
+        self.entries = entries;
+        self.management_revision = revision;
+        Ok(changed)
     }
 
     fn persist(&self, entries: &HashSet<BlacklistEntry>) -> io::Result<()> {
@@ -169,6 +212,38 @@ impl Store {
     }
 }
 
+/// Read-only management access. Listing a missing store does not create it.
+pub fn managed_list(directory: &Path) -> io::Result<Vec<BlacklistEntry>> {
+    let directory = physical_runtime_path(directory);
+    match crate::secure_directory::open_existing_owned_leaf_directory(&directory) {
+        Ok(root) => validate_owned_directory(&root, "blacklist management parent")?,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(e),
+    }
+    let mut entries: Vec<_> = Store::open(&directory)?.entries.into_iter().collect();
+    entries.sort(); Ok(entries)
+}
+
+pub fn managed_remove(directory: &Path, selected: &[BlacklistEntry]) -> io::Result<usize> {
+    if selected.is_empty() || selected.len() > MAX_BLACKLIST_ENTRIES || selected.iter().any(|e| !valid_entry(e)) {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "invalid blacklist selection"));
+    }
+    let directory = physical_runtime_path(directory);
+    let root = crate::secure_directory::open_existing_owned_leaf_directory(&directory)?;
+    validate_owned_directory(&root, "blacklist management parent")?;
+    let _lock = crate::zhixu::learning::learning_lock::LearningLock::acquire(&directory)?;
+    let store = Store::open(&directory)?;
+    let mut next = store.entries.clone();
+    for entry in selected {
+        if !next.remove(entry) {
+            return Err(io::Error::new(io::ErrorKind::NotFound, "blacklist selection changed; refresh first"));
+        }
+    }
+    crate::zhixu::learning::management::mark_management_change(&directory)?;
+    store.persist(&next)?;
+    Ok(selected.len())
+}
+
 fn valid_entry(entry: &BlacklistEntry) -> bool {
     !entry.reading.is_empty()
         && entry.reading.len() <= 256
@@ -196,6 +271,7 @@ pub(crate) fn shared_blacklist(user_dir: &Path) -> io::Result<Arc<Mutex<Store>>>
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -212,8 +288,26 @@ mod tests {
             NEXT_DIRECTORY.fetch_add(1, Ordering::Relaxed)
         ));
         fs::create_dir(&path).unwrap();
+        #[cfg(unix)]
         fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
         path
+    }
+
+    #[test]
+    fn manager_removal_refreshes_and_stale_writer_keeps_peer_removal() {
+        let directory = temporary_directory();
+        let mut first = Store::open(&directory).unwrap();
+        first.insert("nihao", "你好").unwrap();
+        let mut stale = Store::open(&directory).unwrap();
+        managed_remove(&directory, &[BlacklistEntry { reading: "nihao".into(), text: "你好".into() }]).unwrap();
+        assert!(first.contains("nihao", "你好"), "cached until an explicit safe boundary");
+        assert!(first.refresh_managed().unwrap());
+        assert!(!first.contains("nihao", "你好"));
+        assert!(!first.refresh_managed().unwrap());
+        stale.insert("wo", "我").unwrap();
+        let current = managed_list(&directory).unwrap();
+        assert_eq!(current, vec![BlacklistEntry { reading: "wo".into(), text: "我".into() }]);
+        fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]
@@ -237,11 +331,10 @@ mod tests {
         assert!(!store.contains("mariadb", "栅格"));
         let reloaded = Store::open(&directory).unwrap();
         assert!(reloaded.contains("zhge", "栅格"));
-        let mode = fs::metadata(directory.join(BLACKLIST_FILE_NAME))
-            .unwrap()
-            .permissions()
-            .mode();
-        assert_eq!(mode & 0o077, 0);
+        #[cfg(unix)] {
+            let mode = fs::metadata(directory.join(BLACKLIST_FILE_NAME)).unwrap().permissions().mode();
+            assert_eq!(mode & 0o077, 0);
+        }
         fs::remove_dir_all(directory).unwrap();
     }
 
@@ -250,11 +343,16 @@ mod tests {
         let directory = temporary_directory();
         let path = directory.join(BLACKLIST_FILE_NAME);
         fs::write(&path, b"not-json").unwrap();
+        #[cfg(unix)]
         fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
         assert!(Store::open(&directory).is_err());
         fs::write(&path, br#"{"formatVersion":1,"entries":[]}"#).unwrap();
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
-        assert!(Store::open(&directory).is_err());
+        #[cfg(unix)] {
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
+            assert!(Store::open(&directory).is_err());
+        }
+        #[cfg(windows)]
+        assert!(Store::open(&directory).is_ok());
         fs::remove_dir_all(directory).unwrap();
     }
 }

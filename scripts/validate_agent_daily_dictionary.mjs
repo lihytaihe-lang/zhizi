@@ -11,7 +11,7 @@ const publicBuild = existsSync(path.join(root, "PUBLIC_BUILD"));
 const shellLayers = new Set(["aiTerms", "aiNames", "packPoetry", "packCad", "packIndustry", "packTerms"]);
 const isShellAsset = (name) => shellLayers.has(name.replace(/Provenance$/u, ""));
 const assets = Object.freeze({
-  commonFix: ["native/resources/Rime/agent_common_fix.dict.yaml", "e8b6206c93c799e8bcb20e32efa50f94dba29a4f421fcd96fa76a3c93c8c63ef"],
+  commonFix: ["native/resources/Rime/agent_common_fix.dict.yaml", "7ddf8d91380944ade73f82aaf9301ed060f1552d665f4ea9aa9848c10cc2e9ef"],
   daily: ["native/resources/Rime/agent_daily.dict.yaml", "2c15d6e53b7911259b3a93e3d47d69874991ea6e02d1fedb2e77124789495b5e"],
   english: ["native/resources/Rime/agent_english.dict.yaml", "47b351cd46bf975d98a77e67d901210c39fd5ce4952f10e2c8a727b1bb3749de"],
   tech: ["native/resources/Rime/agent_tech_terms.dict.yaml", "3865bba99acdbc5b1ad535a266a79e3d15e0eb8b5f14ff08b4e8be86e830af20"],
@@ -39,7 +39,7 @@ const assets = Object.freeze({
   packTerms: ["native/resources/Rime/agent_pack_terms.dict.yaml", "996b22ce36ed3ddc4c97763d52bcd77d07bf57531d27b8177407b806c949a68d"],
   packTermsProvenance: ["quality/corpus/agent-pack-terms-provenance.tsv", "2385d7e53d6bfdfeb8e3651f04f17e20153641c81a5123e96e32cf92811e4077"],
   aggregate: ["native/resources/Rime/agent_pinyin.dict.yaml", "f2b5a8904ee6fb51c7eb243447b0f51e9a70f77953a6b1d5e311a0e1d97adbf5"],
-  commonFixProvenance: ["quality/corpus/agent-common-fix-provenance.tsv", "cac917eb4b33155877e016d3a1a6113b9393e3342c2b2fcc13abe6d2f67d50cf"],
+  commonFixProvenance: ["quality/corpus/agent-common-fix-provenance.tsv", "bcd925e889c8b2a76f50732d660f9c6dd613ef4e7e7bba5efe84f821457eac04"],
   provenance: ["quality/corpus/agent-daily-provenance.tsv", "1b32e5dde5d7b9912e3bcd7a99fb55a4d380de4f0c37e872c53b9ad051121d1f"],
   englishProvenance: ["quality/corpus/agent-english-provenance.tsv", "5072ef56b73f0d8273df92fc7b5db888747b3707ee84774620b65064f7517583"],
   techProvenance: ["quality/corpus/agent-tech-terms-provenance.tsv", "2e390be331a858974506a4b721dae18b311ff686eac7146925ed6049a3d1a79c"],
@@ -75,6 +75,8 @@ assert(JSON.stringify(commonFixRows) === JSON.stringify([
   ["完成了", "wan cheng le", "520"],
   ["难用", "nan yong", "520"],
   ["超级烦", "chao ji fan", "520"],
+  ["改法", "gai fa", "520"],
+  ["这种改法", "zhe zhong gai fa", "260"],
 ]), "agent_common_fix rows changed");
 assert(commonFixRows.length <= 300, "agent_common_fix exceeds the frozen 300-row ceiling");
 const commonFixProvenanceRows = loaded.commonFixProvenance.trimEnd().split(/\r?\n/u)

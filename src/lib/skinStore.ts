@@ -1,5 +1,6 @@
 import type { CandidateSkinCatalogSnapshot } from "./lexicon";
 import { isTauriRuntime } from "./tauriRuntime";
+import { formatSkinMoney } from "../domain/skinOrders";
 
 export type SkinStoreSettings = {
   indexUrl: string;
@@ -14,6 +15,9 @@ export type StoreSkin = {
   version: string;
   tier: "free" | "paid";
   priceCents: number;
+  currency?: string;
+  platforms?: string[];
+  availableForSale?: boolean;
   productId: string;
   animated: boolean;
   bundleBytes: number;
@@ -21,7 +25,7 @@ export type StoreSkin = {
   updatedAt: string;
   license: string;
   changelog: string;
-  state: "notInstalled" | "installed" | "updateAvailable" | "needsAppUpgrade";
+  state: "notInstalled" | "installed" | "updateAvailable" | "needsAppUpgrade" | "unsupportedPlatform";
   installedVersion: string | null;
   owned: boolean | null;
   ownedError: "notConfigured" | "notSignedIn" | null;
@@ -72,13 +76,12 @@ export async function installStoreSkin(id: string): Promise<CandidateSkinCatalog
   return invoke("skin_store_install", { id });
 }
 
-export async function purchaseStoreSkin(id: string): Promise<{ ok: boolean; message: string }> {
+export async function purchaseStoreSkin(id: string): Promise<{ ok: boolean; message: string; checkoutUrl?: string; orderId?: string }> {
   if (!isTauriRuntime()) throw new Error("请在管理台 App 中购买皮肤。");
   return invoke("skin_store_purchase", { id });
 }
 
-export function formatSkinPrice(priceCents: number): string {
+export function formatSkinPrice(priceCents: number, currency = "CNY"): string {
   if (priceCents === 0) return "免费";
-  const yuan = priceCents / 100;
-  return `¥${priceCents % 100 === 0 ? yuan : yuan.toFixed(2)}`;
+  return formatSkinMoney(priceCents, currency);
 }

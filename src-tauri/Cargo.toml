@@ -1,6 +1,6 @@
 [package]
 name = "agent-input-layer"
-version = "0.3.41"
+version = "0.3.50"
 description = "A task input layer for AI agents"
 authors = ["Agent Input Layer contributors"]
 edition = "2021"
@@ -32,6 +32,7 @@ personal-seed = []
 test-upload = []
 
 [dependencies]
+agent-ime-core = { path = "../native/core/agent-ime-core" }
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }

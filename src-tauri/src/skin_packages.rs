@@ -41,6 +41,10 @@ pub struct CandidateSkinEntry {
     pub status: String,
     pub reason: Option<String>,
     pub can_uninstall: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    pub animated: bool,
+    pub tags: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -63,13 +67,34 @@ struct ParsedSkin {
     display_name: CandidateSkinDisplayName,
     author: String,
     description: String,
+    animated: bool,
     json: Vec<u8>,
     assets: Vec<(String, Vec<u8>)>,
 }
 
 pub fn default_skins_root() -> Result<PathBuf, String> {
+    #[cfg(debug_assertions)]
+    if let Some(root) = crate::skin_qa::root()? { return Ok(root.join("Skins")); }
+    #[cfg(target_os = "windows")]
+    {
+        return std::env::var_os("LOCALAPPDATA")
+            .map(|root| PathBuf::from(root).join("Zhizi/Skins"))
+            .ok_or_else(|| "无法确定本地应用数据目录。".into());
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let root = std::env::var_os("XDG_DATA_HOME")
+            .filter(|root| Path::new(root).is_absolute())
+            .map(PathBuf::from)
+            .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/share")))
+            .ok_or_else(|| "无法确定本地应用数据目录。".to_string())?;
+        return Ok(root.join("zhizi/Skins"));
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+    {
     let home = std::env::var_os("HOME").ok_or_else(|| "无法确定用户目录。".to_string())?;
     Ok(PathBuf::from(home).join("Library/Application Support/AgentInputMethod/Skins"))
+    }
 }
 
 pub fn catalog_snapshot(
@@ -94,12 +119,6 @@ pub fn install(source: &Path) -> Result<CandidateSkinCatalogSnapshot, String> {
     catalog_snapshot_at(&root, None)
 }
 
-pub fn uninstall(id: &str) -> Result<CandidateSkinCatalogSnapshot, String> {
-    let root = default_skins_root()?;
-    uninstall_at(id, &root)?;
-    catalog_snapshot_at(&root, None)
-}
-
 fn built_in_entries() -> Vec<CandidateSkinEntry> {
     CANDIDATE_SKIN_CATALOG
         .iter()
@@ -115,6 +134,9 @@ fn built_in_entries() -> Vec<CandidateSkinEntry> {
             status: "ready".into(),
             reason: None,
             can_uninstall: false,
+            version: Some(env!("CARGO_PKG_VERSION").into()),
+            animated: skin.animated,
+            tags: skin.tags.iter().map(|tag| (*tag).into()).collect(),
         })
         .collect()
 }
@@ -153,6 +175,9 @@ fn catalog_snapshot_at(
                             status: "conflict".into(),
                             reason: Some(reason.clone()),
                             can_uninstall: true,
+                            version: None,
+                            animated: parsed.animated,
+                            tags: Vec::new(),
                         });
                         issues.push(CandidateSkinIssue {
                             package: name,
@@ -168,6 +193,9 @@ fn catalog_snapshot_at(
                             status: "ready".into(),
                             reason: None,
                             can_uninstall: true,
+                            version: None,
+                            animated: parsed.animated,
+                            tags: Vec::new(),
                         });
                     }
                 }
@@ -409,6 +437,7 @@ fn activate_package(
     }
 }
 
+#[cfg(test)]
 fn uninstall_at(id: &str, root: &Path) -> Result<(), String> {
     let _guard = INSTALL_LOCK
         .lock()
@@ -619,9 +648,23 @@ fn parse_skin_json(json: Vec<u8>) -> Result<ParsedSkin, String> {
         display_name,
         author,
         description,
+        animated: json_is_animated(object),
         json,
         assets: Vec::new(),
     })
+}
+
+fn json_is_animated(object: &Map<String, Value>) -> bool {
+    object.get("decorations").and_then(Value::as_array).is_some_and(|items| items.iter().any(|item| {
+        match item.get("type").and_then(Value::as_str) {
+            Some("sprite") => item.get("frames").and_then(Value::as_u64).unwrap_or(1) > 1
+                || item.get("motion").and_then(Value::as_array).is_some_and(|items| !items.is_empty())
+                || item.get("travel").is_some_and(|value| !value.is_null())
+                || item.get("clips").and_then(Value::as_array).is_some_and(|items| !items.is_empty()),
+            Some("gradient" | "frame") | None => false,
+            _ => true,
+        }
+    }))
 }
 
 fn validate_allowed_fields(object: &Map<String, Value>) -> Result<(), String> {

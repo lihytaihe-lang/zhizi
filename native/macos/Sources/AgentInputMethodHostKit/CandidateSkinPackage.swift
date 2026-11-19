@@ -801,7 +801,13 @@ struct SkinGalleryPackages {
             guard total <= maximumExternalBytes else { throw CandidateSkinPackageError.tooLarge("总大小不得超过 1.5 MB") }
             files[name] = data
         }
-        let data = files["skin.json"]!
+        let package = try decodePackage(files, expected: expected)
+        try directory.verifyBoundPath()
+        return package
+    }
+
+    private static func decodePackage(_ files: [String: Data], expected: CandidateThemeIdentifier? = nil) throws -> Package {
+        guard let data = files["skin.json"] else { throw CandidateSkinPackageError.missing("skin.json") }
         guard let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               let raw = object["id"] as? String, let id = CandidateThemeIdentifier(rawValue: raw) else {
             throw CandidateSkinPackageError.invalid("skin.json 不是有效 JSON 或 id 不合法")
@@ -812,12 +818,19 @@ struct SkinGalleryPackages {
         assets.removeValue(forKey: "skin.json")
         let theme = try CandidateSkinPackageLoader.decodeTheme(data, expected: id, fallback: CandidateSkinCatalog.theme(for: .system), assets: assets)
         let display = object["displayName"] as? [String: String]
-        try directory.verifyBoundPath()
         return Package(identifier: id, name: display?["zh"] ?? raw, detail: object["description"] as? String ?? "", theme: theme, files: files)
     }
 
     func install(_ source: URL) throws -> CandidateThemeIdentifier {
-        let package = try Self.read(LocalSecureDirectory.openExisting(source))
+        let package: Package
+        if source.pathExtension.lowercased() == "json", !source.hasDirectoryPath {
+            let parent = try LocalSecureDirectory.openExisting(source.deletingLastPathComponent())
+            let (json, _) = try parent.readRegular(source.lastPathComponent, maximumBytes: CandidateSkinPackageLimits.maximumSkinJSONBytes)
+            package = try Self.decodePackage(["skin.json": json])
+            try parent.verifyBoundPath()
+        } else {
+            package = try Self.read(LocalSecureDirectory.openExisting(source))
+        }
         let destination = try LocalSecureDirectory.openOrCreateFinal(root, mode: 0o700)
         let names = try destination.entryNames(maximumCount: CandidateSkinPackageLimits.maximumPackages)
         guard names.count < CandidateSkinPackageLimits.maximumPackages else { throw CandidateSkinPackageError.tooLarge("安装包数量") }

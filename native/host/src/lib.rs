@@ -10,6 +10,7 @@ pub mod quality;
 pub mod ranking;
 pub mod settings;
 pub mod zhiju;
+pub mod generation;
 
 /// The learning provider: Zhixu only. The retired Rime rule stays rejected by the
 /// core ABI (`aim_session_set_learning(0)` answers -2).
@@ -29,6 +30,7 @@ use agent_ime_core::{
     aim_session_process,
     aim_session_reorder_context_candidates, aim_session_set_mode, aim_session_set_preceding_text,
     aim_session_set_candidate_context, aim_session_set_typo_correction, aim_session_set_learning, aim_session_set_fuzzy,
+    aim_session_abbreviation_alternatives, aim_session_offer_abbreviation,
 };
 use ranking::{Done, Job, Worker};
 use std::path::{Path, PathBuf};
@@ -103,8 +105,8 @@ pub struct HostConfig {
     pub app_id: String,
 }
 
-/// How long a key waits for 顺手·知字 before showing the decoder's order; a later
-/// result arrives through `Host::poll_ranking`.
+/// Initial wait for synchronous callers. Later results arrive through
+/// `Host::poll_ranking`.
 pub const RANKING_BUDGET: Duration = Duration::from_millis(15);
 
 /// A segment picked mid-composition stays in front of the letters left (`到时候wo xuan yi xuan`);
@@ -141,6 +143,7 @@ pub enum Ablation {
 
 struct Pending {
     generation: u64,
+    context: String,
     view: View,
     slots: Vec<usize>,
     homophone: Vec<bool>,
@@ -149,6 +152,12 @@ struct Pending {
     edits: Vec<f64>,
     /// The typed letters are not whole pinyin (the first is a guess too).
     guessed: bool,
+}
+
+struct PendingOffer {
+    generation: u64,
+    view: View,
+    texts: Vec<String>,
 }
 
 /// One C3 decision in full, for local evaluation (`Host::last_composition`).
@@ -171,8 +180,17 @@ pub struct Host {
     session: *mut AimSession,
     recent: String,
     worker: Option<Worker>,
+    ranking_wait: Duration,
     generation: u64,
     pending: Option<Pending>,
+    pending_offer: Option<PendingOffer>,
+    zhiju_worker: Option<generation::Worker>,
+    zhiju_enabled: bool,
+    context_ranking_enabled: bool,
+    pending_generation: Option<generation::Done>,
+    pending_verification: Option<(generation::Done, String)>,
+    pending_gen_offer: Option<(View, String)>,
+    generation_observation: generation::Observation,
     observation: ModelObservation,
     last_composition: CompositionTrace,
     last_group: GroupTrace,
@@ -212,8 +230,17 @@ impl Host {
             session,
             recent: String::new(),
             worker: None,
+            ranking_wait: RANKING_BUDGET,
             generation: 0,
             pending: None,
+            pending_offer: None,
+            zhiju_worker: None,
+            zhiju_enabled: true,
+            context_ranking_enabled: true,
+            pending_generation: None,
+            pending_verification: None,
+            pending_gen_offer: None,
+            generation_observation: generation::Observation::default(),
             observation: ModelObservation::default(),
             last_composition: CompositionTrace::default(),
             last_group: GroupTrace::default(),
@@ -244,10 +271,68 @@ impl Host {
         self.clear_context();
     }
 
+    /// IBus serves several applications in one process. Recreate the core session
+    /// with its real learning domain while retaining the loaded model workers.
+    /// The caller reapplies the application's saved switches and input mode.
+    pub fn change_application(&mut self, config: &HostConfig) -> Result<(), String> {
+        let mut fresh = Self::open(config)?;
+        self.process(Key::FocusLost, 0, false);
+        std::mem::swap(&mut self.session, &mut fresh.session);
+        self.set_app(&config.app_id);
+        Ok(())
+    }
+
     /// Turns on 顺手·知字. `notify` runs on the model thread when a late result is
     /// ready; the shell should then call `poll_ranking` on its own thread.
     pub fn enable_model(&mut self, scorer: Box<dyn ranking::Scorer>, notify: Option<Box<dyn Fn() + Send>>) {
-        self.worker = Some(Worker::start(scorer, notify));
+        self.start_ranking(scorer, notify, RANKING_BUDGET);
+    }
+
+    /// For shells that redraw from a model notification on their input thread.
+    /// Publish the decoder's page immediately so a key callback never waits on inference.
+    pub fn enable_deferred_model(&mut self, scorer: Box<dyn ranking::Scorer>, notify: Box<dyn Fn() + Send>) {
+        self.start_ranking(scorer, Some(notify), Duration::ZERO);
+    }
+
+    fn start_ranking(
+        &mut self,
+        scorer: Box<dyn ranking::Scorer>,
+        notify: Option<Box<dyn Fn() + Send>>,
+        wait: Duration,
+    ) {
+        let worker = Worker::start(scorer, notify);
+        worker.advance(self.generation);
+        self.worker = Some(worker);
+        self.ranking_wait = wait;
+    }
+
+    /// Loads the independent 知句 worker; call from the shell's loader, never a key callback.
+    pub fn enable_zhiju(&mut self, vocabulary: &Path, model: Box<dyn generation::Distribution>,
+        notify: Option<Box<dyn Fn() + Send>>) -> Result<(), String> {
+        let worker = generation::Worker::start(vocabulary, model, notify)?;
+        worker.advance(self.generation);
+        self.zhiju_worker = Some(worker);
+        Ok(())
+    }
+
+    pub fn set_zhiju_enabled(&mut self, enabled: bool) {
+        self.zhiju_enabled = enabled;
+        if !enabled {
+            if let Some(worker) = &self.zhiju_worker { worker.advance(u64::MAX); worker.clear(); }
+            self.pending_generation = None;
+            self.pending_verification = None;
+            self.pending_gen_offer = None;
+        }
+    }
+
+    pub fn set_context_ranking_enabled(&mut self, enabled: bool) {
+        self.context_ranking_enabled = enabled;
+        if !enabled {
+            self.pending = None;
+            self.pending_offer = None;
+            if let Some(worker) = &self.worker { worker.advance(u64::MAX); }
+            if let Some((done, _)) = self.pending_verification.take() { self.pending_generation = Some(done); }
+        }
     }
 
     /// The owner's settled habits from their own quality records (one JSON per line).
@@ -275,6 +360,8 @@ impl Host {
         &self.observation
     }
 
+    pub fn generation_observation(&self) -> &generation::Observation { &self.generation_observation }
+
     /// The last C3 decision's candidates, edits and scores (local evaluation only).
     pub fn last_composition(&self) -> &CompositionTrace {
         &self.last_composition
@@ -298,13 +385,113 @@ impl Host {
     /// A late 顺手·知字 result for the page on screen, if one arrived and no key came
     /// in between: the page to redraw.
     pub fn poll_ranking(&mut self) -> Option<View> {
-        let generation = self.pending.as_ref()?.generation;
-        let done = self.worker.as_ref()?.try_take(generation)?;
-        let pending = self.pending.take()?;
-        let view = self.apply_ranking(pending, done, true);
+        let view = self.poll_models()?;
         if let Some(recorder) = &mut self.recorder {
             recorder.refresh(&view, &self.observation);
         }
+        Some(view)
+    }
+
+    fn poll_models(&mut self) -> Option<View> {
+        if let Some(pending) = &self.pending {
+            if let Some(done) = self.worker.as_ref().and_then(|w| w.try_take(pending.generation)) {
+                let pending = self.pending.take()?;
+                return Some(self.finish_ranking(pending, done, true));
+            }
+        }
+        if let Some(done) = self.worker.as_ref().and_then(|w| w.try_comparison(self.generation)) {
+            match done.id {
+                0 => {
+                    if let Some(pending) = self.pending_offer.take() {
+                        if pending.generation == self.generation && self.page_matches(&pending.view) {
+                            if let Some(scores) = done.scores.filter(|s| s.len() == pending.texts.len()) {
+                                let best = (0..scores.len().saturating_sub(1)).max_by(|&a, &b| scores[a].total_cmp(&scores[b]));
+                                if let Some(best) = best.filter(|&i| done.elapsed <= Duration::from_millis(8)
+                                    && scores[i] > scores[scores.len() - 1] + 2.0) {
+                                    let text = &pending.texts[best];
+                                    if unsafe { aim_session_offer_abbreviation(self.session, text.as_ptr(), text.len()) } == 0 {
+                                        return Some(self.current_page(pending.view));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                1 => {
+                    if let Some((generated, native)) = self.pending_verification.take() {
+                        if self.zhiju_enabled && self.core_page_texts().first() == Some(&native) {
+                            let texts = [generated.candidates[0].text.clone(), native];
+                            let guessed = unsafe { aim_session_composition_guessed(self.session) } != 0;
+                            let veto = done.elapsed <= Duration::from_millis(8) && done.scores.as_ref().is_some_and(|scores|
+                                ranking::composition_lead(&texts, scores, &[0.0, 0.0], guessed) == Some(1));
+                            return self.apply_generation(generated, veto);
+                        }
+                    }
+                }
+                2 => {
+                    if let Some((view, text)) = self.pending_gen_offer.take() {
+                        if self.zhiju_enabled && self.page_matches(&view) && done.elapsed <= Duration::from_millis(8) {
+                            if let Some(scores) = done.scores.filter(|s| s.len() == 3) {
+                                if ranking::composition_offer(&[view.candidates[0].text.clone(), text.clone()], &scores[..2], &[0.0, 0.0]) == Some(1)
+                                    && scores[1] > scores[2] + 2.0 {
+                                    return Some(self.offer_composition(view, Some(text)));
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        if let Some(done) = self.zhiju_worker.as_ref().and_then(|w| w.take(self.generation)) {
+            self.generation_observation = done.observation.clone();
+            if !done.candidates.is_empty() { self.pending_generation = Some(done); }
+        }
+        // A fast GEN result waits for the primary page; a partial native word's
+        // shorter likelihood must never veto a completed sentence.
+        if self.pending.is_none() && self.zhiju_enabled {
+            if let Some(done) = self.pending_generation.take() {
+                let native = self.core_page_texts().first()?.clone();
+                if self.context_ranking_enabled && self.worker.is_some() && self.observation.outcome == "composed"
+                    && native != done.candidates[0].text {
+                    self.worker.as_ref()?.compare(ranking::Comparison { id: 1, generation: self.generation,
+                        context: done.job.context.clone(), texts: vec![done.candidates[0].text.clone(), native.clone()] });
+                    self.pending_verification = Some((done, native));
+                } else { return self.apply_generation(done, false); }
+            }
+        }
+        None
+    }
+
+    fn page_matches(&self, view: &View) -> bool {
+        self.core_page_texts() == view.candidates.iter().map(|c| c.text.clone()).collect::<Vec<_>>()
+    }
+
+    fn apply_generation(&mut self, done: generation::Done, veto: bool) -> Option<View> {
+        if done.job.generation != self.generation || done.elapsed >= generation::BUDGET || !self.zhiju_enabled { return None; }
+        let mut result = AimResult::default();
+        let status = unsafe { agent_ime_core::aim_session_apply_zhiju_snapshot(self.session,
+            done.job.snapshot.0, i32::from(!veto), &mut result) };
+        let mut view = view_from(&result);
+        unsafe { aim_result_free(&mut result); }
+        if status != 0 && status > -10 { return None; }
+        view.consumed = done.job.original.consumed;
+        view.commit = done.job.original.commit;
+        if !veto && status == 0 {
+            self.generation_observation.outcome = "applied";
+            self.pending_offer = None;
+            if let Some(first) = view.candidates.first_mut() { first.comment = "整句 · 知句".into(); }
+        } else if !veto && status <= -10 && self.context_ranking_enabled && self.worker.is_some()
+            && view.page == 0 && view.candidates.len() == 5 {
+            let text = done.candidates[0].text.clone();
+            if !view.candidates.iter().any(|c| c.text == text) {
+                self.worker.as_ref()?.compare(ranking::Comparison { id: 2, generation: self.generation,
+                    context: done.job.context, texts: vec![view.candidates[0].text.clone(), text.clone(), view.candidates[4].text.clone()] });
+                self.pending_gen_offer = Some((view.clone(), text));
+            }
+        }
+        if veto { self.generation_observation.outcome = "vetoed"; }
+        else if status != 0 { self.generation_observation.outcome = "rejected"; }
         Some(view)
     }
 
@@ -361,6 +548,16 @@ impl Host {
         }
         self.generation += 1;
         self.pending = None;
+        self.pending_offer = None;
+        self.pending_generation = None;
+        self.pending_verification = None;
+        self.pending_gen_offer = None;
+        self.generation_observation = generation::Observation { outcome: "not_applicable", ..Default::default() };
+        if let Some(worker) = &self.worker { worker.advance(self.generation); }
+        if let Some(worker) = &self.zhiju_worker { worker.advance(self.generation); }
+        if secure || view.preedit.is_empty() || matches!(key, Key::FocusLost | Key::Deactivate | Key::Escape) {
+            if let Some(worker) = &self.zhiju_worker { worker.clear(); }
+        }
         // As on macOS: only keys that produce a fresh page are ranked; navigation
         // keeps the order the core stored.
         // Picking a segment (digit or Space) that leaves letters to convert shows a fresh page too.
@@ -382,13 +579,23 @@ impl Host {
         }
         // A segment picked mid-composition is not in the document yet: the model reads it as context.
         let context = with_picked_text(context, &view.preedit);
+        if self.zhiju_enabled && view.page == 0 {
+            if let Some(worker) = &self.zhiju_worker {
+                let mut snapshot = std::ptr::null_mut();
+                if unsafe { agent_ime_core::aim_session_zhiju_snapshot(self.session, &mut snapshot) } == 0 && !snapshot.is_null() {
+                    worker.submit(generation::Job { generation: self.generation, snapshot: generation::Snapshot(snapshot),
+                        original: view.clone(), context: context.clone() });
+                    self.generation_observation.outcome = "pending";
+                }
+            }
+        }
         self.rank(view, context)
     }
 
     fn rank(&mut self, view: View, context: String) -> View {
         self.last_composition = CompositionTrace::default();
         self.last_group = GroupTrace::default();
-        if self.worker.is_none() {
+        if self.worker.is_none() || !self.context_ranking_enabled {
             self.observation = ModelObservation { outcome: "unavailable", ..Default::default() };
             return view;
         }
@@ -415,11 +622,16 @@ impl Host {
         let group: Vec<String> = slots.iter().map(|&i| view.candidates[i].text.clone()).collect();
         let generation = self.generation;
         let worker = self.worker.as_ref().expect("checked above");
-        worker.submit(Job { generation, context, composition: composition.clone(), group });
+        worker.submit(Job { generation, context: context.clone(), composition: composition.clone(), group });
         let guessed = !composition.is_empty() && unsafe { aim_session_composition_guessed(self.session) } != 0;
-        let pending = Pending { generation, view: view.clone(), slots, homophone, composition, edits, guessed };
-        match worker.wait(generation, RANKING_BUDGET) {
-            Some(done) => self.apply_ranking(pending, done, false),
+        let pending = Pending { generation, context, view: view.clone(), slots, homophone, composition, edits, guessed };
+        let ready = if self.ranking_wait.is_zero() {
+            worker.try_take(generation)
+        } else {
+            worker.wait(generation, self.ranking_wait)
+        };
+        match ready {
+            Some(done) => self.finish_ranking(pending, done, false),
             None => {
                 self.observation = ModelObservation {
                     outcome: "pending",
@@ -430,6 +642,30 @@ impl Host {
                 view
             }
         }
+    }
+
+    fn finish_ranking(&mut self, pending: Pending, done: Done, late: bool) -> View {
+        let context = pending.context.clone();
+        let view = self.apply_ranking(pending, done, late);
+        if view.page == 0 && view.candidates.len() == 5
+            && matches!(self.observation.outcome, "unchanged" | "reordered" | "composed") {
+            let mut buffer = vec![0u8; 4096];
+            let length = unsafe { aim_session_abbreviation_alternatives(self.session, buffer.as_mut_ptr(), buffer.len()) };
+            if length > 0 && length as usize <= buffer.len() {
+                let mut texts: Vec<String> = String::from_utf8_lossy(&buffer[..length as usize]).split('\t')
+                    .filter(|s| !s.is_empty()).map(str::to_string).collect();
+                // Bind the alternatives to the actual post-C2/C3 fifth, scored
+                // alongside them rather than using a score from an earlier batch.
+                if !texts.is_empty() {
+                    texts.push(view.candidates[4].text.clone());
+                    self.worker.as_ref().unwrap().compare(ranking::Comparison {
+                        id: 0, generation: self.generation, context, texts: texts.clone(),
+                    });
+                    self.pending_offer = Some(PendingOffer { generation: self.generation, view: view.clone(), texts });
+                }
+            }
+        }
+        view
     }
 
     /// Which candidates of the current page the context model scores: those that cover the whole
@@ -605,6 +841,14 @@ impl Host {
     /// The caret moved to another document or application: forget the context.
     pub fn clear_context(&mut self) {
         self.recent.clear();
+        self.generation += 1;
+        self.pending = None;
+        self.pending_offer = None;
+        self.pending_generation = None;
+        self.pending_verification = None;
+        self.pending_gen_offer = None;
+        if let Some(worker) = &self.worker { worker.advance(self.generation); }
+        if let Some(worker) = &self.zhiju_worker { worker.advance(self.generation); worker.clear(); }
     }
 }
 
@@ -698,8 +942,17 @@ mod context_tests {
             session: std::ptr::null_mut(),
             recent: "旧的".into(),
             worker: None,
+            ranking_wait: RANKING_BUDGET,
             generation: 0,
             pending: None,
+            pending_offer: None,
+            zhiju_worker: None,
+            zhiju_enabled: true,
+            context_ranking_enabled: true,
+            pending_generation: None,
+            pending_verification: None,
+            pending_gen_offer: None,
+            generation_observation: generation::Observation::default(),
             observation: ModelObservation::default(),
             last_composition: CompositionTrace::default(),
             last_group: GroupTrace::default(),
@@ -751,6 +1004,9 @@ mod page_texts_tests {
                 "泥\tni\t90\n拟\tni\t80\n逆\tni\t70\n腻\tni\t60\n",
                 "跑\tpao\t1000\n泡\tpao\t900\n抛\tpao\t800\n炮\tpao\t700\n",
                 "到\tdao\t1000\n道\tdao\t900\n发\tfa\t1000\n法\tfa\t900\n",
+                "实施\tshi shi\t30000\n事实\tshi shi\t29000\n试试\tshi shi\t28000\n实时\tshi shi\t27000\n适时\tshi shi\t26000\n",
+                "史实\tshi shi\t25000\n失实\tshi shi\t24000\n逝世\tshi shi\t23000\n失势\tshi shi\t22000\n时事\tshi shi\t21000\n",
+                "外\twai\t100\n们\tmen\t100\n想\txiang\t100\n星\txing\t90\n吃\tchi\t100\n菜\tcai\t100\n我们\two men\t100\n",
             ),
         )
         .unwrap();
@@ -775,6 +1031,29 @@ mod page_texts_tests {
         let count = core.len().min(shown.len());
         assert!(count > 0, "typing ni yields candidates, core={core:?} shown={shown:?}");
         assert_eq!(&core[..count], &shown[..count], "core={core:?} shown={shown:?}");
+        drop(host);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn application_change_replaces_core_domain_and_clears_pending_page_but_retains_models() {
+        let _serial = SESSIONS.lock().unwrap_or_else(|error| error.into_inner());
+        let (root, shared, user) = minimal_directories("ibus-app-change");
+        let config = |app: &str| HostConfig {
+            shared_dir: shared.clone(), user_dir: user.clone(), app_id: app.into(),
+        };
+        let mut host = Host::open(&config("gtk3-im:first")).unwrap();
+        host.enable_model(Box::new(OffpageScorer { delay: Duration::ZERO }), None);
+        host.process(Key::Text("n".into()), 0, false);
+        host.set_context("上一个应用");
+        let old_session = host.session;
+        host.change_application(&config("gtk3-im:second")).unwrap();
+        assert_ne!(host.session, old_session);
+        assert_eq!(host.app_id, "gtk3-im:second");
+        assert!(host.recent.is_empty() && host.pending.is_none());
+        assert!(host.worker.is_some());
+        assert!(host.core_page_texts().is_empty());
+        assert!(host.process(Key::Text("i".into()), 0, false).preedit.starts_with('i'));
         drop(host);
         std::fs::remove_dir_all(root).unwrap();
     }
@@ -815,6 +1094,7 @@ mod page_texts_tests {
         });
         let pending = Pending {
             generation: host.generation,
+            context: host.recent.clone(),
             view,
             slots,
             homophone,
@@ -927,6 +1207,207 @@ mod page_texts_tests {
             let view = apply_scores(host, view, Some(("再等我一下", 40.0)), None);
             assert_eq!(host.observation.outcome, "composed");
             assert_eq!(view.commit, "先前提交");
+            assert_core_page(host, &view);
+        });
+    }
+
+    struct OffpageScorer { delay: Duration }
+    impl ranking::Scorer for OffpageScorer {
+        fn score(&mut self, _: &str, texts: &[String]) -> Result<Vec<f64>, String> {
+            if texts.iter().any(|s| s == "时事") {
+                std::thread::sleep(self.delay);
+                return Ok(texts.iter().map(|s| if s == "时事" { 0.0 } else { -100.0 }).collect());
+            }
+            Ok(vec![-10.0; texts.len()])
+        }
+    }
+
+    #[test]
+    fn optional_offpage_word_preserves_four_slots_and_digit_five_commits_it() {
+        with_input("offpage", "shishi", |host, view| {
+            assert!(!view.candidates.iter().any(|c| c.text == "时事"));
+            host.enable_model(Box::new(OffpageScorer { delay: Duration::ZERO }), None);
+            let mut shown = host.rank(view, "关注国内外新闻".into());
+            let primary = shown.clone();
+            let deadline = std::time::Instant::now() + Duration::from_secs(2);
+            while std::time::Instant::now() < deadline && shown.candidates[4].text != "时事" {
+                if let Some(next) = host.poll_ranking() { shown = next; }
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            assert_eq!(shown.candidates[4].text, "时事");
+            assert_eq!(shown.candidates[..4], primary.candidates[..4]);
+            assert_core_page(host, &shown);
+            assert_eq!(host.process(Key::Text("5".into()), 0, false).commit, "时事");
+        });
+    }
+
+    #[test]
+    fn optional_offpage_comparison_cannot_apply_after_its_eight_ms_budget() {
+        with_input("offpage-budget", "shishi", |host, view| {
+            host.enable_model(Box::new(OffpageScorer { delay: Duration::from_millis(12) }), None);
+            let view = host.rank(view, "关注国内外新闻".into());
+            std::thread::sleep(Duration::from_millis(40));
+            assert!(host.poll_ranking().is_none());
+            assert_eq!(host.core_page_texts(), view.candidates.iter().map(|c| c.text.clone()).collect::<Vec<_>>());
+        });
+    }
+
+    #[test]
+    fn deferred_ranking_returns_a_selectable_page_and_applies_on_notification() {
+        struct HeldScorer {
+            release: Option<std::sync::mpsc::Receiver<()>>,
+        }
+        impl ranking::Scorer for HeldScorer {
+            fn score(&mut self, _context: &str, texts: &[String]) -> Result<Vec<f64>, String> {
+                if let Some(release) = self.release.take() {
+                    release.recv_timeout(Duration::from_secs(2)).map_err(|error| error.to_string())?;
+                }
+                Ok(vec![-10.0; texts.len()])
+            }
+        }
+
+        with_input("deferred-ranking", "shishi", |host, decoder_page| {
+            let (release, wait) = std::sync::mpsc::channel();
+            let (notify, ready) = std::sync::mpsc::channel();
+            host.enable_deferred_model(Box::new(HeldScorer { release: Some(wait) }), Box::new(move || {
+                let _ = notify.send(());
+            }));
+            let initial = host.rank(decoder_page.clone(), "当地消息".into());
+            assert_eq!(initial.candidates, decoder_page.candidates);
+            assert_eq!(host.model_observation().outcome, "pending");
+            assert_core_page(host, &initial);
+            release.send(()).unwrap();
+            ready.recv_timeout(Duration::from_secs(2)).unwrap();
+            let redrawn = host.poll_ranking().expect("completed ranking from notification");
+            assert_core_page(host, &redrawn);
+            let selected = redrawn.candidates[0].text.clone();
+            assert_eq!(host.process(Key::Text("1".into()), 0, false).commit, selected);
+        });
+
+        with_input("deferred-rank-select", "shishi", |host, decoder_page| {
+            let (release, wait) = std::sync::mpsc::channel();
+            host.enable_deferred_model(Box::new(HeldScorer { release: Some(wait) }), Box::new(|| {}));
+            let shown = host.rank(decoder_page, "当地消息".into());
+            assert_eq!(host.model_observation().outcome, "pending");
+            let selected = shown.candidates[0].text.clone();
+            assert_eq!(host.process(Key::Text("1".into()), 0, false).commit, selected);
+            assert!(host.pending.is_none());
+            let _ = release.send(());
+            assert!(host.poll_ranking().is_none());
+            assert!(host.core_page_texts().is_empty());
+        });
+    }
+
+    #[derive(Default)]
+    struct SyntheticAudit {
+        calls: std::sync::atomic::AtomicUsize,
+        commits: std::sync::atomic::AtomicUsize,
+        clears: std::sync::atomic::AtomicUsize,
+    }
+    impl SyntheticAudit {
+        fn load(&self, order: std::sync::atomic::Ordering) -> usize { self.calls.load(order) }
+    }
+    struct SyntheticDistribution { calls: std::sync::Arc<SyntheticAudit>, delay: Duration, fail: bool }
+    impl generation::Distribution for SyntheticDistribution {
+        fn score(&mut self, tokens: &[i32], rows: usize, cols: usize, vocab: usize) -> Result<Vec<f32>, String> {
+            use std::sync::atomic::Ordering;
+            self.calls.calls.fetch_add(1, Ordering::SeqCst);
+            std::thread::sleep(self.delay);
+            if self.fail { return Err("synthetic model error".into()); }
+            let mut scores = vec![-100.0; rows * vocab];
+            for (row, prefix) in tokens.chunks_exact(cols).enumerate() {
+                let length = prefix.iter().take_while(|&&v| v != 0).count();
+                let target = [4, 5, 6, 7][length.saturating_sub(2).min(3)];
+                scores[row * vocab + target] = -0.1;
+            }
+            Ok(scores)
+        }
+        fn commit_prefixes(&mut self) { self.calls.commits.fetch_add(1, std::sync::atomic::Ordering::SeqCst); }
+        fn clear(&mut self) { self.calls.clears.fetch_add(1, std::sync::atomic::Ordering::SeqCst); }
+    }
+
+    fn with_generation(name: &str, delay: Duration, fail: bool, check: impl FnOnce(&mut Host, std::sync::Arc<SyntheticAudit>)) {
+        let _serial = SESSIONS.lock().unwrap_or_else(|error| error.into_inner());
+        let (root, shared, user) = minimal_directories(name);
+        let vocab = root.join("itos.json");
+        std::fs::write(&vocab, r#"["<pad>","<bos>","<unk>","外","我","们","想","吃","星","菜"]"#).unwrap();
+        let mut host = Host::open(&HostConfig { shared_dir: shared, user_dir: user, app_id: format!("zhizi.gen-{name}") }).unwrap();
+        let calls = std::sync::Arc::new(SyntheticAudit::default());
+        host.enable_zhiju(&vocab, Box::new(SyntheticDistribution { calls: calls.clone(), delay, fail }), None).unwrap();
+        host.set_context_ranking_enabled(false);
+        host.set_context("外");
+        check(&mut host, calls);
+        drop(host);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    fn enter(host: &mut Host, keys: &str, secure: bool) -> View {
+        let mut view = View::default();
+        for c in keys.chars() { view = host.process(Key::Text(c.to_string()), 0, secure); }
+        view
+    }
+
+    #[test]
+    fn generation_without_context_ranking_uses_real_core_and_commits_shown_first() {
+        with_generation("independent", Duration::ZERO, false, |host, calls| {
+            let mut view = enter(host, "wmxc", false);
+            let deadline = std::time::Instant::now() + Duration::from_secs(2);
+            while std::time::Instant::now() < deadline && view.candidates.first().is_none_or(|c| c.comment != "整句 · 知句") {
+                if let Some(next) = host.poll_ranking() { view = next; }
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            assert!(calls.load(std::sync::atomic::Ordering::SeqCst) > 0);
+            assert!(calls.commits.load(std::sync::atomic::Ordering::SeqCst) > 0);
+            assert_eq!(view.candidates[0].text, "我们想吃");
+            assert_eq!(view.candidates[0].comment, "整句 · 知句");
+            assert_eq!(view.candidates.iter().map(|c| c.text.clone()).collect::<Vec<_>>(), host.core_page_texts());
+            assert_eq!(host.process(Key::Text("1".into()), 0, false).commit, view.candidates[0].text);
+        });
+    }
+
+    #[test]
+    fn disabled_or_secure_generation_never_calls_the_model() {
+        with_generation("disabled-secure", Duration::ZERO, false, |host, calls| {
+            host.set_zhiju_enabled(false);
+            enter(host, "wmxc", false);
+            host.process(Key::Escape, 0, false);
+            host.set_zhiju_enabled(true);
+            enter(host, "wmxc", true);
+            std::thread::sleep(Duration::from_millis(10));
+            assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+            assert!(host.poll_ranking().is_none());
+        });
+    }
+
+    #[test]
+    fn generation_error_or_timeout_keeps_the_basic_page() {
+        for (name, delay, fail) in [("error", Duration::ZERO, true), ("timeout", Duration::from_millis(45), false)] {
+            with_generation(name, delay, fail, |host, calls| {
+                let view = enter(host, "wmxc", false);
+                std::thread::sleep(Duration::from_millis(80));
+                assert!(calls.load(std::sync::atomic::Ordering::SeqCst) > 0);
+                assert_eq!(calls.commits.load(std::sync::atomic::Ordering::SeqCst), 0, "failed/late inference cannot enter the shared prefix cache");
+                assert!(host.poll_ranking().is_none());
+                assert_core_page(host, &view);
+            });
+        }
+    }
+
+    #[test]
+    fn focus_clear_cancels_a_completed_generation_before_it_is_polled() {
+        with_generation("focus-clear", Duration::ZERO, false, |host, calls| {
+            let view = enter(host, "wmxc", false);
+            let deadline = std::time::Instant::now() + Duration::from_secs(1);
+            while calls.load(std::sync::atomic::Ordering::SeqCst) < 4 && std::time::Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            host.clear_context();
+            let deadline = std::time::Instant::now()+Duration::from_secs(1);
+            while calls.clears.load(std::sync::atomic::Ordering::SeqCst)==0 && std::time::Instant::now()<deadline {
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            assert!(calls.clears.load(std::sync::atomic::Ordering::SeqCst)>0);
+            assert!(host.poll_ranking().is_none());
             assert_core_page(host, &view);
         });
     }

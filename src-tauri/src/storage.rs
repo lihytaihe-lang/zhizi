@@ -3,6 +3,7 @@ use crate::keychain::system_provider_keychain;
 use crate::keychain::{
     provider_keychain_reference, validate_provider_keychain_reference, ProviderKeychain,
 };
+#[cfg(test)]
 use crate::skin_catalog::is_candidate_skin_id;
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -2897,6 +2898,7 @@ impl AppStorage {
         self.project_runtime_configuration()
     }
 
+    #[cfg(test)]
     pub fn set_candidate_theme(
         &self,
         candidate_theme: &str,
@@ -2907,6 +2909,7 @@ impl AppStorage {
         )
     }
 
+    #[cfg(test)]
     pub fn set_candidate_theme_from_catalog(
         &self,
         candidate_theme: &str,

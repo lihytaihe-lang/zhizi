@@ -211,6 +211,24 @@ final class ZhijuTests: XCTestCase {
         XCTAssertEqual(finished.contextModel.zhijuLatencyMs, 40)
     }
 
+    func testCoreStepReachingDeadlineDoesNotStartPrediction() throws {
+        let (probe, _, target) = try sentenceFixture()
+        defer { probe.close() }
+        var ticks: UInt64 = 0
+        probe.zhijuClock = { ticks }
+        probe.zhijuCoreStepForTesting = { ticks = 40_000_000 }
+        try installFake(target, into: probe) {
+            XCTFail("An expired search started a model prediction")
+        }
+        let steps = Steps()
+        probe.deferredApplier = steps.append
+        probe.zhijuEnabled = true
+        let shown = try type("b", into: probe)
+        let result = try XCTUnwrap(steps.next().finish())
+        XCTAssertEqual(result.candidates, shown.candidates)
+        XCTAssertEqual(result.contextModel.zhijuOutcome, .timeout)
+    }
+
     func testNewKeyDoesNotWaitForPredictionAndMakesTheResultStale() throws {
         let (probe, _, target) = try sentenceFixture()
         defer { probe.close() }

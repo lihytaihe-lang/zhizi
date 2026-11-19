@@ -8,6 +8,7 @@ public struct MappedIMEEvent {
     public let modifiers: UInt32
     public let deliveryID: UInt64
     public let isAutorepeat: Bool
+    var repairedShiftSlash = false
 }
 
 public final class EventMapper {
@@ -56,9 +57,14 @@ public final class EventMapper {
         // makes paired quotes/colon/parentheses unreachable while composing.
         // The keypad + is always `+` (expands the panel): owner 2026-10-11, keypad + did
         // nothing in the Claude/ChatGPT desktop apps while Shift+= worked.
-        let printableText = event.keyCode == 69
+        let eventText = event.keyCode == 69
             ? "+" : event.characters ?? event.charactersIgnoringModifiers ?? ""
         let actionModifiers = event.modifierFlags.intersection([.shift, .control, .option, .command])
+        // Some hosts supply the unshifted slash with Shift still set. Confirm the
+        // intended character using the active layout, including non-US slash keys.
+        let repairedShiftSlash = eventText == "/" && actionModifiers == [.shift]
+            && event.characters(byApplyingModifiers: .shift) == "?"
+        let printableText = repairedShiftSlash ? "?" : eventText
         if event.keyCode == 51 && actionModifiers == [.control, .shift] {
             return MappedIMEEvent(
                 kind: .blacklistCandidate, text: "", modifiers: mappedModifiers,
@@ -93,7 +99,8 @@ public final class EventMapper {
             text: kind == .text ? printableText : "",
             modifiers: mappedModifiers,
             deliveryID: deliveryID,
-            isAutorepeat: isAutorepeat
+            isAutorepeat: isAutorepeat,
+            repairedShiftSlash: repairedShiftSlash
         )
     }
 

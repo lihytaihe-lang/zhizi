@@ -59,6 +59,10 @@ Source: "{#Stage}\*"; DestDir: "{app}\{#Tag}"; Flags: ignoreversion recursesubdi
 Source: "{#LoaderDir}\zhizi_loader_1.dll"; DestDir: "{app}"; Flags: onlyifdoesntexist
 
 [Icons]
+Name: "{group}\关闭候选排序"; Filename: "{app}\{#Tag}\zhizi-settings.exe"; Parameters: "--context-ranking off"; IconFilename: "{app}\{#Tag}\zhizi.ico"
+Name: "{group}\开启候选排序"; Filename: "{app}\{#Tag}\zhizi-settings.exe"; Parameters: "--context-ranking on"; IconFilename: "{app}\{#Tag}\zhizi.ico"
+Name: "{group}\关闭知句生成"; Filename: "{app}\{#Tag}\zhizi-settings.exe"; Parameters: "--zhiju off"; IconFilename: "{app}\{#Tag}\zhizi.ico"
+Name: "{group}\开启知句生成"; Filename: "{app}\{#Tag}\zhizi-settings.exe"; Parameters: "--zhiju on"; IconFilename: "{app}\{#Tag}\zhizi.ico"
 #ifndef PUBLIC
 Name: "{group}\关闭测试记录与上传"; Filename: "{app}\{#Tag}\zhizi-upload.exe"; Parameters: "--set-consent no"; IconFilename: "{app}\{#Tag}\zhizi.ico"
 Name: "{group}\开启测试记录与上传"; Filename: "{app}\{#Tag}\zhizi-upload.exe"; Parameters: "--set-consent yes"; IconFilename: "{app}\{#Tag}\zhizi.ico"

@@ -1,8 +1,10 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 
-mod blacklist;
+pub mod blacklist;
 mod context_model;
+mod exact_context;
 mod english_choices;
+mod exact_offpage;
 mod mixer;
 mod lexicon_layers;
 pub mod personal_picks;
@@ -10,6 +12,7 @@ pub mod ranking;
 mod secure_directory;
 mod state;
 pub mod zhixu;
+pub mod sdk;
 
 use context_model::ContextModel;
 use mixer::MixerLexicon;
@@ -19,6 +22,14 @@ use std::ptr;
 use std::slice;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
+
+/// Stable C struct/key ABI generation; increment for incompatible ABI changes.
+pub const ABI_VERSION: u32 = 6;
+/// Static NUL-terminated crate version. Borrow only; never free or mutate it.
+#[unsafe(no_mangle)]
+pub extern "C" fn aim_core_version() -> *const std::ffi::c_char {
+    concat!(env!("CARGO_PKG_VERSION"), "\0").as_ptr().cast()
+}
 
 static LIVE_SESSIONS: AtomicUsize = AtomicUsize::new(0);
 
@@ -212,9 +223,12 @@ unsafe fn utf8_argument(pointer: *const u8, length: usize) -> Result<String, ()>
 }
 
 #[unsafe(no_mangle)]
-/// Creates one isolated IME session.
+/// Creates one composition session over the process dictionary deployment.
 ///
 /// # Safety
+///
+/// Serialize creation and keep the same shared/user deployment while any
+/// sessions are alive, including sessions owned by the Rust SDK facade.
 ///
 /// Each non-null pointer must reference a readable buffer of its corresponding
 /// length for the duration of this call. A null pointer is permitted only when
@@ -1425,7 +1439,7 @@ pub unsafe extern "C" fn aim_result_free(result: *mut AimResult) {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn aim_core_abi_version() -> u32 {
-    6
+    ABI_VERSION
 }
 
 #[unsafe(no_mangle)]

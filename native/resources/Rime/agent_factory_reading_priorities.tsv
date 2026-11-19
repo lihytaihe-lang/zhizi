@@ -21,15 +21,15 @@ Ansible	ansible	500
 AppKit	appkit	519
 Apple	apple	500
 Azure	azure	500
-BAD	bad	503
+BAD	bad	506
 BASELINE	baseline	520
 BSD	bsd	460
 Bitbucket	bitbucket	500
 Bun	bun	500
 CAPTURE	capture	499
 CD	cd	500
-CFBundleShortVersionString	cfbundleshortversionstring	440
-CFBundleVersion	cfbundleversion	468
+CFBundleShortVersionString	cfbundleshortversionstring	443
+CFBundleVersion	cfbundleversion	470
 CGEvent	cgevent	390
 CI	ci	500
 CLI	cli	500
@@ -61,7 +61,7 @@ FLAG	flag	449
 FREEZE	freeze	507
 FTS	fts	449
 Figma	figma	500
-Fresh	fresh	518
+Fresh	fresh	519
 GPL	gpl	451
 GPT	gpt	500
 Gemini	gemini	500
@@ -76,7 +76,7 @@ HOME	home	520
 HTTP	http	500
 HTTPS	https	520
 Hugging Face	huggingface	500
-IBus	ibus	405
+IBus	ibus	416
 IDAT	idat	335
 IDE	ide	381
 IEND	iend	335
@@ -139,8 +139,8 @@ OpenCC	opencc	440
 OpenWorkspace	openworkspace	335
 PASS	pass	520
 PENDING	pending	520
-PageDown	pagedown	493
-PageUp	pageup	468
+PageDown	pagedown	494
+PageUp	pageup	470
 PassThrough	passthrough	335
 PostgreSQL	postgres	500
 Postgres	postgres	500
@@ -148,7 +148,7 @@ ProductCommit	productcommit	520
 ProductInputs	productinputs	520
 Python	python	500
 README	readme	520
-READY	ready	514
+READY	ready	515
 REG	reg	425
 REPORT	report	520
 REST	rest	500
@@ -184,8 +184,9 @@ Terraform	terraform	500
 TextEdit	textedit	481
 TypeScript	ts	500
 TypeScript	typescript	500
-UID	uid	493
+UID	uid	482
 URL	url	520
+UTC	utc	421
 UTF	utf	520
 Ubuntu	ubuntu	500
 UserConfirm	userconfirm	335
@@ -213,12 +214,12 @@ XcodeGen	xcodegen	335
 YAML	yaml	500
 YES	yes	481
 YIJIAN	yijian	520
-acquire	acquire	465
+acquire	acquire	475
 advance	advance	430
 allowed	allowed	508
 api	api	100000
 appIdentifier	appidentifier	355
-attach	attach	517
+attach	attach	518
 attributesForCharacterIndex	attributesforcharacterindex	335
 browser	browser	482
 bundleIdentifier	bundleidentifier	390
@@ -235,12 +236,12 @@ embedding	embedding	500
 entities	entities	370
 entitlement	entitlement	494
 entries	entries	520
-expire	expire	440
-facts	facts	454
+expire	expire	443
+facts	facts	470
 fallback	fallback	520
 file	file	520
 finish	finish	515
-flock	flock	430
+flock	flock	433
 forget	forget	482
 fsync	fsync	446
 gRPC	grpc	500
@@ -248,7 +249,7 @@ generation	generation	520
 getpeereid	getpeereid	370
 github	github	100000
 health	health	456
-hello	hello	458
+hello	hello	460
 iCloud	icloud	500
 iOS	ios	500
 iPad	ipad	500
@@ -267,19 +268,19 @@ macOS	macos	520
 nginx	nginx	500
 npm	npm	500
 overlay	overlay	515
-prepare	prepare	508
+prepare	prepare	509
 process	process	520
 prompt	prompt	500
 proposed	proposed	411
 prose	prose	488
 provisional	provisional	475
-purchase	purchase	425
+purchase	purchase	430
 python	python	100000
 record	record	520
 relations	relations	381
 remaining	remaining	520
 remember	remember	421
-reqwest	reqwest	511
+reqwest	reqwest	513
 restore	restore	520
 revision	revision	520
 rlib	rlib	355
@@ -301,7 +302,7 @@ terminal	terminal	520
 terminals	terminals	492
 token	token	100000
 unknown	unknown	520
-withdraw	withdraw	465
+withdraw	withdraw	466
 〇	ling	248
 㳇	fu	1
 䶮	yan	0
@@ -71956,6 +71957,7 @@ withdraw	withdraw	465
 改款	gai kuan	108
 改正	gai zheng	940
 改水电	gai shui dian	250
+改法	gai fa	520
 改版	gai ban	1214
 改用	gai yong	499
 改由	gai you	225
@@ -134696,6 +134698,7 @@ withdraw	withdraw	465
 这种店	zhe zhong dian	518
 这种情况	zhe zhong qing kuang	2470
 这种感觉	zhe zhong gan jue	604
+这种改法	zhe zhong gai fa	260
 这种方式	zhe zhong fang shi	738
 这种方法	zhe zhong fang fa	679
 这种服务	zhe zhong fu wu	455

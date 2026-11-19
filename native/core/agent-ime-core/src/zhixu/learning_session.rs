@@ -33,6 +33,7 @@ struct Knowledge {
     whole_overlay: Option<(u64, Option<Arc<Index>>)>,
     style_dirty: bool,
     style: Option<Arc<OwnerStyle>>,
+    management_revision: Option<String>,
 }
 
 impl Knowledge {
@@ -51,6 +52,7 @@ impl Knowledge {
             whole_overlay: None,
             style_dirty: true,
             style: None,
+            management_revision: None,
         }
     }
 
@@ -163,6 +165,28 @@ impl Default for LearningSession {
 }
 
 impl LearningSession {
+    /// Called only while the host has no displayed composition. A manager edit
+    /// never changes the meaning of an already visible digit selection.
+    pub(crate) fn refresh_managed(&mut self) -> Result<bool, i32> {
+        if self.mode != LearningMode::Zhixu { return Ok(false); }
+        let mut knowledge = self.knowledge.lock().map_err(|_| -105)?;
+        let Some(directory) = knowledge.directory.clone() else { return Ok(false); };
+        let revision = super::learning::management::management_revision(&directory).map_err(|_| -105)?;
+        if revision == knowledge.management_revision { return Ok(false); }
+        if knowledge.dirty && !knowledge.persist() { return Err(-105); }
+        let (store, revision) = super::learning::management::refreshed_store(&directory, personal_picks::now_ms()).map_err(|_| -105)?;
+        let old: std::collections::HashSet<_> = knowledge.store.entries().iter().map(|e| (e.reading.clone(),e.text.clone()))
+            .chain(knowledge.store.choices().iter().map(|e| (e.reading.clone(),e.text.clone()))).collect();
+        let new: std::collections::HashSet<_> = store.entries().iter().map(|e| (e.reading.clone(),e.text.clone()))
+            .chain(store.choices().iter().map(|e| (e.reading.clone(),e.text.clone()))).collect();
+        knowledge.revision = next_revision();
+        let revision_number = knowledge.revision;
+        for removed in old.difference(&new) { knowledge.deleted_words.insert(removed.clone(), revision_number); }
+        knowledge.store = store; knowledge.management_revision = revision;
+        knowledge.loaded = true; knowledge.overlay_dirty = true; knowledge.style_dirty = true; knowledge.whole_overlay = None;
+        Ok(true)
+    }
+
     pub(crate) fn revision(&self) -> u64 {
         #[cfg(test)]
         let _timing = crate::mixer::WholeLearningTiming::start();
@@ -659,6 +683,30 @@ mod tests {
     use crate::state::{KeyKind, SecurityState};
     use std::fs;
     use std::sync::atomic::{AtomicU64, Ordering};
+
+    #[test]
+    fn manager_delete_refreshes_once_and_blocks_older_pending_choice() {
+        use super::super::learning::{management_delete, management_restore, ManagementKey};
+        let dir = scratch("manager-refresh"); let now = personal_picks::now_ms();
+        let mut seed = LearningStore::load(&dir, now);
+        seed.record("cai wo", "裁我", now); seed.save(&dir).unwrap();
+        let mut session = session(); session.attach(&dir); session.set_mode(LearningMode::Zhixu, &index());
+        assert_eq!(session.entries().len(), 1);
+        session.stage(Some(choice("cai wo", "裁我")), 333);
+        session.commit("裁我", 333, now);
+        let deleted = management_delete(&dir, &[ManagementKey { reading: "cai wo".into(), text: "裁我".into() }]).unwrap();
+        assert_eq!(session.entries().len(), 1, "external edit does not eagerly replace a cached view");
+        assert!(session.refresh_managed().unwrap()); assert!(session.entries().is_empty());
+        assert!(!session.refresh_managed().unwrap());
+        session.key(&key(KeyKind::Text), false, now + 5100);
+        assert!(session.entries().is_empty(), "older pending delivery must not resurrect the manager deletion");
+        management_restore(&dir, &deleted).unwrap();
+        assert!(session.refresh_managed().unwrap()); assert_eq!(session.entries().len(), 1);
+        session.stage(Some(choice("cai wo", "裁我")), 334); session.commit("裁我", 334, now + 6000);
+        session.key(&key(KeyKind::Text), false, now + 11100);
+        assert_eq!(session.entries()[0].count, 2, "fresh post-restore selection still learns");
+        fs::remove_dir_all(dir).unwrap();
+    }
 
     #[test]
     fn first_preference_matches_app_raw_and_text_without_creating_a_global_entry() {

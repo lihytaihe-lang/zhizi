@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 
 /// Where the owner's skin choice lives. The input method menu, the gallery window and every controller read the same key; the choice
 /// wins over the manager app's runtime.json until it is cleared.
@@ -668,13 +669,17 @@ public final class SkinGalleryWindowController: NSObject, NSWindowDelegate {
     public static let shared = SkinGalleryWindowController()
 
     private let packages: SkinGalleryPackages
+    private let managerApplicationURL: URL?
     private var external: [SkinGalleryPackages.Package] = []
     private var issues: [String] = []
     private let importButton = GalleryActionButton(title: "导入皮肤…", target: nil, action: nil)
+    private let storeButton = GalleryActionButton(title: "皮肤商店…", target: nil, action: nil)
     private let issuesButton = NSButton(title: "", target: nil, action: nil)
+    private var packagesChanged = false
 
-    init(externalRoot: URL? = nil) {
+    init(externalRoot: URL? = nil, managerApplicationURL: URL? = nil) {
         packages = SkinGalleryPackages(root: externalRoot)
+        self.managerApplicationURL = managerApplicationURL
         super.init()
     }
 
@@ -750,7 +755,7 @@ public final class SkinGalleryWindowController: NSObject, NSWindowDelegate {
         selected = currentChoice() ?? .system
         refreshSelection()
         // The input method process is a background app; a window needs a regular activation policy while it is open.
-        previousPolicy = NSApp.activationPolicy()
+        if previousPolicy == nil { previousPolicy = NSApp.activationPolicy() }
         NSApp.setActivationPolicy(.accessory)
         fitToScreen(window)
         updatePreviewHeight()
@@ -1025,20 +1030,24 @@ public final class SkinGalleryWindowController: NSObject, NSWindowDelegate {
         importButton.target = self
         importButton.action = #selector(importSkin)
         importButton.bezelStyle = .rounded
+        storeButton.target = self
+        storeButton.action = #selector(openStore)
+        storeButton.bezelStyle = .rounded
         issuesButton.target = self
         issuesButton.action = #selector(showIssues)
         issuesButton.isBordered = false
         issuesButton.font = .systemFont(ofSize: 11)
         issuesButton.contentTintColor = .secondaryLabelColor
         importButton.translatesAutoresizingMaskIntoConstraints = false
+        storeButton.translatesAutoresizingMaskIntoConstraints = false
         issuesButton.translatesAutoresizingMaskIntoConstraints = false
-        [useButton, resetButton, importButton, sortButton].forEach { $0.isBordered = false }
-        [searchField, sortButton, useButton, resetButton, importButton].forEach {
+        [useButton, resetButton, importButton, storeButton, sortButton].forEach { $0.isBordered = false }
+        [searchField, sortButton, useButton, resetButton, importButton, storeButton].forEach {
             $0.wantsLayer = true
             $0.layer?.cornerRadius = 14
         }
         searchField.layer?.cornerRadius = 17
-        [useButton, resetButton, importButton].forEach {
+        [useButton, resetButton, importButton, storeButton].forEach {
             $0.font = .systemFont(ofSize: 13, weight: .medium)
             $0.layer?.cornerRadius = 15
         }
@@ -1068,7 +1077,8 @@ public final class SkinGalleryWindowController: NSObject, NSWindowDelegate {
         [nameLabel, kindBadge, detailLabel, previewHost].forEach(previewZone.addSubview)
         previewZone.title = nameLabel
         previewZone.detail = detailLabel
-        [titleLabel, countLabel, previewZone, useButton, resetButton, chipRow, searchField, sortButton, scroll, importButton, issuesButton].forEach(root.addSubview)
+        [titleLabel, countLabel, previewZone, useButton, resetButton, chipRow, searchField, sortButton, scroll,
+         importButton, storeButton, issuesButton].forEach(root.addSubview)
         NSLayoutConstraint.activate([
             titleLabel.topAnchor.constraint(equalTo: root.topAnchor, constant: 18),
             titleLabel.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
@@ -1102,7 +1112,9 @@ public final class SkinGalleryWindowController: NSObject, NSWindowDelegate {
             chipRow.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
             importButton.centerYAnchor.constraint(equalTo: titleLabel.centerYAnchor),
             importButton.trailingAnchor.constraint(equalTo: resetButton.leadingAnchor, constant: -8),
-            importButton.leadingAnchor.constraint(greaterThanOrEqualTo: countLabel.trailingAnchor, constant: 12),
+            storeButton.centerYAnchor.constraint(equalTo: titleLabel.centerYAnchor),
+            storeButton.trailingAnchor.constraint(equalTo: importButton.leadingAnchor, constant: -8),
+            storeButton.leadingAnchor.constraint(greaterThanOrEqualTo: countLabel.trailingAnchor, constant: 12),
             issuesButton.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
             issuesButton.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -6),
             issuesButton.heightAnchor.constraint(equalToConstant: 20),
@@ -1152,6 +1164,7 @@ public final class SkinGalleryWindowController: NSObject, NSWindowDelegate {
     }
 
     private func reloadPackages() {
+        packagesChanged = false
         stopHover()
         preview?.removeFromHost()
         preview = nil
@@ -1202,10 +1215,32 @@ public final class SkinGalleryWindowController: NSObject, NSWindowDelegate {
 
     @objc private func showIssues() { alert(issues.joined(separator: "\n")) }
 
+    @objc private func openStore() {
+        let workspace = NSWorkspace.shared
+        guard let manager = managerApplicationURL ?? workspace.urlForApplication(withBundleIdentifier: LexiconWindowController.managerBundleIdentifier),
+              let url = URL(string: "zhizi-skins://store/") else {
+            alert("请先将知字管理台放入「应用程序」，再打开皮肤商店。")
+            return
+        }
+        let urlTypes = Bundle(url: manager)?.object(forInfoDictionaryKey: "CFBundleURLTypes") as? [[String: Any]]
+        guard urlTypes?.contains(where: { ($0["CFBundleURLSchemes"] as? [String])?.contains("zhizi-skins") == true }) == true else {
+            alert("请更新知字管理台，再打开皮肤商店。")
+            return
+        }
+        workspace.open([url], withApplicationAt: manager, configuration: NSWorkspace.OpenConfiguration()) { [weak self] _, error in
+            guard error != nil else { return }
+            Task { @MainActor in
+                guard let self, self.window?.isVisible == true else { return }
+                self.alert("皮肤商店未能打开，请从知字管理台进入。")
+            }
+        }
+    }
+
     @objc private func importSkin() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
-        panel.canChooseFiles = false
+        panel.canChooseFiles = true
+        panel.allowedContentTypes = [.json]
         panel.allowsMultipleSelection = false
         panel.prompt = "导入"
         guard panel.runModal() == .OK, let url = panel.url else { return }
@@ -1356,11 +1391,11 @@ public final class SkinGalleryWindowController: NSObject, NSWindowDelegate {
 
     private func refreshControlColours() {
         previewZone.effectiveAppearance.performAsCurrentDrawingAppearance {
-            for control in [searchField, sortButton, useButton, resetButton, importButton, kindBadge] {
+            for control in [searchField, sortButton, useButton, resetButton, importButton, storeButton, kindBadge] {
                 control.layer?.backgroundColor = GalleryStyle.controlFill.cgColor
                 control.layer?.borderWidth = 0
             }
-            for control in [searchField, useButton, resetButton, importButton] {
+            for control in [searchField, useButton, resetButton, importButton, storeButton] {
                 control.layer?.borderWidth = 0.75
                 control.layer?.borderColor = GalleryStyle.controlBorder.cgColor
             }
@@ -1376,7 +1411,7 @@ public final class SkinGalleryWindowController: NSObject, NSWindowDelegate {
                 .font: useButton.font ?? NSFont.systemFont(ofSize: 13),
                 .foregroundColor: useButton.isEnabled ? NSColor.white : GalleryStyle.accent,
             ])
-            [resetButton, importButton].forEach { button in
+            [resetButton, importButton, storeButton].forEach { button in
                 button.attributedTitle = NSAttributedString(string: button.title, attributes: [
                     .font: button.font ?? NSFont.systemFont(ofSize: 13),
                     .foregroundColor: button.isEnabled ? NSColor.labelColor : NSColor.disabledControlTextColor,
@@ -1493,6 +1528,15 @@ public final class SkinGalleryWindowController: NSObject, NSWindowDelegate {
     }
 
     public func close() { window?.close() }
+
+    func storePackagesDidChange() {
+        packagesChanged = true
+        if window?.isKeyWindow == true { reloadPackages() }
+    }
+
+    public func windowDidBecomeKey(_ notification: Notification) {
+        if packagesChanged { reloadPackages() }
+    }
 
     public func windowWillClose(_ notification: Notification) {
         isClosing = true

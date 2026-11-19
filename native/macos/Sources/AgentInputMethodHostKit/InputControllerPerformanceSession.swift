@@ -82,10 +82,18 @@ public final class InputControllerPerformanceSession {
     func setPrecedingTextReadableForTesting(_ readable: Bool) {
         client.precedingTextReadableForTesting = readable
     }
+    func configureModelContextForTesting(rankingEnabled: Bool, generationEnabled: Bool) {
+        controller?.configureModelContextForTesting(rankingEnabled: rankingEnabled, generationEnabled: generationEnabled)
+    }
+    var rankingContextForTesting: String? { controller?.rankingContextForTesting }
+    var recordedPrecedingTextForTesting: String? { controller?.recordedPrecedingTextForTesting }
     var recentCommittedDocumentForTesting: String { client.documentSuffixForTesting }
 
     func seedDocumentTextForTesting(_ text: String) {
         client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
+    }
+    func replaceDocumentTextForTesting(_ text: String) {
+        client.replaceDocumentTextForTesting(text)
     }
 
     func activateAppForTesting(_ appIdentifier: String) {
@@ -154,6 +162,13 @@ final class SyntheticTextInputClient: NSObject, IMKTextInput {
     }
 
     var hasMarkedText: Bool { !marked.isEmpty }
+
+    func replaceDocumentTextForTesting(_ text: String) {
+        documentUTF16Length = 0
+        retainedDocumentSuffix = ""
+        marked = ""
+        insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
+    }
 
     func insertText(_ string: Any!, replacementRange: NSRange) {
         let value = Self.plainString(string)

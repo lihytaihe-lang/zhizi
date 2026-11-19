@@ -1,0 +1,15 @@
+Zhizi word bigram table (word-bigram-v1)
+
+A pruned, Kneser-Ney smoothed word bigram table used only to build whole-sentence
+candidates for inputs that mix full pinyin with bare initials. It contains word
+pairs and log probabilities computed from the following corpora; it contains no
+running text from them.
+
+- Chinese Wikipedia (sampled ~40 million characters). License: CC BY-SA 4.0,
+  https://creativecommons.org/licenses/by-sa/4.0/ . This table, as a derived
+  statistical work, is distributed under CC BY-SA 4.0.
+- ASAP (Chinese review corpus), Apache License 2.0.
+- Tatoeba (Chinese sentences), CC BY 2.0 FR, https://tatoeba.org .
+
+Word segmentation used the Zhizi lexicon (see LICENSE-LEXICON).
+Built by scripts/lexicon/build_word_bigram.py.

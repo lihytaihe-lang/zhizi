@@ -1,6 +1,16 @@
 import AppKit
 import AgentInputMethodHostKit
 
+private struct MeasuredPageReport: Decodable {
+    struct Row: Decodable {
+        let input: String
+        let displayedPage: [String]
+        let comments: [String]
+    }
+    let artifactVersion: String
+    let rows: [Row]
+}
+
 @MainActor
 final class CandidateHarnessDelegate: NSObject, NSApplicationDelegate {
     private var window: NSWindow?
@@ -59,9 +69,25 @@ final class CandidateHarnessDelegate: NSObject, NSApplicationDelegate {
             width: 2,
             height: 24
         )
-        let candidateTexts = CommandLine.arguments.contains("--zan-regression")
+        var measured: MeasuredPageReport.Row?
+        if let path = CommandLine.arguments.first(where: { $0.hasPrefix("--page-report=") }) {
+            do {
+                let report = try JSONDecoder().decode(MeasuredPageReport.self,
+                    from: Data(contentsOf: URL(fileURLWithPath: String(path.dropFirst("--page-report=".count)))))
+                guard let row = report.rows.first, row.displayedPage.count == 5,
+                      row.comments.count == 5, !row.input.isEmpty else { throw CocoaError(.coderInvalidValue) }
+                measured = row
+                window.title = "知字 \(report.artifactVersion) 候选页验证"
+            } catch {
+                fputs("cannot load the requested measured candidate page: \(error)\n", stderr)
+                NSApp.terminate(nil)
+                return
+            }
+        }
+        let candidateTexts = measured?.displayedPage ?? (CommandLine.arguments.contains("--zan-regression")
             ? ["咱", "赞", "暂", "攒", "讚"]
-            : ["你好", "你", "拟好", "年后", "霓虹"]
+            : ["你好", "你", "拟好", "年后", "霓虹"])
+        let candidateComments = measured?.comments ?? Array(repeating: "", count: candidateTexts.count)
         let secondaryCandidates = CommandLine.arguments.contains("--secondary-regression")
             ? [
                 IMECandidate(text: "尊嘟假嘟", comment: "热词 · local", readingKey: "zundujiadu"),
@@ -88,10 +114,10 @@ final class CandidateHarnessDelegate: NSObject, NSApplicationDelegate {
             }
         } else {
             panel.update(
-                candidates: candidateTexts.map { IMECandidate(text: $0, comment: "") },
+                candidates: zip(candidateTexts, candidateComments).map { IMECandidate(text: $0.0, comment: $0.1) },
                 highlighted: 0,
                 secondaryCandidates: secondaryCandidates,
-                preedit: CommandLine.arguments.contains("--zan-regression") ? "zan" : "nihao",
+                preedit: measured?.input ?? (CommandLine.arguments.contains("--zan-regression") ? "zan" : "nihao"),
                 anchor: candidateAnchor,
                 secure: false
             )

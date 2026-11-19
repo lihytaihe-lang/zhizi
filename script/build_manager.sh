@@ -37,6 +37,8 @@ BUNDLE="$ROOT_DIR/src-tauri/target/release/bundle/macos/Agent Input Method.app"
 CONTENTS="$BUNDLE/Contents"
 [[ -d "$BUNDLE" ]] || { echo "missing manager bundle: $BUNDLE" >&2; exit 2; }
 [[ -z "$(find "$BUNDLE" -type l -print -quit)" ]] || { echo "manager bundle contains symlinks" >&2; exit 3; }
+# Cargo也会把内部夹具程序带入应用包；分发的管理台只保留用户主程序。
+rm -f "$CONTENTS/MacOS/snapshot-fixture-ctl"
 
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$CONTENTS/Info.plist"
 /usr/libexec/PlistBuddy -c "Delete :AgentIMEProductCommit" "$CONTENTS/Info.plist" 2>/dev/null || true

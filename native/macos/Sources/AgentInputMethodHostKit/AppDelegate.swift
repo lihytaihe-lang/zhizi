@@ -49,6 +49,13 @@ public final class InputMethodAppDelegate: NSObject, NSApplicationDelegate {
             },
             "com.hongye.facai.inputmethod.zhizi.hide-skin-gallery" as CFString, nil, .deliverImmediately
         )
+        CFNotificationCenterAddObserver(
+            CFNotificationCenterGetDarwinNotifyCenter(), nil,
+            { _, _, _, _, _ in
+                DispatchQueue.main.async { MainActor.assumeIsolated { SkinGalleryWindowController.shared.storePackagesDidChange() } }
+            },
+            "com.hongye.facai.inputmethod.zhizi.skin-packages-changed" as CFString, nil, .deliverImmediately
+        )
     }
 
     private func observeLexiconWindowRequests() {
@@ -151,6 +158,9 @@ public final class InputMethodAppDelegate: NSObject, NSApplicationDelegate {
         observeSkinGalleryRequests()
         observeLexiconWindowRequests()
         memorySampler.start()
+        if ProcessInfo.processInfo.environment["AIM_COLD_START_PROBE_DIR"] == nil, server != nil {
+            ReleaseUpdateMonitor.shared.start()
+        }
         runColdStartProbeIfRequested()
     }
 
@@ -248,6 +258,7 @@ public final class InputMethodAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     public func applicationWillTerminate(_ notification: Notification) {
+        ReleaseUpdateMonitor.shared.stop()
         // Same drain as the cold-start probe: an installed IME quit during a
         // first model load hits the same exit/ANE-compilation race. Short and
         // bounded so termination never waits indefinitely on the main thread.

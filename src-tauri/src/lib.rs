@@ -15,6 +15,7 @@ mod native_integration;
 mod profile_introspection;
 mod quality_records;
 mod quality_log;
+mod release_updates;
 mod replay_gate;
 mod skin_catalog;
 mod skin_packages {
@@ -30,6 +31,12 @@ mod skin_packages {
     }
 }
 mod skin_store;
+mod skin_store_window;
+mod skin_commerce;
+mod skin_credentials;
+mod skin_choice;
+#[cfg(debug_assertions)]
+mod skin_qa;
 mod snapshot;
 mod storage;
 #[cfg(feature = "test-upload")]
@@ -615,7 +622,7 @@ fn learning_cleanup_items_inner(storage: &AppStorage) -> Result<LearningCleanupL
                 id: entry.id,
                 text: entry.text,
                 pinyin: entry.pinyin,
-                source: "rime_userdb".into(),
+                source: "zhixu_learning".into(),
                 domain: None,
                 learned_at_ms: None,
                 last_hit_at_ms: None,
@@ -658,7 +665,7 @@ fn preview_learning_cleanup(
         .into_iter()
         .filter(|item| {
             (requested.is_empty() || requested.contains(&item.id))
-                && (item.source == "rime_userdb"
+                && (item.source == "rime_userdb" || item.source == "zhixu_learning"
                     || domain.as_ref().is_none_or(|domain| {
                         item.domain
                             .as_ref()
@@ -700,23 +707,33 @@ fn apply_learning_cleanup(
         .filter(|id| id.starts_with("userdb:"))
         .any(|id| !selected_userdb.iter().any(|item| &item.id == id));
     if missing_userdb {
-        return Err("所选 UserDB 学习记录已变化，请刷新后重试。".into());
+        return Err("所选本地学习记录已变化，请刷新后重试。".into());
     }
-    let deleted_userdb = userdb_maintenance::delete(&selected_userdb)?;
-    let sqlite_ids = ids
-        .into_iter()
-        .filter(|id| !id.starts_with("userdb:"))
-        .collect::<Vec<_>>();
-    match storage.apply_learning_cleanup_with_userdb(
-        sqlite_ids,
-        domain,
-        deleted_userdb.clone(),
-        current_time_ms()?,
-    ) {
-        Ok(result) => Ok(result),
+    let sqlite_ids = ids.into_iter().filter(|id| !id.starts_with("userdb:")).collect::<Vec<_>>();
+    let now = current_time_ms()?;
+    if selected_userdb.is_empty() {
+        return storage.apply_learning_cleanup_with_userdb(sqlite_ids, domain, Vec::new(), now);
+    }
+    let mut saved_batch = None;
+    let mut recovery = Vec::new();
+    let deletion = userdb_maintenance::delete_journaled(&selected_userdb, |actual_backup| {
+        let batch = storage.apply_learning_cleanup_with_userdb(sqlite_ids, domain, actual_backup.clone(), now)?;
+        recovery = actual_backup;
+        saved_batch = Some(batch);
+        Ok(())
+    });
+    match deletion {
+        Ok(()) => saved_batch.ok_or_else(|| "学习撤销包未记录，操作未完成。".into()),
         Err(error) => {
-            userdb_maintenance::restore(&deleted_userdb)
-                .map_err(|rollback| format!("{error}；且 UserDB 回滚失败：{rollback}"))?;
+            if let Some(batch) = saved_batch {
+                // The durable journal already exists even if the subsequent
+                // atomic file replacement failed. Merge recovery never lowers
+                // counts or removes concurrently learned facts.
+                userdb_maintenance::restore(&recovery).map_err(|restore|
+                    format!("{error}；撤销包 {} 已保留，恢复待重试：{restore}", batch.batch_id))?;
+                storage.undo_learning_cleanup(&batch.batch_id, current_time_ms()?).map_err(|undo|
+                    format!("{error}；学习已恢复，撤销包 {} 可重试：{undo}", batch.batch_id))?;
+            }
             Err(error)
         }
     }
@@ -731,12 +748,29 @@ fn undo_learning_cleanup(
     userdb_maintenance::restore(&userdb_entries)?;
     match storage.undo_learning_cleanup(&batch_id, current_time_ms()?) {
         Ok(count) => Ok(count + userdb_entries.len()),
-        Err(error) => {
-            userdb_maintenance::delete(&userdb_entries)
-                .map_err(|rollback| format!("{error}；且 UserDB 撤销回滚失败：{rollback}"))?;
-            Err(error)
-        }
+        // Native restore is a max-count, idempotent merge. Keep the recovered
+        // facts if the independent SQLite undo fails; compensating deletion
+        // could erase facts learned concurrently. The same undo can be retried.
+        Err(error) => Err(format!("学习内容已合并恢复，但管理记录撤销失败，可重试：{error}")),
     }
+}
+
+#[tauri::command]
+fn native_learning_status() -> Result<agent_ime_core::zhixu::learning::LearningStatus, String> {
+    userdb_maintenance::status()
+}
+#[tauri::command]
+fn export_native_learning() -> Result<String, String> { userdb_maintenance::export_learning() }
+#[tauri::command]
+fn preview_native_learning_import(document: String) -> Result<agent_ime_core::zhixu::learning::LearningImportPreview, String> {
+    userdb_maintenance::preview_learning(&document)
+}
+#[derive(serde::Serialize)]
+struct NativeLearningMerged { words: usize, choices: usize }
+#[tauri::command]
+fn merge_native_learning_import(document: String) -> Result<NativeLearningMerged, String> {
+    let result = userdb_maintenance::import_learning(&document)?;
+    Ok(NativeLearningMerged { words: result.entries, choices: result.choices })
 }
 
 #[tauri::command]
@@ -1609,6 +1643,8 @@ fn shared_snapshot_store() -> Result<SnapshotStore, String> {
 }
 
 fn project_runtime_path() -> Result<std::path::PathBuf, String> {
+    #[cfg(debug_assertions)]
+    if let Some(root) = skin_qa::root()? { return Ok(root.join("Runtime/runtime.json")); }
     let home = std::env::var_os("HOME").ok_or_else(|| "无法确定用户目录。".to_string())?;
     Ok(std::path::PathBuf::from(home)
         .join("Library/Application Support/AgentInputMethod/Shared/Profiles/runtime.json"))
@@ -1683,7 +1719,17 @@ fn activate_project_profile(
 fn project_runtime_configuration(
     storage: State<'_, AppStorage>,
 ) -> Result<ProjectRuntimeConfiguration, String> {
-    storage.project_runtime_configuration()
+    effective_skin_runtime(&storage)
+}
+
+fn effective_skin_runtime(storage: &AppStorage) -> Result<ProjectRuntimeConfiguration, String> {
+    let mut runtime = storage.project_runtime_configuration()?;
+    let available = skin_packages::available_candidate_skin_ids().unwrap_or_else(|_| {
+        skin_catalog::CANDIDATE_SKIN_CATALOG.iter().map(|skin| skin.id.to_string()).collect()
+    });
+    if let Some(id) = skin_choice::current() { runtime.candidate_theme = id; }
+    if !available.contains(&runtime.candidate_theme) { runtime.candidate_theme = "system".into(); }
+    Ok(runtime)
 }
 
 #[tauri::command]
@@ -1722,26 +1768,6 @@ fn set_prediction_enabled(
     let config = storage.set_prediction_enabled(enabled)?;
     publish_project_runtime(&config)?;
     Ok(config)
-}
-
-#[tauri::command]
-fn set_candidate_theme(
-    storage: State<'_, AppStorage>,
-    candidate_theme: String,
-) -> Result<ProjectRuntimeConfiguration, String> {
-    let available = skin_packages::available_candidate_skin_ids()?;
-    let config = storage
-        .set_candidate_theme_from_catalog(&candidate_theme, available.contains(&candidate_theme))?;
-    publish_project_runtime(&config)?;
-    Ok(config)
-}
-
-#[tauri::command]
-fn list_candidate_skins(
-    storage: State<'_, AppStorage>,
-) -> Result<CandidateSkinCatalogSnapshot, String> {
-    let runtime = storage.project_runtime_configuration()?;
-    skin_packages::catalog_snapshot(Some(&runtime.candidate_theme))
 }
 
 #[tauri::command]
@@ -1806,46 +1832,78 @@ async fn skin_store_install(
     entitlements: State<'_, skin_store::Entitlements>,
     id: String,
 ) -> Result<CandidateSkinCatalogSnapshot, String> {
-    backend
+    let catalog = backend
         .install(&storage, entitlements.as_ref(), &id)
-        .await
+        .await?;
+    #[cfg(target_os = "macos")]
+    skin_store_window::notify_packages_changed();
+    Ok(backend.enrich_catalog(catalog))
 }
 
 #[tauri::command]
-fn skin_store_purchase(
+async fn skin_store_purchase(
+    app: tauri::AppHandle,
     storage: State<'_, AppStorage>,
     backend: State<'_, skin_store::StoreBackend>,
     entitlements: State<'_, skin_store::Entitlements>,
     id: String,
 ) -> Result<skin_store::PurchaseResult, String> {
-    backend.purchase(&storage, entitlements.as_ref(), &id)
+    use tauri_plugin_opener::OpenerExt;
+    let skin = backend.purchase_entry(&storage, &id)?;
+    let entitlements = entitlements.inner().clone();
+    let mut result = tauri::async_runtime::spawn_blocking(move || skin_store::purchase_product(entitlements.as_ref(), &skin))
+        .await.map_err(|_| "购买服务暂不可用。")?;
+    if let Some(url) = &result.checkout_url {
+        skin_commerce::validate_checkout_url(url)?;
+        if app.opener().open_url(url, None::<&str>).is_err() {
+            result.message = "订单已创建，但付款页面未打开；可在订单页继续付款。".into();
+        }
+    }
+    // A checkout URL is a pending order, never a purchase receipt.
+    Ok(result)
+}
+
+async fn commerce_work<T: Send + 'static>(client: skin_commerce::Client,
+    work: impl FnOnce(&skin_commerce::CommerceClient) -> Result<T, String> + Send + 'static) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(move || work(&client)).await.map_err(|_| "账号服务暂不可用。")?
 }
 
 #[tauri::command]
-fn install_candidate_skin(
-    storage: State<'_, AppStorage>,
-    source_path: String,
-) -> Result<CandidateSkinCatalogSnapshot, String> {
-    let _ = skin_packages::install(std::path::Path::new(&source_path))?;
-    let runtime = storage.project_runtime_configuration()?;
-    skin_packages::catalog_snapshot(Some(&runtime.candidate_theme))
+fn skin_account_cached(client: State<'_, skin_commerce::Client>) -> Result<skin_commerce::Snapshot, String> { client.cached() }
+#[tauri::command]
+async fn skin_account_set_service(client: State<'_, skin_commerce::Client>, url: String) -> Result<skin_commerce::Snapshot, String> {
+    commerce_work(client.inner().clone(), move |client| client.set_url(&url)).await
+}
+#[tauri::command]
+async fn skin_account_request_code(client: State<'_, skin_commerce::Client>, email: String) -> Result<(), String> {
+    commerce_work(client.inner().clone(), move |client| client.request_code(&email)).await
+}
+#[tauri::command]
+async fn skin_account_login(client: State<'_, skin_commerce::Client>, email: String, code: String) -> Result<skin_commerce::Snapshot, String> {
+    commerce_work(client.inner().clone(), move |client| client.login(&email, &code)).await
+}
+#[tauri::command]
+async fn skin_account_refresh(client: State<'_, skin_commerce::Client>) -> Result<skin_commerce::Snapshot, String> {
+    commerce_work(client.inner().clone(), |client| client.refresh()).await
+}
+#[tauri::command]
+async fn skin_account_more_orders(client: State<'_, skin_commerce::Client>) -> Result<skin_commerce::Snapshot, String> {
+    commerce_work(client.inner().clone(), |client| client.more_orders()).await
+}
+#[tauri::command]
+async fn skin_account_cancel(client: State<'_, skin_commerce::Client>, order_id: String) -> Result<skin_commerce::Snapshot, String> {
+    commerce_work(client.inner().clone(), move |client| client.cancel(&order_id)).await
+}
+#[tauri::command]
+async fn skin_account_logout(client: State<'_, skin_commerce::Client>) -> Result<skin_commerce::Snapshot, String> {
+    commerce_work(client.inner().clone(), |client| client.logout()).await
 }
 
 #[tauri::command]
-fn uninstall_candidate_skin(
-    storage: State<'_, AppStorage>,
-    id: String,
-) -> Result<CandidateSkinCatalogSnapshot, String> {
-    let _ = skin_packages::uninstall(&id)?;
-    let current = storage.project_runtime_configuration()?;
-    let active = if current.candidate_theme == id {
-        let fallback = storage.set_candidate_theme("system")?;
-        publish_project_runtime(&fallback)?;
-        fallback
-    } else {
-        current
-    };
-    skin_packages::catalog_snapshot(Some(&active.candidate_theme))
+async fn skin_account_resume(app: tauri::AppHandle, client: State<'_, skin_commerce::Client>, order_id: String) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    let url = commerce_work(client.inner().clone(), move |client| client.resume(&order_id)).await?;
+    app.opener().open_url(url, None::<&str>).map_err(|_| "付款页面未能打开，请稍后重试。".into())
 }
 
 #[tauri::command]
@@ -2211,11 +2269,16 @@ fn rollback_lexicon_snapshot(version: u64) -> Result<SnapshotMeta, String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let context = tauri::generate_context!();
+    #[cfg(debug_assertions)]
+    if std::env::var_os("ZHIZI_SKIN_QA_ROOT").is_some() { skin_qa::run(context); return; }
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
+            release_updates::get_release_info,
+            release_updates::check_stable_update,
             ime_preferences::ime_preferences,
             ime_preferences::set_ime_typo_correction,
             ime_preferences::set_ime_fuzzy_mask,
@@ -2237,6 +2300,10 @@ pub fn run() {
             preview_learning_cleanup,
             apply_learning_cleanup,
             undo_learning_cleanup,
+            native_learning_status,
+            export_native_learning,
+            preview_native_learning_import,
+            merge_native_learning_import,
             export_maintenance_backup,
             preview_maintenance_backup,
             restore_maintenance_backup,
@@ -2274,8 +2341,7 @@ pub fn run() {
             set_prediction_enabled,
             set_context_model_ranking_enabled,
             context_model_availability,
-            set_candidate_theme,
-            list_candidate_skins,
+            skin_store_window::skin_store_open_request,
             skin_store_get_settings,
             skin_store_set_url,
             skin_store_refresh,
@@ -2283,8 +2349,11 @@ pub fn run() {
             skin_store_preview,
             skin_store_install,
             skin_store_purchase,
-            install_candidate_skin,
-            uninstall_candidate_skin,
+            skin_account_cached, skin_account_set_service, skin_account_request_code,
+            skin_account_login, skin_account_refresh, skin_account_logout,
+            skin_account_resume,
+            skin_account_more_orders,
+            skin_account_cancel,
             lexicon_download::lexicon_packs_available,
 lexicon_download::lexicon_packs_installed,
             lexicon_download::lexicon_pack_install,
@@ -2373,8 +2442,9 @@ lexicon_download::lexicon_packs_installed,
                 app_handle.path().app_data_dir()?,
                 skin_packages::default_skins_root().map_err(std::io::Error::other)?,
             ));
-            let skin_entitlements: skin_store::Entitlements =
-                std::sync::Arc::new(skin_store::NotConfiguredEntitlements);
+            let commerce: skin_commerce::Client = std::sync::Arc::new(skin_commerce::CommerceClient::new(app_handle.path().app_data_dir()?));
+            let skin_entitlements: skin_store::Entitlements = commerce.clone();
+            app.manage(commerce);
             app.manage(skin_entitlements);
 
             install_tray(&app_handle)?;
@@ -2424,11 +2494,13 @@ lexicon_download::lexicon_packs_installed,
                 }
             }
         })
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building tauri application")
         .run(|app, event| {
-            if matches!(event, RunEvent::Reopen { .. }) {
-                show_main_window(app);
+            #[cfg(target_os = "macos")]
+            {
+                if matches!(event, RunEvent::Reopen { .. }) { show_main_window(app); }
+                skin_store_window::handle_open(app, &event);
             }
         });
 }

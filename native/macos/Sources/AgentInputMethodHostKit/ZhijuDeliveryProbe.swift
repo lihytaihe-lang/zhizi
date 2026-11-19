@@ -11,6 +11,11 @@ import Foundation
     public let fuzzyMask: UInt32?
     public let typoCorrectionEnabled: Bool?
     public let appIdentifier: String?
+    public let prefixInput: String?
+    public let prefixRepeats: Int?
+    public let hostContextReadable: Bool?
+    public let contextRankingEnabled: Bool?
+    public let keyIntervalMilliseconds: Int?
 }
 
 @_spi(PerformanceHarness) public struct ZhijuDeliveryRow: Codable, Sendable {
@@ -38,6 +43,10 @@ import Foundation
     public let fuzzyMask: UInt32
     public let typoCorrectionEnabled: Bool
     public let zhijuTrace: ZhijuSearchSample?
+    public let committedPrefix: String?
+    public let inferenceContext: String?
+    public let recordedHostContext: String?
+    public let contextRankingCalls: Int?
 }
 
 @_spi(PerformanceHarness) public struct ZhijuDeliveryReport: Codable, Sendable {
@@ -98,16 +107,24 @@ import Foundation
         }
         var rows: [ZhijuDeliveryRow] = []
         for item in cases {
+            let interval = item.keyIntervalMilliseconds ?? 80
+            guard (0...1_000).contains(interval) else { throw CocoaError(.coderInvalidValue) }
+            let caseUser = item.prefixInput == nil ? user : user.appendingPathComponent(UUID().uuidString)
+            if caseUser != user { try FileManager.default.createDirectory(at: caseUser, withIntermediateDirectories: true) }
             let app = item.appIdentifier ?? "com.agentinputlayer.zhiju-delivery"
             let client = SyntheticTextInputClient(appIdentifier: app)
             if let context = item.context {
                 client.insertText(context, replacementRange: NSRange(location: NSNotFound, length: 0))
             }
             guard let controller = AgentInputController(performanceSharedDirectory: sharedDirectory,
-                userDirectory: user, appIdentifier: app, client: client) else {
+                userDirectory: caseUser, appIdentifier: app, client: client) else {
                 throw CocoaError(.coderInvalidValue)
             }
-            controller.enableContextRankingForPerformance()
+            if item.contextRankingEnabled ?? true {
+                controller.enableContextRankingForPerformance()
+            } else {
+                controller.configureModelContextForTesting(rankingEnabled: false, generationEnabled: enabled)
+            }
             controller.configureDeferredModelsForProbe(zhijuEnabled: enabled, shortAbbreviations: item.shortAbbreviations ?? true,
                 fifthSlotSelection: item.fifthSlotSelection ?? true)
             let fuzzyMask = item.fuzzyMask ?? 0
@@ -116,9 +133,31 @@ import Foundation
                 throw CocoaError(.coderInvalidValue)
             }
             defer { controller.inputControllerWillClose() }
+            var prefix: String?
+            if let keys = item.prefixInput {
+                let repeats = item.prefixRepeats ?? 1
+                guard !keys.isEmpty, keys.utf8.allSatisfy({ (97...122).contains($0) }), (1...20).contains(repeats) else {
+                    throw CocoaError(.coderInvalidValue)
+                }
+                var committed = ""
+                for _ in 0..<repeats {
+                    for key in keys {
+                        _ = try process(String(key), controller: controller, client: client)
+                        if interval > 0 { drain(for: Double(interval) / 1_000) }
+                    }
+                    drain(for: 0.3)
+                    let selection = try process("1", controller: controller, client: client)
+                    guard !selection.commitText.isEmpty, selection.markedText.isEmpty else {
+                        throw CocoaError(.coderInvalidValue)
+                    }
+                    committed += selection.commitText
+                }
+                prefix = committed
+            }
+            client.precedingTextReadableForTesting = item.hostContextReadable ?? true
             for key in item.input.dropLast() {
                 _ = try process(String(key), controller: controller, client: client)
-                drain(for: 0.08)
+                if interval > 0 { drain(for: Double(interval) / 1_000) }
             }
             _ = try process(String(item.input.suffix(1)), controller: controller, client: client)
             let immediate = controller.latestCandidateTextsForTesting ?? []
@@ -129,6 +168,9 @@ import Foundation
             let matches = controller.latestPageMatchesCoreForTesting
             let funnel = controller.candidateFunnelForTesting
             let generated = controller.zhijuAlternativesForTesting
+            let inferenceContext = prefix == nil ? nil : controller.rankingContextForTesting
+            let recordedHostContext = prefix == nil ? nil : controller.recordedPrecedingTextForTesting
+            let rankingCalls = prefix == nil ? nil : controller.contextRankingCallsForPerformance
             let digit = item.selectionDigit ?? 1
             guard (1...5).contains(digit), shown.candidates.indices.contains(digit - 1) else {
                 throw CocoaError(.coderInvalidValue)
@@ -157,7 +199,9 @@ import Foundation
                 selectionMarkedText: selection.markedText,
                 digitSelectionMatchesDisplay: fullCommit || markedSegment,
                 fuzzyMask: fuzzyMask, typoCorrectionEnabled: typoCorrectionEnabled,
-                zhijuTrace: trace?.sample))
+                zhijuTrace: trace?.sample,
+                committedPrefix: prefix, inferenceContext: inferenceContext,
+                recordedHostContext: recordedHostContext, contextRankingCalls: rankingCalls))
             controller.inputControllerWillClose()
         }
         let applicationPassed = !requireZhijuApplication || !enabled || (requireFifthOffer

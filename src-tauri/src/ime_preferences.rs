@@ -18,7 +18,7 @@ pub struct ImePreferences {
     pub fuzzy_mask: u32,
 }
 
-fn read(key: &str) -> Option<String> {
+pub(crate) fn read(key: &str) -> Option<String> {
     let output = Command::new(DEFAULTS).args(["read", DOMAIN, key]).output().ok()?;
     output
         .status
@@ -26,7 +26,7 @@ fn read(key: &str) -> Option<String> {
         .then(|| String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
-fn write(key: &str, kind: &str, value: &str) -> Result<(), String> {
+pub(crate) fn write(key: &str, kind: &str, value: &str) -> Result<(), String> {
     let status = Command::new(DEFAULTS)
         .args(["write", DOMAIN, key, kind, value])
         .status()

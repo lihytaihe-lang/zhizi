@@ -10,20 +10,25 @@ export function SkinStorePreview({ name, enabled, load }: SkinStorePreviewProps)
   const container = useRef<HTMLSpanElement>(null);
   const [source, setSource] = useState("");
   const [failed, setFailed] = useState(false);
+  const loader = useRef(load);
+  loader.current = load;
   useEffect(() => {
     if (!enabled || !container.current || typeof IntersectionObserver === "undefined") return;
     let active = true;
-    const observer = new IntersectionObserver((entries) => {
-      if (!entries.some((entry) => entry.isIntersecting)) return;
-      observer.disconnect();
-      void load().then((value) => {
+    const fetchPreview = () => {
+      void loader.current().then((value) => {
         if (!value.startsWith("data:image/png;base64,")) throw new Error("预览格式不可用");
         if (active) setSource(value);
       }).catch(() => { if (active) setFailed(true); });
+    };
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return;
+      observer.disconnect();
+      fetchPreview();
     });
     observer.observe(container.current);
     return () => { active = false; observer.disconnect(); };
-  }, [enabled, load]);
+  }, [enabled]);
   return (
     <span className="skin-store-preview" ref={container}>
       {source && !failed ? (

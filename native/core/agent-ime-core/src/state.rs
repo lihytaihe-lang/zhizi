@@ -232,6 +232,8 @@ pub trait Decoder: Send {
             .flatten()
     }
     fn configure_learning(&mut self, _mode: crate::zhixu::learning::LearningMode) -> Result<(), i32> { Ok(()) }
+    /// Observe manager edits only at a new composition boundary.
+    fn refresh_managed_learning(&mut self) -> Result<bool, i32> { Ok(false) }
     fn configure_zhixu_whole(&mut self, _on: bool) -> Result<(), i32> { Ok(()) }
     fn learning_key(&mut self, _event: &KeyEvent, _now: u64) {}
     fn learning_commit(&mut self, _text: &str, _delivery_id: u64, _now: u64) {}
@@ -1413,6 +1415,12 @@ impl Session {
 
     pub fn process(&mut self, event: KeyEvent) -> ResultModel {
         self.invalidate_zhiju_search();
+        if !event.security.degraded() && event.kind == KeyKind::Text && !self.composing()
+            && event.modifiers & (MOD_COMMAND | MOD_OPTION | MOD_CONTROL) == 0 {
+            // A busy or invalid external file leaves the last valid snapshot
+            // in use. Retry at the next boundary, never while a menu is shown.
+            let _ = self.decoder.refresh_managed_learning();
+        }
         self.decoder.learning_key(&event, crate::personal_picks::now_ms());
         let host_previous_text_kind = self.host_previous_text_kind.take();
         let security = event.security;

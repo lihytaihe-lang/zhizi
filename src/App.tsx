@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { BookMarked, BookOpen, Database, Home, ListChecks, Loader2, MessageSquare, Settings, SlidersHorizontal, WandSparkles, Wrench } from "lucide-react";
+import { BookMarked, BookOpen, Database, Home, Palette, ListChecks, Loader2, MessageSquare, Settings, SlidersHorizontal, WandSparkles, Wrench } from "lucide-react";
 import "./App.css";
 import { CompactInputPanel } from "./components/compact/CompactInputPanel";
 import { HistoryList } from "./components/HistoryList";
 import { ModeSelector } from "./components/ModeSelector";
 import { ResultPanel } from "./components/ResultPanel";
+import { ReleaseControls } from "./components/ReleaseControls";
 import { RuleList } from "./components/RuleList";
 import { SettingsPanel } from "./components/SettingsPanel";
+import { SkinCommercePanel } from "./components/SkinCommercePanel";
 import { HomePanel } from "./components/HomePanel";
 import { QualityRecordingPanel } from "./components/QualityRecordingPanel";
 import { LexiconManager } from "./components/LexiconManager";
@@ -35,6 +37,7 @@ import {
   getCurrentWindowLabel,
   hideCurrentWindow,
   listenForPanelFocus,
+  listenForSkinStore,
   resizeCurrentWindow,
 } from "./lib/nativeWindow";
 import { isProviderReady } from "./lib/providerClient";
@@ -54,7 +57,7 @@ import { loadAppState, loadLocalAppState, saveAppState } from "./lib/storage";
 import { stageGeneratedHotwordCandidates } from "./lib/knowledge";
 import { loadLastResultAction, saveLastResultAction } from "./lib/resultAction";
 
-type ViewId = "home" | "records" | "compose" | "lexicon" | "sources" | "knowledge" | "maintenance" | "settings";
+type ViewId = "skins" | "home" | "records" | "compose" | "lexicon" | "sources" | "knowledge" | "maintenance" | "settings";
 /** Everything outside the input method's daily use sits under 高级 (owner 2026-10-10). */
 const ADVANCED_VIEWS: ViewId[] = ["compose", "knowledge", "sources", "maintenance", "settings"];
 type WindowSurface = "main" | "compact";
@@ -182,6 +185,16 @@ function App() {
       delete document.documentElement.dataset.windowSurface;
     };
   }, []);
+
+  useEffect(() => {
+    if (windowSurface !== "main") return;
+    let active = true;
+    const subscription = listenForSkinStore(() => { if (active) setView("skins"); });
+    return () => {
+      active = false;
+      void subscription.then((unlisten) => unlisten());
+    };
+  }, [windowSurface]);
 
   useEffect(() => {
     let cancelled = false;
@@ -585,6 +598,7 @@ function App() {
           <h1>知字</h1>
         </div>
         <div className="header-actions">
+          <ReleaseControls />
           <div className={`status-pill ${providerReady ? "is-model" : ""}`}>
             {providerReady
               ? "模型增强已启用"
@@ -593,6 +607,7 @@ function App() {
           <div className="view-tabs" role="tablist" aria-label="主视图">
             {([
               ["home", "首页", <Home size={16} key="i" />],
+              ["skins", "皮肤商店", <Palette size={16} key="i" />],
               ["lexicon", "词库", <BookOpen size={16} key="i" />],
               ["records", "记录", <ListChecks size={16} key="i" />],
             ] as const).map(([id, label, icon]) => (
@@ -618,7 +633,9 @@ function App() {
 
       <section className={`workspace ${view !== "compose" && view !== "settings" ? "is-lexicon" : ""}`}>
         <div className="primary-column">
-          {view === "home" ? (
+          {view === "skins" ? (
+            <section className="panel settings-panel"><SkinCommercePanel /></section>
+          ) : view === "home" ? (
             <HomePanel onNavigate={(destination) => setView(destination === "advanced" ? "compose" : destination)} />
           ) : view === "records" ? (
             <QualityRecordingPanel />

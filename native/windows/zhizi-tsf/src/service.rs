@@ -110,7 +110,10 @@ impl State {
         match result {
             Ok(mut h) => {
                 let _gate = CORE_GATE.lock().unwrap_or_else(|e| e.into_inner());
-                h.set_typo_correction(zhizi_host::settings::load(&data_dir()).typo_correction);
+                let switches = zhizi_host::settings::load(&data_dir());
+                h.set_typo_correction(switches.typo_correction);
+                h.set_context_ranking_enabled(switches.context_ranking);
+                h.set_zhiju_enabled(switches.zhiju);
                 let english = zhizi_host::settings::english_mode(&data_dir(), &app_name());
                 h.set_english_mode(english);
                 drop(_gate);
@@ -300,7 +303,7 @@ fn enable_test_recording(host: &mut Host, data: &std::path::Path) {
         host.enable_recording(zhizi_host::quality::RecorderConfig {
             path: data.join("Quality/events.jsonl"),
             platform: "windows".into(),
-            build: env!("CARGO_PKG_VERSION").into(),
+            build: env!("ZHIZI_RELEASE_VERSION").into(),
             device: cpu_name(),
         });
     }
@@ -314,7 +317,11 @@ fn initialize_host(
     let mut host = open_host()?;
     let model_error = match load_model() {
         Ok(scorer) => {
-            host.enable_model(scorer, notify);
+            if let Some(notify) = notify {
+                host.enable_deferred_model(scorer, notify);
+            } else {
+                host.enable_model(scorer, None);
+            }
             None
         }
         Err(error) => Some(error),
@@ -334,11 +341,7 @@ fn begin_load(state: &Rc<RefCell<State>>) {
             let (mut host, model_error) = initialize_host(
                 || {
                     let _gate = CORE_GATE.lock().unwrap_or_else(|e| e.into_inner());
-                    let host = Host::open(&HostConfig {
-                        shared_dir: root.join("Rime"),
-                        user_dir: data.join("Rime"),
-                        app_id: app,
-                    })?;
+                    let host = open_installed_host(&root, &data, app)?;
                     diagnostic("Core initialized");
                     Ok(host)
                 },
@@ -366,6 +369,18 @@ fn begin_load(state: &Rc<RefCell<State>>) {
             } else {
                 diagnostic("ONNX model enabled");
             }
+            let generation = (|| -> std::result::Result<(), String> {
+                zhizi_host::ranking::onnx::init_runtime(&root.join("onnxruntime.dll"))?;
+                let threads = (std::thread::available_parallelism().map(|n| n.get()).unwrap_or(2) / 2).clamp(1, 4);
+                let model = zhizi_host::zhiju::onnx::OnnxDistribution::load(&root.join("ZhijuModel/zhiju30m_v3.onnx"), threads)?;
+                host.enable_zhiju(&root.join("ZhijuModel/itos.json"), Box::new(model), Some(Box::new(move || unsafe {
+                    let _ = PostMessageW(Some(HWND(hwnd as _)), WM_RANK, WPARAM(0), LPARAM(0));
+                })))
+            })();
+            match generation {
+                Ok(()) => diagnostic("Zhiju model enabled"),
+                Err(error) => diagnostic(&format!("Zhiju unavailable; basic input remains enabled: {error}")),
+            }
             if let Ok(records) = std::fs::read_to_string(data.join("Quality/events.jsonl")) {
                 host.set_owner_style(&records)
             }
@@ -381,6 +396,13 @@ fn begin_load(state: &Rc<RefCell<State>>) {
             let _ = PostMessageW(Some(HWND(hwnd as _)), WM_RANK, WPARAM(0), LPARAM(0));
         }
     });
+}
+
+/// The shell owns its application directory; the core creates only its final
+/// Rime leaf and validates that leaf and its parent before writing learning.
+fn open_installed_host(root: &std::path::Path, data: &std::path::Path, app_id: String) -> std::result::Result<Host, String> {
+    std::fs::create_dir_all(data).map_err(|e| format!("create input-method data directory: {e}"))?;
+    Host::open(&HostConfig { shared_dir: root.join("Rime"), user_dir: data.join("Rime"), app_id })
 }
 pub fn poll(state: &Rc<RefCell<State>>) {
     let Ok(mut s) = state.try_borrow_mut() else {
@@ -722,7 +744,9 @@ impl ITfThreadMgrEventSink_Impl for Service_Impl {
         let _gate = CORE_GATE.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(h) = self.state.borrow_mut().host.as_mut() {
             h.set_app(&app);
-            h.set_typo_correction(switches.typo_correction)
+            h.set_typo_correction(switches.typo_correction);
+            h.set_context_ranking_enabled(switches.context_ranking);
+            h.set_zhiju_enabled(switches.zhiju)
         }
         Ok(())
     }
@@ -1174,6 +1198,13 @@ mod tests {
         let testdir =
             std::path::PathBuf::from(std::env::var("ZHIZI_TEST_DATA").expect("ZHIZI_TEST_DATA"));
         assert!(testdir.starts_with("H:\\zhizi"));
+        let first_use = testdir.join(format!("first-use-{}", std::process::id()));
+        assert!(!first_use.exists());
+        let mut fresh = open_installed_host(&root, &first_use, "zhizi-first-use-test".into()).unwrap();
+        for c in "nihao".chars() { fresh.process(Key::Text(c.to_string()), 0, false); }
+        assert_eq!(fresh.process(Key::Space, 0, false).commit, "你好");
+        drop(fresh);
+        std::fs::remove_dir_all(first_use).unwrap();
         for failed_stage in ["runtime unavailable", "model damaged", "vocabulary invalid"] {
             let opened = Cell::new(false);
             let (mut host, model_error) = initialize_host(

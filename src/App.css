@@ -113,6 +113,44 @@ h2 {
   color: #1f684f;
 }
 
+.release-controls {
+  position: relative;
+}
+
+.release-details {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 8px);
+  left: 0;
+  width: min(355px, 80vw);
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #c9d3cc;
+  border-radius: 8px;
+  background: #fff;
+  color: #24352c;
+  font-size: 0.85rem;
+  box-shadow: 0 8px 24px rgba(20, 35, 29, 0.12);
+}
+
+.release-details dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 12px;
+  margin: 0;
+}
+
+.release-details dd {
+  margin: 0;
+}
+
+.release-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
 .header-actions {
   display: flex;
   align-items: center;
@@ -1008,20 +1046,6 @@ select:focus {
   min-height: 34px;
   padding: 0 11px;
   font-size: 0.82rem;
-}
-
-.skin-issues {
-  margin-top: 10px;
-  border: 1px solid #e3c8bc;
-  border-radius: 8px;
-  background: #fff9f6;
-  color: #874631;
-  padding: 9px 10px;
-  font-size: 0.76rem;
-}
-
-.skin-issues p {
-  margin: 4px 0 0;
 }
 
 .lexicon-panel {
@@ -2514,3 +2538,31 @@ input.skin-store-search,
     --skin-warning: #ffb19b;
   }
 }
+
+.skin-account-heading, .skin-account-connection-controls, .skin-account-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.skin-account-heading { justify-content: space-between; margin: 18px 0 12px; }
+.skin-account-heading p { margin: 5px 0; }
+.skin-account-connection-controls input { flex: 1; min-width: 180px; }
+.skin-account-actions { margin-top: 12px; }
+.skin-account-actions button { font-size: 12px; padding: 7px 11px; }
+.skin-account button:focus-visible, .skin-account input:focus-visible {
+  outline: 3px solid #82b49d;
+  outline-offset: 3px;
+}
+@media (max-width: 640px) { .skin-account-connection-controls input { flex-basis: 100%; } }
+.skin-account { margin: 16px 0; }
+.skin-account-connection, .skin-order-help { margin: 16px 0; padding: 14px; border: 1px solid #d5dfd7; border-radius: 10px; }
+.skin-account summary { cursor: pointer; font-size: 13px; }
+.skin-account p { font-size: 13px; color: #52645a; }
+.skin-account-login { display: grid; gap: 8px; max-width: 460px; margin: 18px 0; }
+.skin-account-notice { background: #f4f3e9; padding: 14px; border-radius: 8px; }
+.skin-owned-list > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 10px 0; padding: 12px; background: #f4f7f4; border-radius: 10px; overflow-wrap: anywhere; }
+.skin-order { margin: 12px 0; padding: 16px; border: 1px solid #d5dfd7; border-radius: 12px; }
+.skin-order small { overflow-wrap: anywhere; }
+.skin-order .skin-account-heading { margin-top: 0; font-size: 13px; }
+.skin-account .skin-account-error { color: #973e2b; }

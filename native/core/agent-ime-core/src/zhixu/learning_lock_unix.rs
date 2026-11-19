@@ -22,12 +22,12 @@ unsafe extern "C" {
     fn openat(directory_descriptor: c_int, path: *const c_char, flags: c_int, ...) -> c_int;
 }
 
-pub(super) struct LearningLock {
+pub(crate) struct LearningLock {
     file: File,
 }
 
 impl LearningLock {
-    pub(super) fn acquire(user_dir: &Path) -> io::Result<Self> {
+    pub(crate) fn acquire(user_dir: &Path) -> io::Result<Self> {
         let directory = open_or_create_owned_leaf_directory(user_dir, 0o700)?;
         let name = CString::new(LOCK_FILE_NAME).unwrap();
         // Keep creation anchored to the validated directory, even if its path

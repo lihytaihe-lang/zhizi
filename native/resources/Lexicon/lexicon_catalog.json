@@ -15,7 +15,7 @@
       "description": "少量常见排序修正",
       "group": "core",
       "defaultEnabled": true,
-      "rows": 3
+      "rows": 5
     },
     {
       "id": "agent_daily",

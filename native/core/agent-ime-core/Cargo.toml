@@ -1,8 +1,10 @@
 [package]
 name = "agent-ime-core"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2024"
 license = "MIT OR Apache-2.0"
+description = "Zhixu native pinyin engine with owned Rust and C APIs"
+readme = "README.md"
 
 [lib]
 name = "agent_ime_core"

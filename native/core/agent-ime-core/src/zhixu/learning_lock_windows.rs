@@ -66,12 +66,12 @@ fn information(file: &File) -> io::Result<FileInformation> {
     Ok(result)
 }
 
-pub(super) struct LearningLock {
+pub(crate) struct LearningLock {
     file: File,
 }
 
 impl LearningLock {
-    pub(super) fn acquire(user_dir: &Path) -> io::Result<Self> {
+    pub(crate) fn acquire(user_dir: &Path) -> io::Result<Self> {
         let path = user_dir.join(LOCK_FILE_NAME);
         let mut options = OpenOptions::new();
         // Sharing reads and writes permits contenders to reach LockFileEx, but

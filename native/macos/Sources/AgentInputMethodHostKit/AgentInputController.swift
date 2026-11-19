@@ -131,6 +131,15 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
     }
 
     func enableDeferredRankingForTesting() { callbackExecutor.sync { attachDeferredRanking(forTesting: true) } }
+    func configureModelContextForTesting(rankingEnabled: Bool, generationEnabled: Bool) {
+        callbackExecutor.sync {
+            performanceContextRankingEnabled = rankingEnabled
+            core?.setContextRankingEnabled(rankingEnabled)
+            core?.zhijuEnabled = generationEnabled
+        }
+    }
+    var rankingContextForTesting: String? { callbackExecutor.sync { core?.rankingContextForTesting } }
+    var recordedPrecedingTextForTesting: String? { callbackExecutor.sync { activePrecedingText } }
     var latestCandidateTextsForTesting: [String]? { callbackExecutor.sync { latestView?.candidates.map(\.text) } }
     var zhijuEnabledForTesting: Bool? { callbackExecutor.sync { core?.zhijuEnabled } }
     var latestViewForTesting: IMEViewModel? { callbackExecutor.sync { latestView } }
@@ -364,12 +373,19 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
                 from: client,
                 windowLength: contextCaptureConfiguration.precedingTextWindowLength
             )
-            if let activePrecedingText {
-                _ = core.setPrecedingText(activePrecedingText)
-            } else if projectConfiguration.contextModelRankingEnabled || performanceContextRankingEnabled {
+            if activePrecedingText == nil {
                 recentCommitContext.activate(appIdentifier)
-                // Fallback text stays off QualityRecorder's persistent path.
-                _ = core.setPrecedingText(recentCommitContext.text)
+            }
+            let modelContext = ModelContextSelection.resolve(
+                hostText: activePrecedingText,
+                recentCommitText: recentCommitContext.text,
+                rankingEnabled: projectConfiguration.contextModelRankingEnabled || performanceContextRankingEnabled,
+                generationEnabled: core.zhijuEnabled
+            )
+            if let text = modelContext.text {
+                // Both models share the memory-only fallback. Recording still
+                // receives only activePrecedingText supplied by the host.
+                _ = core.setPrecedingText(text)
             }
         }
         // The `+ =` key without Shift expands the one-row panel (owner 2026-10-11, photo
@@ -423,7 +439,13 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
         if previousDirectEnglish != latestDirectEnglish {
             updateStatusItemMode()
         }
-        let insertTextElapsed = apply(result, to: client)
+        // The host would receive the original slash when the core passes the
+        // repaired question mark through in ASCII or direct English mode.
+        let needsRepairedPassthrough = mapped.repairedShiftSlash && security == .nonSecure
+            && !result.consumed && result.markedText.isEmpty && client != nil
+        let insertTextElapsed = apply(
+            result, to: client, passthroughText: needsRepairedPassthrough ? mapped.text : ""
+        )
         let elapsed = DispatchTime.now().uptimeNanoseconds &- started
         stages.insert = applyStages.insert
         stages.marked = applyStages.marked
@@ -446,7 +468,7 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
             )
         }
         applyPendingAppSwitchIfSafe()
-        return result.consumed
+        return result.consumed || needsRepairedPassthrough
     }
 
     @_spi(PerformanceHarness)
@@ -842,16 +864,29 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
         let detailed = NSMenuItem(title: detailedTitle, action: #selector(toggleDetailedDiagnostics(_:)), keyEquivalent: "")
         detailed.target = self
         menu.addItem(detailed)
-        // Testers quote the build in bug reports.
-        if let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String {
+        if let identity = ReleaseIdentity.running() {
             menu.addItem(.separator())
-            let release = Bundle.main.object(forInfoDictionaryKey: "ZhiziReleaseVersion") as? String
-            let title = release.map { "知字 \($0) · 构建 \(build)" } ?? "知字 · 版本 \(build)"
+            let title = "知字 \(identity.version) · 构建 \(identity.build)"
             let version = NSMenuItem(title: title, action: nil, keyEquivalent: "")
             version.isEnabled = false
             menu.addItem(version)
         }
+        if !performanceMode, let release = MainActor.assumeIsolated({ ReleaseUpdateMonitor.shared.available }) {
+            let item = NSMenuItem(title: "有新版本 \(release.version) · 构建 \(release.build)…", action: #selector(openReleaseNotes(_:)), keyEquivalent: "")
+            item.target = self
+            menu.addItem(item)
+        }
         return menu
+    }
+
+    @objc private func openReleaseNotes(_ sender: NSMenuItem) {
+        callbackExecutor.sync {
+            MainActor.assumeIsolated {
+                guard let release = ReleaseUpdateMonitor.shared.available,
+                      let notes = URL(string: release.notesURL) else { return }
+                NSWorkspace.shared.open(notes)
+            }
+        }
     }
 
     static func makePersonalModelMenuItem(directory: URL?, defaults: UserDefaults) -> NSMenuItem {
@@ -1452,7 +1487,8 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
     @discardableResult
     private func apply(
         _ result: IMEViewModel,
-        to client: (any IMKTextInput & NSObjectProtocol)?
+        to client: (any IMKTextInput & NSObjectProtocol)?,
+        passthroughText: String = ""
     ) -> UInt64? {
         // secure/unknown and lifecycle transitions must tear down our own
         // candidate surface even if the IMK client proxy has already vanished.
@@ -1471,11 +1507,12 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
         }
         guard let client else { return nil }
         var insertTextElapsed: UInt64?
-        if !result.commitText.isEmpty {
+        let deliveredText = result.commitText + passthroughText
+        if !deliveredText.isEmpty {
             let insertStarted = DispatchTime.now().uptimeNanoseconds
-            client.insertText(result.commitText, replacementRange: NSRange(location: NSNotFound, length: NSNotFound))
+            client.insertText(deliveredText, replacementRange: NSRange(location: NSNotFound, length: NSNotFound))
             insertTextElapsed = DispatchTime.now().uptimeNanoseconds &- insertStarted
-            if !result.secureDegraded { recentCommitContext.append(result.commitText, app: appIdentifier) }
+            if !result.secureDegraded { recentCommitContext.append(deliveredText, app: appIdentifier) }
         }
         _ = lap()
         applyStages.insert = insertTextElapsed ?? 0

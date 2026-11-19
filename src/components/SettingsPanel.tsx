@@ -1,18 +1,11 @@
 import { useEffect, useState } from "react";
-import { FileJson, FolderOpen, KeyRound, Palette, Save, Trash2, Zap } from "lucide-react";
+import { KeyRound, Save, Zap } from "lucide-react";
 import type { ProviderKind, ProviderSettings, ShortcutSettings } from "../domain/types";
-import { candidateSkinCatalog, type CandidateSkinId } from "../domain/skinCatalog";
-import { SkinStore } from "./SkinStore";
 import type { McpServerStatus } from "../lib/layer2";
 import {
   contextModelAvailability,
   setContextModelRankingEnabled,
-  installCandidateSkin,
-  listCandidateSkins,
   projectRuntimeConfiguration,
-  setCandidateTheme,
-  uninstallCandidateSkin,
-  type CandidateSkinCatalogSnapshot,
 } from "../lib/lexicon";
 
 type SettingsPanelProps = {
@@ -30,17 +23,6 @@ const shortcutOptions = [
   { label: "Command + Shift + Space", value: "super+shift+space" },
   { label: "Control + Space", value: "control+space" },
 ];
-
-const builtInSkinSnapshot: CandidateSkinCatalogSnapshot = {
-  skins: candidateSkinCatalog.map((skin) => ({
-    ...skin,
-    origin: "builtIn" as const,
-    status: "ready" as const,
-    reason: null,
-    canUninstall: false,
-  })),
-  issues: [],
-};
 
 export function SettingsPanel({
   providerSettings,
@@ -72,74 +54,6 @@ export function SettingsPanel({
     finally { setModelBusy(false); }
   }
   const providerKind = providerSettings.providerKind ?? "openai-compatible";
-  const [candidateTheme, setCandidateThemeState] = useState<CandidateSkinId>("system");
-  const [skinCatalog, setSkinCatalog] = useState<CandidateSkinCatalogSnapshot>(builtInSkinSnapshot);
-  const [skinBusy, setSkinBusy] = useState(false);
-  const [skinView, setSkinView] = useState<"mine" | "store">("mine");
-  const [storeVisited, setStoreVisited] = useState(false);
-  const [storeBusy, setStoreBusy] = useState(false);
-  const [localCatalogRevision, setLocalCatalogRevision] = useState(0);
-  const [pendingSkinRemoval, setPendingSkinRemoval] = useState<string | null>(null);
-  const [themeMessage, setThemeMessage] = useState("");
-  useEffect(() => {
-    void Promise.all([projectRuntimeConfiguration(), listCandidateSkins()])
-      .then(([runtime, catalog]) => {
-        setCandidateThemeState(runtime.candidateTheme);
-        setSkinCatalog(catalog);
-      })
-      .catch((error) => setThemeMessage(String(error)));
-  }, []);
-  async function changeCandidateTheme(value: CandidateSkinId, reportError = false) {
-    try {
-      const runtime = await setCandidateTheme(value);
-      setCandidateThemeState(runtime.candidateTheme);
-      setThemeMessage("已保存；当前 composition 保持原皮肤，下次 composition 生效。");
-    } catch (error) {
-      setThemeMessage(`皮肤切换失败：${String(error)}`);
-      if (reportError) throw error;
-    }
-  }
-  async function chooseAndInstall(directory: boolean) {
-    setSkinBusy(true);
-    try {
-      const { open } = await import("@tauri-apps/plugin-dialog");
-      const selected = await open({
-        title: directory ? "选择皮肤包目录" : "选择 skin.json",
-        directory,
-        multiple: false,
-        recursive: false,
-        canCreateDirectories: false,
-        ...(directory ? {} : { filters: [{ name: "知字皮肤", extensions: ["json"] }] }),
-      });
-      if (!selected || Array.isArray(selected)) return;
-      setSkinCatalog(await installCandidateSkin(selected));
-      setLocalCatalogRevision((value) => value + 1);
-      setThemeMessage("皮肤已安装；无需重新构建 App，可直接设为当前。");
-    } catch (error) {
-      setThemeMessage(`皮肤安装失败：${String(error)}`);
-    } finally {
-      setSkinBusy(false);
-    }
-  }
-  async function removeCandidateSkin(id: string, fromStore = false) {
-    setSkinBusy(true);
-    try {
-      setSkinCatalog(await uninstallCandidateSkin(id));
-      if (!fromStore) setLocalCatalogRevision((value) => value + 1);
-      const runtime = await projectRuntimeConfiguration();
-      setCandidateThemeState(runtime.candidateTheme);
-      setThemeMessage(
-        runtime.candidateTheme === "system"
-          ? "外部皮肤已卸载；若它原为当前皮肤，已自动回落 system。"
-          : "外部皮肤已卸载。",
-      );
-    } catch (error) {
-      setThemeMessage(`皮肤卸载失败：${String(error)}`);
-      if (fromStore) throw error;
-    } finally {
-      setSkinBusy(false);
-    }
-  }
   return (
     <section className="panel settings-panel" aria-labelledby="settings-title">
       <div className="panel-heading">
@@ -160,96 +74,6 @@ export function SettingsPanel({
         </label>
         {modelAvailability.reason ? <p role="status">{modelAvailability.reason}</p> : null}
         {modelMessage ? <p role="status">{modelMessage}</p> : null}
-      </div>
-
-      <div className="settings-section">
-        <div className="settings-section-heading">
-          <Palette size={17} />
-          <div>
-            <h3>候选皮肤</h3>
-            <p>皮肤外观来自本地目录；切换只在下一次 composition 生效。</p>
-          </div>
-        </div>
-        <div className="skin-segments" role="group" aria-label="皮肤区域">
-          <button className={`skin-segment${skinView === "mine" ? " is-active" : ""}`} type="button"
-            disabled={skinBusy || storeBusy} aria-pressed={skinView === "mine"}
-            onClick={() => { if (!skinBusy && !storeBusy) setSkinView("mine"); }}>我的皮肤</button>
-          <button className={`skin-segment${skinView === "store" ? " is-active" : ""}`} type="button"
-            disabled={skinBusy || storeBusy} aria-pressed={skinView === "store"}
-            onClick={() => { if (!skinBusy && !storeBusy) { setStoreVisited(true); setSkinView("store"); } }}>皮肤商店</button>
-        </div>
-        {skinView === "mine" ? <>
-        <div className="skin-install-actions">
-          <button className="secondary-button" disabled={skinBusy} onClick={() => void chooseAndInstall(true)} type="button">
-            <FolderOpen size={15} />安装皮肤目录
-          </button>
-          <button className="secondary-button" disabled={skinBusy} onClick={() => void chooseAndInstall(false)} type="button">
-            <FileJson size={15} />安装 .json
-          </button>
-        </div>
-        <div className="skin-list" aria-label="已安装候选皮肤">
-          {skinCatalog.skins.map((skin, index) => {
-            const conflict = skin.status === "conflict";
-            const current = !conflict && skin.id === candidateTheme;
-            return (
-              <article className={`skin-row ${current ? "is-current" : ""} ${conflict ? "has-conflict" : ""}`} key={`${skin.origin}-${skin.id}-${index}`}>
-                <div className="skin-row-copy">
-                  <strong>{skin.displayName.zh}<small>{skin.displayName.en}</small></strong>
-                  <span>{skin.origin === "builtIn" ? "内置" : "外部"} · {skin.author}</span>
-                  <p>{skin.description}</p>
-                  {skin.reason ? <em>{skin.reason}</em> : null}
-                </div>
-                <div className="skin-row-actions">
-                  <button
-                    className={current ? "primary-button" : "secondary-button"}
-                    disabled={current || conflict || skinBusy}
-                    onClick={() => void changeCandidateTheme(skin.id)}
-                    type="button"
-                  >
-                    {current ? "当前" : "设为当前"}
-                  </button>
-                  {skin.canUninstall ? (
-                    <button
-                      aria-label={`卸载 ${skin.displayName.zh}`}
-                      className="icon-button is-danger"
-                      disabled={skinBusy}
-                      onClick={() => setPendingSkinRemoval(skin.id)}
-                      title="仅卸载外部皮肤"
-                      type="button"
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  ) : null}
-                </div>
-              </article>
-            );
-          })}
-        </div>
-        {pendingSkinRemoval ? (
-          <div className="skin-store-confirm" role="group" aria-label="确认卸载本地皮肤">
-            <p>确认卸载「{skinCatalog.skins.find((skin) => skin.id === pendingSkinRemoval)?.displayName.zh ?? pendingSkinRemoval}」？
-              {candidateTheme === pendingSkinRemoval ? "当前皮肤将回落简洁。" : ""}</p>
-            <button className="secondary-button" type="button" disabled={skinBusy} onClick={() => {
-              setPendingSkinRemoval(null); void removeCandidateSkin(pendingSkinRemoval);
-            }}>确认卸载</button>
-            <button className="secondary-button" type="button" onClick={() => setPendingSkinRemoval(null)}>取消</button>
-          </div>
-        ) : null}
-        </> : null}
-        {storeVisited ? <div hidden={skinView !== "store"}>
-          <SkinStore currentSkinId={candidateTheme} busy={skinBusy} onBusyChange={setStoreBusy} localCatalogRevision={localCatalogRevision}
-          onUseSkin={(id) => changeCandidateTheme(id, true)} onCatalogChange={setSkinCatalog}
-          onUninstallSkin={(id) => removeCandidateSkin(id, true)} />
-        </div> : null}
-        {skinCatalog.issues.length ? (
-          <div className="skin-issues" role="alert">
-            <strong>皮肤校验报告</strong>
-            {skinCatalog.issues.map((issue, index) => (
-              <p key={`${issue.package}-${index}`}>{issue.package}：{issue.reason}</p>
-            ))}
-          </div>
-        ) : null}
-        {themeMessage ? <p className="settings-message" role="status">{themeMessage}</p> : null}
       </div>
 
       <div className="settings-section">

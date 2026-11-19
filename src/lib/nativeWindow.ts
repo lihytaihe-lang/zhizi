@@ -56,3 +56,24 @@ export async function listenForPanelFocus(onFocus: () => void): Promise<() => vo
     return () => {};
   }
 }
+
+export async function listenForSkinStore(onOpen: () => void): Promise<() => void> {
+  if (!isTauriRuntime()) return () => {};
+
+  let unlisten = () => {};
+  try {
+    const [{ listen }, { invoke }] = await Promise.all([import("@tauri-apps/api/event"), import("@tauri-apps/api/core")]);
+    let seen = 0;
+    const open = (request: number) => {
+      if (request <= seen) return;
+      seen = request;
+      onOpen();
+    };
+    unlisten = await listen<number>("zhizi://open-skin-store", (event) => open(event.payload));
+    // LaunchServices may deliver the request before the webview has mounted.
+    open(await invoke<number>("skin_store_open_request"));
+  } catch {
+    // The store remains reachable from the manager navigation.
+  }
+  return unlisten;
+}

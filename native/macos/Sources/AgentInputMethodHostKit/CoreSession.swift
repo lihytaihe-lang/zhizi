@@ -676,13 +676,14 @@ public final class CoreSession: @unchecked Sendable {
             guard current(), aim_zhiju_search_prepare(search.handle, snapshot.handle) == 0 else { return }
             KeyPathContentionTrace.shared?.record("zhiju.prepare.work", DispatchTime.now().uptimeNanoseconds &- preparationStarted)
             guard current() else { return }
+            let budget: UInt64 = 40_000_000
             let started = zhijuClock()
             let trace = model.trace
             trace?.beginSearch()
             var scores: [Float] = []
             let predictor = model.makeScoringSession(initialPrefix: initialZhijuPrefix, initialEpoch: initialEpoch)
             defer { predictor.clear() }
-            func mayStore() -> Bool { current() && zhijuClock() &- started < 40_000_000 }
+            func mayStore() -> Bool { current() && zhijuClock() &- started < budget }
             let context = ZhijuScoringContext(vocabularyCount: model.vocabularyCount, trace: trace) {
                 try predictor.score(tokens: $0, rows: $1, shouldContinue: current, mayStore: mayStore)
             }
@@ -692,14 +693,17 @@ public final class CoreSession: @unchecked Sendable {
             for _ in 0...16 {
                 guard current() else { return }
                 let elapsed = zhijuClock() &- started
-                guard elapsed < 40_000_000 else { outcome = .timeout; break }
+                guard elapsed < budget else { outcome = .timeout; break }
                 context.pending = nil
                 zhijuCoreStepForTesting?()
                 guard current() else { return }
                 let (status, encoded) = Self.stepZhiju(snapshot: snapshot, search: search, context: context,
-                    scores: scores, budget: (40_000_000 - elapsed + 999_999) / 1_000_000)
+                    scores: scores, budget: (budget - elapsed + 999_999) / 1_000_000)
                 guard current() else { return }
                 if status == 1, let request = context.pending {
+                    // Core expansion consumed time after the previous budget read.
+                    // Skip an inference whose result can no longer be applied.
+                    guard zhijuClock() &- started < budget else { outcome = .timeout; break }
                     do { scores = try predictor.score(tokens: request.tokens, rows: request.rows,
                                                       shouldContinue: current, mayStore: mayStore) }
                     catch {
@@ -724,7 +728,7 @@ public final class CoreSession: @unchecked Sendable {
             }
             let elapsed = zhijuClock() &- started
             trace?.finishSearch(elapsed: elapsed)
-            if elapsed >= 40_000_000 { outcome = .timeout; promote = false }
+            if elapsed >= budget { outcome = .timeout; promote = false }
             guard current() else { return }
             deliverZhiju(original: original, generation: generation, job: job, outcome: outcome,
                          latencyMs: Double(elapsed) / 1_000_000, snapshot: snapshot, promote: promote,
@@ -1055,6 +1059,8 @@ public final class CoreSession: @unchecked Sendable {
     }
 
     private func shortAbbreviationInputs(_ original: IMEViewModel) -> [String] {
+        // The legacy ABI name also admits bounded exact full-pinyin words with
+        // Han context. Both use the same optional fifth-slot budget and guards.
         if probeGroups != nil { probeGroups?.shortWords = [] }
         guard probeShortAbbreviationOffers, let handle, original.candidates.count == 5 else { return [] }
         var buffer = [UInt8](repeating: 0, count: 1024)
@@ -1069,7 +1075,8 @@ public final class CoreSession: @unchecked Sendable {
     }
 
     private func offerShortAbbreviation(_ view: IMEViewModel, words: [String], scores: [Double]?, elapsed: UInt64,
-        composition: CompositionInputs?, compositionScores: [Double]?, group: GroupInputs, groupScores: [Double]?) -> IMEViewModel {
+        composition: CompositionInputs?, compositionScores: [Double]?, group: GroupInputs, groupScores: [Double]?,
+        currentBatchReference: Bool = false) -> IMEViewModel {
         guard let handle, words.count >= 2, let scores, scores.count == words.count,
               scores.allSatisfy(\.isFinite), elapsed <= 8_000_000, view.pageNumber == 0, view.candidates.count == 5 else { return view }
         var known = Dictionary(zip(words, scores), uniquingKeysWith: { first, _ in first })
@@ -1079,7 +1086,13 @@ public final class CoreSession: @unchecked Sendable {
         if let groupScores, groupScores.count == group.texts.count {
             for (text, score) in zip(group.texts, groupScores) where score.isFinite { known[text] = score }
         }
-        guard let reference = known[view.candidates[4].text],
+        // Full-pinyin alternatives can have different lengths. That changes the
+        // scorer's retained context window, so use the fifth scored alongside
+        // these alternatives rather than an earlier C2/C3 batch's value.
+        let reference = currentBatchReference
+            ? words.lastIndex(of: view.candidates[4].text).map { scores[$0] }
+            : known[view.candidates[4].text]
+        guard let reference,
               let best = words.indices.dropLast().max(by: { scores[$0] < scores[$1] }),
               scores[best] > reference + 2,
               !view.candidates.contains(where: { $0.text == words[best] }) else { return view }
@@ -1097,13 +1110,18 @@ public final class CoreSession: @unchecked Sendable {
         composition: CompositionInputs?, compositionScores: [Double]?, group: GroupInputs, groupScores: [Double]?,
         scorer: @escaping (String, [String]) throws -> [Double]) {
         guard !words.isEmpty, [.unchanged, .reordered, .composed].contains(view.contextModel.outcome) else { return }
+        // The legacy initials path has at most three letters and stays unchanged.
+        // Bind the new full-pinyin comparison to the actual post-primary fifth.
+        let fullPinyin = view.markedText.utf8.filter { (97...122).contains($0) }.count >= 4
+        let comparisonWords = fullPinyin && view.candidates.count == 5
+            ? Array(words.dropLast()) + [view.candidates[4].text] : words
         rankingQueue.async { [self] in
             Self.runtimeLock.lock()
             let current = rankingGeneration == generation && appliedRankingStage == 1 && handle != nil
             Self.runtimeLock.unlock()
             guard current else { return }
             let started = contextRanking.now()
-            let scores = try? scorer(context, words)
+            let scores = try? scorer(context, comparisonWords)
             let elapsed = contextRanking.now() &- started
             let finish: () -> IMEViewModel? = { [self] in
                 Self.runtimeLock.lock()
@@ -1114,8 +1132,9 @@ public final class CoreSession: @unchecked Sendable {
                 displayedContextModel = ContextModelObservation(enabled: observed.enabled, outcome: observed.outcome,
                     baseOrder: observed.baseOrder, groupSize: observed.groupSize,
                     latencyMs: (observed.latencyMs ?? 0) + Double(elapsed) / 1_000_000, cold: observed.cold)
-                return zhijuView(offerShortAbbreviation(view.withContextModel(displayedContextModel), words: words, scores: scores, elapsed: elapsed,
-                    composition: composition, compositionScores: compositionScores, group: group, groupScores: groupScores))
+                return zhijuView(offerShortAbbreviation(view.withContextModel(displayedContextModel), words: comparisonWords, scores: scores, elapsed: elapsed,
+                    composition: composition, compositionScores: compositionScores, group: group, groupScores: groupScores,
+                    currentBatchReference: fullPinyin))
             }
             if let deferredApplier {
                 deferredApplier(DeferredRankingStep(markedText: view.markedText, pageNumber: view.pageNumber,
@@ -1286,6 +1305,12 @@ public final class CoreSession: @unchecked Sendable {
             .split(separator: "\n", omittingEmptySubsequences: false)
             .map { $0.split(separator: "\t").map(String.init) }
             .filter { !$0.isEmpty }
+    }
+
+    var rankingContextForTesting: String {
+        Self.runtimeLock.lock()
+        defer { Self.runtimeLock.unlock() }
+        return rankingContext
     }
 
     public func setPrecedingText(_ text: String) -> Bool {

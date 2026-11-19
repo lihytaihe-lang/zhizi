@@ -28,3 +28,12 @@ ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "
 name = "zhizi-upload"
 path = "src/bin/zhizi-upload.rs"
 required-features = ["upload"]
+
+[[example]]
+name = "product_acceptance"
+required-features = ["model"]
+
+[[bin]]
+name = "zhizi-ibus-host"
+path = "src/bin/zhizi-ibus-host.rs"
+required-features = ["model"]

@@ -9,7 +9,6 @@ import {
   countQualityRecordsInRange, permanentDeletionConfirmation, qualityStatusPresentation,
   QualityRecordingPanel,
 } from "../components/QualityRecordingPanel";
-import { SettingsPanel } from "../components/SettingsPanel";
 import { applyLocalPinyinReadings, type KnowledgeTerm } from "../lib/knowledge";
 import { splitLexiconList } from "../lib/lexicon";
 import type { QualityRecordingConsent, QualityRecordingEvent, QualityRecordingStatus } from "../lib/lexicon";
@@ -36,24 +35,9 @@ test("learning cleanup surfaces suspicious evidence in owner language", () => {
   assert.doesNotMatch(markup, /Rime UserDB|SQLite learned|schema/);
 });
 
-test("hotword review and candidate theme controls expose the owner-facing contracts", () => {
+test("hotword review and data sources expose the owner-facing contracts", () => {
   const knowledge = renderToStaticMarkup(<KnowledgeManager />);
   const sources = renderToStaticMarkup(<DataSourceManager />);
-  const settings = renderToStaticMarkup(<SettingsPanel
-    providerSettings={{
-      enabled: false,
-      baseUrl: "",
-      model: "",
-      apiKey: "",
-    }}
-    shortcutSettings={{ shortcut: "alt+space" }}
-    settingsMessage=""
-    onProviderChange={() => {}}
-    onShortcutChange={() => {}}
-    onApplyShortcut={() => {}}
-    mcpStatus={{ enabled: false, endpoint: null }}
-  />);
-
   assert.match(knowledge, /同一审核队列/);
   assert.match(knowledge, /未审核项不进候选/);
   assert.match(knowledge, />添加文件夹</);
@@ -66,16 +50,6 @@ test("hotword review and candidate theme controls expose the owner-facing contra
   assert.ok(sources.includes(String.raw`词\t拼音[\t释义]`));
   assert.match(sources, /缺拼音且不进候选/);
   assert.match(sources, /Owner 自著/);
-  assert.match(settings, /候选皮肤/);
-  assert.match(settings, /皮肤外观来自本地目录/);
-  for (const displayName of ["简洁", "玄墨", "水豚", "落樱"]) {
-    assert.match(settings, new RegExp(displayName));
-  }
-  assert.match(settings, /安装皮肤目录/);
-  assert.match(settings, /安装 \.json/);
-  assert.match(settings, /设为当前/);
-  assert.match(settings, /当前/);
-  assert.match(settings, /切换只在下一次 composition 生效/);
 });
 
 test("folder defaults are deterministic and local pinyin only fills missing readings", async () => {

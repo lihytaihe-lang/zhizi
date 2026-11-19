@@ -13,10 +13,10 @@ use std::sync::{Arc, OnceLock};
 
 #[cfg(unix)]
 #[path = "learning_lock_unix.rs"]
-mod learning_lock;
+pub(crate) mod learning_lock;
 #[cfg(windows)]
 #[path = "learning_lock_windows.rs"]
-mod learning_lock;
+pub(crate) mod learning_lock;
 
 pub const FILE_NAME: &str = "agent_zhixu_learning_v1.json";
 pub const MAX_ENTRIES: usize = 4096;
@@ -26,6 +26,28 @@ const FORMAT_VERSION: u32 = 1;
 const MAX_COUNT: u32 = 1_000_000;
 const MAX_IMPORT_BYTES: usize = 16 * 1024 * 1024;
 const MAX_DELIVERY_IDS: usize = 2048;
+
+#[path = "learning_json_size.rs"]
+mod json_size;
+
+#[path = "learning_management.rs"]
+pub(crate) mod management;
+pub use management::{LearningImportPreview, LearningManagementSnapshot, LearningStatus, LearningWordBackup, ManagementKey,
+    management_delete, management_delete_journaled, management_export, management_import, management_list, management_preview, management_restore};
+
+fn word_bytes(entry: &Entry) -> usize {
+    entry.reading.len() + entry.text.len() + 100 + if entry.rime.is_some() { 120 } else { 0 }
+}
+
+fn choice_bytes(entry: &Choice) -> usize {
+    json_size::json_string_bytes(&entry.app) + entry.raw.len() + entry.reading.len() + entry.text.len()
+        + entry.alternatives.iter().map(|text| text.len() + 3).sum::<usize>() + 200
+}
+
+fn estimated_bytes(document: &Document) -> usize {
+    200 + document.delivery_ids.len() * 21 + document.entries.iter().map(word_bytes).sum::<usize>()
+        + document.choices.iter().map(choice_bytes).sum::<usize>()
+}
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[repr(u32)]
@@ -736,19 +758,6 @@ impl LearningStore {
         });
         self.choices.truncate(MAX_ENTRIES);
         // Upper bounds include JSON punctuation, escaped app names and numeric fields.
-        let word_bytes = |entry: &Entry| entry.reading.len() + entry.text.len() + 100 + if entry.rime.is_some() { 120 } else { 0 };
-        let choice_bytes = |entry: &Choice| {
-            entry.app.len() * 6
-                + entry.raw.len()
-                + entry.reading.len()
-                + entry.text.len()
-                + entry
-                    .alternatives
-                    .iter()
-                    .map(|text| text.len() + 3)
-                    .sum::<usize>()
-                + 200
-        };
         let mut bytes = 200
             + self.delivery_ids.len() * 21
             + self.entries.iter().map(word_bytes).sum::<usize>()
@@ -1593,5 +1602,38 @@ mod tests {
         fs::set_permissions(dir.join(FILE_NAME), fs::Permissions::from_mode(0o644)).unwrap();
         assert!(LearningStore::load(&dir, 100).entries().is_empty());
         fs::remove_dir_all(dir).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod capacity_accounting_tests {
+    use super::*;
+    #[test]
+    fn json_capacity_retains_safe_rows_with_long_plain_app_identifiers() {
+        let mut store = LearningStore::default();
+        let mut entries = Vec::new();
+        for index in 0..1200u32 {
+            let text = char::from_u32(0x4e00 + index).unwrap().to_string();
+            entries.push(Entry { reading: "ta".into(), text: text.clone(), count: 3,
+                last_ms: index as u64 + 1, rime: None });
+            store.choices.push(Choice { app: "a".repeat(128), raw: "ta".into(), reading: "ta".into(),
+                text, target: 0, count: 3, last_ms: index as u64 + 1, alternatives: vec![] });
+        }
+        store.entries = Arc::new(entries);
+        let serialized = serde_json::to_vec(&store.document()).unwrap();
+        assert!(serialized.len() < MAX_BYTES as usize);
+        store.limit();
+        assert_eq!(store.entries.len(), 1200, "safe serialized data must not be evicted for nonexistent app-name escapes");
+        assert_eq!(store.choices.len(), 1200);
+    }
+    #[test]
+    fn exact_app_string_size_matches_json_serializer() {
+        for code in 0..=0x300u32 {
+            let text = char::from_u32(code).unwrap().to_string();
+            assert_eq!(json_size::json_string_bytes(&text), serde_json::to_vec(&text).unwrap().len());
+        }
+        for text in ["中文😀", "plain\\\"text", "\u{2028}\u{2029}"] {
+            assert_eq!(json_size::json_string_bytes(text), serde_json::to_vec(text).unwrap().len());
+        }
     }
 }

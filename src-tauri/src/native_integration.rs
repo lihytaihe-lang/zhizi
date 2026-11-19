@@ -2,6 +2,9 @@ use crate::layer2::AppClass;
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 
+#[cfg(target_os = "macos")]
+pub(crate) use platform::process_executable;
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SelectionCapture {
@@ -345,13 +348,20 @@ mod platform {
         }
     }
 
-    fn bundle_id_for_pid(pid: i32) -> Option<String> {
+    pub(crate) fn process_executable(pid: i32) -> Option<std::path::PathBuf> {
+        use std::os::unix::ffi::OsStringExt;
         let mut buffer = vec![0_u8; 4096];
         let count = unsafe { proc_pidpath(pid, buffer.as_mut_ptr().cast(), buffer.len() as u32) };
         if count <= 0 {
             return None;
         }
-        let executable = String::from_utf8_lossy(&buffer[..count as usize]).into_owned();
+        let path = CStr::from_bytes_until_nul(&buffer).ok()?;
+        Some(std::ffi::OsString::from_vec(path.to_bytes().to_vec()).into())
+    }
+
+    fn bundle_id_for_pid(pid: i32) -> Option<String> {
+        let executable = process_executable(pid)?;
+        let executable = executable.to_str()?;
         let marker = ".app/Contents/";
         let end = executable.find(marker)? + ".app".len();
         let plist = Path::new(&executable[..end]).join("Contents/Info.plist");

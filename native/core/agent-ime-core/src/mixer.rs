@@ -1250,6 +1250,51 @@ impl MixerDecoder {
         ranked
     }
 
+    fn restore_gaifa_correction(&self, base: &DecoderSnapshot, candidates: &mut Vec<MixedCandidate>) {
+        let Some(first) = candidates.first() else { return; };
+        let raw = base.raw_input.as_str();
+        let first_text = first.candidate.text.as_str();
+        let corrected = if raw == "gaifa" {
+            if !matches!(first_text, "盖发" | "该法" | "改发")
+                || self.preceding_text.as_deref().and_then(|text| crate::exact_context::exact_collocation(raw, text)) != Some("改法")
+            {
+                return;
+            }
+            "改法"
+        } else if raw.ends_with("zhezhonggaifa")
+            && ["这种该法", "着中该法", "这种盖发", "这种改发"].iter().any(|suffix| first_text.ends_with(suffix))
+        {
+            "这种改法"
+        } else {
+            return;
+        };
+        let Some(reading) = canonical_reading(raw) else { return; };
+        let matches = |candidate: &MixedCandidate| {
+            candidate.candidate.text.ends_with(corrected)
+                && candidate.candidate.reading_key.replace(['\'', ' '], "") == raw
+        };
+        if let Some(position) = candidates.iter().position(matches) {
+            candidates[..=position].rotate_right(1);
+            self.set_confirmed_first(None);
+            return;
+        }
+        // A previously learned exact sentence can suppress the native lattice
+        // entirely. Read one factory alternative without rewriting learning.
+        let Ok(blacklist) = self.blacklist.lock() else { return; };
+        let accept = |text: &str| text.ends_with(corrected)
+            && !self.lexicon.blocked_texts.contains(text)
+            && !blacklist.contains(&reading, text)
+            && !crate::lexicon_layers::is_hidden(text, &|word| {
+                chinese_syllabified_readings_by_text().contains_key(word)
+            });
+        let _factory_only = zhixu::pin_learning(None);
+        let (alternatives, _) = whole_reading_candidates_prefix_with(&reading, &[], 0, false, None, &accept);
+        if let Some(candidate) = alternatives.into_iter().find(|item| matches(item) && accept(&item.candidate.text)) {
+            candidates.insert(0, candidate);
+            self.set_confirmed_first(None);
+        }
+    }
+
     fn set_confirmed_first(&self, text: Option<String>) {
         if self.whole_enabled()
             && let Ok(mut cache) = self.whole_cache.lock()
@@ -2023,7 +2068,13 @@ impl MixerDecoder {
         if self.fuzzy_mask != 0 {
             self.prioritize_first_syllable_single_characters(&base.raw_input, &mut ranked);
         }
+        if self.inner.native_editing() && base.page_no == 0 && self.fuzzy_page_no == 0 {
+            self.prefer_exact_collocation(&base.raw_input, &mut ranked);
+        }
         self.protect_learned_whole(&base.raw_input, &mut ranked);
+        if self.inner.native_editing() && base.page_no == 0 && self.fuzzy_page_no == 0 {
+            self.restore_gaifa_correction(&base, &mut ranked);
+        }
         let page_no = if self.fuzzy_mask == 0 {
             base.page_no
         } else {
@@ -2150,6 +2201,42 @@ impl MixerDecoder {
                     .score(reading, preceding_text, &right.candidate.text);
             right_score.cmp(&left_score)
         });
+    }
+
+    fn prefer_exact_collocation(&self, raw: &str, candidates: &mut [MixedCandidate]) {
+        let Some(preceding) = self.preceding_text.as_deref() else { return; };
+        let Some(word) = crate::exact_context::exact_collocation(raw, preceding) else { return; };
+        let Some(first) = candidates.first() else { return; };
+        if first.candidate.text == word || first.tier != 2 || self.use_rime_order(raw)
+            || ranking::owner_keeps(&first.candidate.text, word)
+            || self.learning.first_has_preference(&self.app_id, raw, &first.candidate.text, |entry|
+                entry.reading.split_whitespace().flat_map(str::bytes).eq(raw.bytes()))
+        {
+            return;
+        }
+        let index = zhixu::current();
+        if !native_exact_word(raw, first, &index) { return; }
+        if let Some(position) = candidates.iter().take(PAGE_SIZE)
+            .position(|item| item.candidate.text == word && native_exact_word(raw, item, &index))
+        {
+            candidates[..=position].rotate_right(1);
+        }
+    }
+
+    fn context_ranking_slots(&self, snapshot: &DecoderSnapshot, candidates: &[MixedCandidate]) -> u32 {
+        // Keep an exact collocation already at the top of the first page stable
+        // when the deferred model sorts the remaining slots.
+        if snapshot.page_no == 0 && self.inner.native_editing()
+            && let Some(preceding) = self.preceding_text.as_deref()
+            && let Some(word) = crate::exact_context::exact_collocation(&snapshot.raw_input, preceding)
+            && let Some(first) = candidates.first()
+            && first.candidate.text == word
+            && let Some(index) = self.inner.dictionary_snapshot()
+            && native_exact_word(&snapshot.raw_input, first, &index)
+        {
+            return !1;
+        }
+        u32::MAX
     }
 
     fn record_selection(&self, raw: &str, position: usize, text: &str) {
@@ -2497,6 +2584,13 @@ fn decoder_candidate(item: &MixedCandidate) -> bool {
         || matches!(item.candidate.comment.as_str(), ZHIXU_WHOLE_COMMENT | ZHIXU_WHOLE_SENTENCE_COMMENT)
 }
 
+fn native_exact_word(raw: &str, item: &MixedCandidate, index: &Index) -> bool {
+    matches!(item.selection, Selection::Base { .. })
+        && item.candidate.reading_key.split_whitespace().flat_map(str::bytes).eq(raw.bytes())
+        && index.all_readings_for_text(&item.candidate.text)
+            .any(|reading| reading == item.candidate.reading_key)
+}
+
 /// Model-first group (C2): every visible Han decoder candidate whose reading covers the
 /// whole raw input, in full syllables or the owner's syllable-prefix abbreviations
 /// (hais -> 还是 / 还剩, jiexialzuoshenm -> 接下来做什么 / 解析阿里做什么). It contains the
@@ -2792,6 +2886,17 @@ impl Decoder for MixerDecoder {
         Ok(())
     }
 
+    fn refresh_managed_learning(&mut self) -> Result<bool, i32> {
+        let learning_changed = self.learning.refresh_managed();
+        let blacklist_changed = self.blacklist.lock().map_err(|_| -105)
+            .and_then(|mut store| store.refresh_managed().map_err(|_| -105));
+        if learning_changed.as_ref().is_ok_and(|v| *v) || blacklist_changed.as_ref().is_ok_and(|v| *v) {
+            self.reset_layer();
+            if let Ok(mut cache) = self.composition_cache.lock() { *cache = None; }
+        }
+        Ok(learning_changed? || blacklist_changed?)
+    }
+
     fn learning_key(&mut self, event: &crate::state::KeyEvent, now: u64) {
         self.learning.key(event, self.is_composing(), now);
     }
@@ -2976,7 +3081,11 @@ impl Decoder for MixerDecoder {
         let (snapshot, mixed) = self.visible_unranked();
         let Ok(blacklist) = self.blacklist.lock() else { return Vec::new() };
         let index = zhixu::current();
-        self.short_abbreviation_words(&snapshot, &mixed).into_iter().map(|(text, _)| text)
+        let mut words = self.short_abbreviation_words(&snapshot, &mixed);
+        if words.is_empty() {
+            words = self.full_pinyin_offpage_words(&snapshot, &mixed, &blacklist);
+        }
+        words.into_iter().map(|(text, _)| text)
             .filter(|text| !blacklist.contains(&snapshot.raw_input, text)
                 && !index.all_readings_for_text(text).any(|reading| blacklist.contains(&reading.replace(' ', ""), text))).collect()
     }
@@ -3033,11 +3142,13 @@ impl Decoder for MixerDecoder {
     fn context_group_mask(&self) -> u32 {
         let (snapshot, mixed) = self.visible_unranked();
         context_group(&snapshot, &mixed, self.has_preceding_context())
+            & self.context_ranking_slots(&snapshot, &mixed)
     }
 
     fn context_complete_mask(&self) -> u32 {
         let (snapshot, mixed) = self.visible_unranked();
         context_complete_group(&snapshot, &mixed, self.has_preceding_context())
+            & self.context_ranking_slots(&snapshot, &mixed)
     }
 
     fn contextual_prior_allowed(&self) -> bool {
@@ -3058,8 +3169,9 @@ impl Decoder for MixerDecoder {
         // The complete-coverage group contains the homophone group, so one check
         // admits C1 swaps and C2 promotions while every other slot stays fixed.
         let has_context = self.has_preceding_context();
-        let mask = context_complete_group(&snapshot, &mixed, has_context)
-            | context_group(&snapshot, &mixed, has_context);
+        let mask = (context_complete_group(&snapshot, &mixed, has_context)
+            | context_group(&snapshot, &mixed, has_context))
+            & self.context_ranking_slots(&snapshot, &mixed);
         if mask.count_ones() < 2 || order.len() != mixed.len() {
             return Err(-10);
         }
@@ -4068,6 +4180,51 @@ impl MixerDecoder {
         self.offered_composition = Some((self.letters_left(), text.to_string()));
         self.offered_abbreviation = false;
         Ok(())
+    }
+
+    /// With Han context, full-pinyin dictionary words beyond the visible page may
+    /// join the same bounded optional fifth-slot comparison as short initials.
+    /// Merely admitting them changes no page or digit identity. The caller still
+    /// compares against the displaced fifth under the original model/time guards.
+    fn full_pinyin_offpage_words(
+        &self,
+        snapshot: &DecoderSnapshot,
+        mixed: &[MixedCandidate],
+        blacklist: &Store,
+    ) -> Vec<(String, f64)> {
+        let raw = snapshot.raw_input.as_str();
+        if snapshot.page_no != 0
+            || !(4..=24).contains(&raw.len())
+            || !raw.bytes().all(|byte| byte.is_ascii_lowercase())
+            || !self.preceding_text.as_deref().is_some_and(|text|
+                text.chars().any(|c| ('\u{3400}'..='\u{9fff}').contains(&c)))
+            || !valid_pinyin_spelling(raw)
+            || context_complete_group(snapshot, mixed, true) & 1 == 0
+        {
+            return Vec::new();
+        }
+        let Some(prefix) = self.inner.snapshot_candidate_prefix(4 * PAGE_SIZE) else { return Vec::new() };
+        let index = zhixu::current();
+        let visible: Vec<String> = mixed.iter().map(|item| item.candidate.text.clone()).collect();
+        let mut words: Vec<_> = prefix.candidates.iter().map(|candidate| crate::exact_offpage::Word {
+            text: candidate.text.clone(),
+            reading: candidate.reading_key.clone(),
+            dictionary_match: common_simplified(&candidate.text)
+                && !self.lexicon.blocked_texts.contains(&normalize_text(&candidate.text))
+                && index.all_readings_for_text(&candidate.text).any(|reading| reading == candidate.reading_key),
+        }).collect();
+        // One strongly supported dictionary word can use the existing score
+        // batch even when frequency alone puts it after the first seven.
+        if let Some(word) = self.preceding_text.as_deref()
+            .and_then(|text| crate::exact_context::exact_collocation(raw, text))
+            && !blacklist.contains(raw, word)
+            && let Some(position) = words.iter().position(|entry|
+                entry.dictionary_match && entry.text == word
+                    && entry.reading.split_whitespace().flat_map(str::bytes).eq(raw.bytes()))
+        {
+            words[..=position].rotate_right(1);
+        }
+        crate::exact_offpage::exact_words(raw, &visible, &words).into_iter().map(|text| (text, 0.0)).collect()
     }
 
     /// Short initials have many complete dictionary matches beyond the five visible
@@ -8840,6 +8997,115 @@ mod tests {
         ].into_iter().enumerate().map(|(rank, (text, reading))| Entry {
             text: text.into(), reading: reading.into(), weight: 20000 - rank as u32 * 1000, layer: "fixture".into(),
         }).collect() }))
+    }
+
+    fn full_pinyin_offpage_fixture() -> Arc<Index> {
+        use crate::zhixu::loader::{DictionaryData, Entry};
+        Arc::new(Index::from_data(DictionaryData { entries: [
+            "实施", "事实", "试试", "实时", "适时", "史实", "失实", "逝世", "失势", "时事",
+        ].into_iter().enumerate().map(|(rank, text)| Entry {
+            text: text.into(), reading: "shi shi".into(), weight: 30000 - rank as u32 * 1000, layer: "fixture".into(),
+        }).collect() }))
+    }
+
+    #[test]
+    fn exact_collocation_moves_an_existing_word_and_keeps_its_commit_path() {
+        use crate::zhixu::loader::{DictionaryData, Entry};
+        let dictionary = Arc::new(Index::from_data(DictionaryData { entries: [
+            ("食物", 30_000), ("事物", 24_000), ("失误", 21_000),
+        ].into_iter().map(|(text, weight)| Entry {
+            text: text.into(), reading: "shi wu".into(), weight, layer: "fixture".into(),
+        }).collect() }));
+        zhixu::with_index(dictionary.clone(), || {
+            let mut mixer = native_mixer("exact-collocation", dictionary);
+            mixer.configure_preceding_text(Some("上次犯了个低级。".into()));
+            mixer.input("shiwu").unwrap();
+            let before = mixer.snapshot().candidates;
+            assert_eq!(before[0].text, "食物");
+            mixer.configure_preceding_text(Some("上次犯了个低级".into()));
+            let after = mixer.snapshot().candidates;
+            assert_eq!(after[0].text, "失误");
+            assert_eq!(after[1].text, before[0].text);
+            assert_eq!(mixer.context_complete_mask() & 1, 0);
+            assert_eq!(mixer.reorder_context_candidates(&[1, 0, 2]), Err(-10));
+            assert_eq!(mixer.select_candidate(0, 90420, LearningIntent::NoLearn).unwrap(), "失误");
+            assert!(mixer.snapshot().raw_input.is_empty());
+            mixer.blacklist.lock().unwrap().insert("shiwu", "失误").unwrap();
+            mixer.input("shiwu").unwrap();
+            let blocked = mixer.snapshot().candidates;
+            assert_eq!(blocked[0].text, "食物");
+            assert!(blocked.iter().all(|candidate| candidate.text != "失误"));
+        });
+    }
+
+    #[test]
+    fn full_pinyin_offpage_admission_requires_han_context_and_preserves_page() {
+        let dictionary = full_pinyin_offpage_fixture();
+        zhixu::with_index(dictionary.clone(), || {
+            let mut mixer = native_mixer("exact-admission", dictionary);
+            mixer.input("shishi").unwrap();
+            assert!(mixer.abbreviation_alternatives().is_empty(), "no-context behavior stays unchanged");
+            mixer.configure_preceding_text(Some("read the latest news".into()));
+            assert!(mixer.abbreviation_alternatives().is_empty(), "Latin-only context cannot open admission");
+            mixer.configure_preceding_text(Some("关注国内外新闻".into()));
+            let before = mixer.snapshot().candidates;
+            assert!(!before.iter().any(|c| c.text == "时事"));
+            let alternatives = mixer.abbreviation_alternatives();
+            assert!(alternatives.contains(&"时事".to_string()));
+            assert!(alternatives.len() <= 7);
+            assert_eq!(mixer.snapshot().candidates, before, "admission does not change a displayed digit");
+            mixer.page_down().unwrap();
+            assert!(mixer.abbreviation_alternatives().is_empty(), "manual paging closes optional admission");
+        });
+    }
+
+    #[test]
+    fn full_pinyin_offpage_prefers_the_matching_word_under_the_existing_blacklist_guard() {
+        let dictionary = full_pinyin_offpage_fixture();
+        zhixu::with_index(dictionary.clone(), || {
+            let mut mixer = native_mixer("exact-context-admission", dictionary);
+            mixer.configure_preceding_text(Some("古籍记载的".into()));
+            mixer.input("shishi").unwrap();
+            let before = mixer.snapshot().candidates;
+            assert!(!before.iter().any(|c| c.text == "史实"));
+            assert_eq!(mixer.abbreviation_alternatives().first().map(String::as_str), Some("史实"));
+            assert_eq!(mixer.snapshot().candidates, before);
+            mixer.blacklist.lock().unwrap().insert("shishi", "史实").unwrap();
+            assert!(mixer.abbreviation_alternatives().iter().all(|text| text != "史实"));
+        });
+    }
+
+    #[test]
+    fn full_pinyin_offpage_offer_keeps_first_four_and_commits_exactly() {
+        let dictionary = full_pinyin_offpage_fixture();
+        zhixu::with_index(dictionary.clone(), || {
+            let mut mixer = native_mixer("exact-selection", dictionary);
+            mixer.configure_preceding_text(Some("关注国内外新闻".into()));
+            mixer.input("shishi").unwrap();
+            let before = mixer.snapshot().candidates;
+            mixer.offer_abbreviation("时事").unwrap();
+            let shown = mixer.snapshot();
+            assert_eq!(shown.candidates[..PAGE_SIZE - 1], before[..PAGE_SIZE - 1]);
+            assert_eq!(shown.candidates[PAGE_SIZE - 1].text, "时事");
+            assert_eq!(mixer.select_candidate(PAGE_SIZE - 1, 90420, LearningIntent::NoLearn).unwrap(), "时事");
+            assert!(mixer.snapshot().raw_input.is_empty());
+        });
+    }
+
+    #[test]
+    fn full_pinyin_offpage_offer_rejects_blacklisted_and_stale_words() {
+        let dictionary = full_pinyin_offpage_fixture();
+        zhixu::with_index(dictionary.clone(), || {
+            let mut mixer = native_mixer("exact-blacklist", dictionary);
+            mixer.configure_preceding_text(Some("关注国内外新闻".into()));
+            mixer.input("shishi").unwrap();
+            assert!(mixer.abbreviation_alternatives().contains(&"时事".to_string()));
+            mixer.blacklist.lock().unwrap().insert("shishi", "时事").unwrap();
+            assert!(!mixer.abbreviation_alternatives().contains(&"时事".to_string()));
+            assert_eq!(mixer.offer_abbreviation("时事"), Err(-10));
+            mixer.input("a").unwrap();
+            assert_eq!(mixer.offer_abbreviation("史实"), Err(-10), "an old exact word cannot cover a newer input");
+        });
     }
 
     #[test]

@@ -8,11 +8,13 @@ use std::path::Path;
 pub struct Settings {
     /// Typing slips (swapped or doubled letters) are corrected. On unless switched off.
     pub typo_correction: bool,
+    pub context_ranking: bool,
+    pub zhiju: bool,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { typo_correction: true }
+        Self { typo_correction: true, context_ranking: true, zhiju: true }
     }
 }
 
@@ -31,11 +33,20 @@ fn write_json(path: &Path, value: &serde_json::Value) -> std::io::Result<()> {
 
 pub fn load(data_dir: &Path) -> Settings {
     let value = read_json(&data_dir.join("settings.json"));
-    Settings { typo_correction: value.and_then(|v| v["typoCorrection"].as_bool()).unwrap_or(true) }
+    Settings {
+        typo_correction: value.as_ref().and_then(|v| v["typoCorrection"].as_bool()).unwrap_or(true),
+        context_ranking: value.as_ref().and_then(|v| v["contextRanking"].as_bool()).unwrap_or(true),
+        zhiju: value.as_ref().and_then(|v| v["zhiju"].as_bool()).unwrap_or(true),
+    }
 }
 
 pub fn save(data_dir: &Path, settings: Settings) -> std::io::Result<()> {
-    write_json(&data_dir.join("settings.json"), &serde_json::json!({ "typoCorrection": settings.typo_correction }))
+    let path = data_dir.join("settings.json");
+    let mut value = read_json(&path).filter(|v| v.is_object()).unwrap_or_else(|| serde_json::json!({}));
+    value["typoCorrection"] = settings.typo_correction.into();
+    value["contextRanking"] = settings.context_ranking.into();
+    value["zhiju"] = settings.zhiju.into();
+    write_json(&path, &value)
 }
 
 /// Whether the person left `app` (a process file name) in English mode the last time.
@@ -69,12 +80,27 @@ mod tests {
     fn typo_correction_is_on_unless_switched_off() {
         let dir = scratch("typo");
         assert!(load(&dir).typo_correction, "no file: default on");
-        save(&dir, Settings { typo_correction: false }).unwrap();
+        save(&dir, Settings { typo_correction: false, ..Settings::default() }).unwrap();
         assert!(!load(&dir).typo_correction);
-        save(&dir, Settings { typo_correction: true }).unwrap();
+        save(&dir, Settings { typo_correction: true, ..Settings::default() }).unwrap();
         assert!(load(&dir).typo_correction);
         std::fs::write(dir.join("settings.json"), "not json").unwrap();
         assert!(load(&dir).typo_correction, "unreadable file: default on");
+    }
+
+    #[test]
+    fn ranking_and_generation_switches_are_independent_and_keep_other_settings() {
+        let dir = scratch("generation");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("settings.json"), r#"{"futureSetting":7,"typoCorrection":false}"#).unwrap();
+        assert!(load(&dir).context_ranking && load(&dir).zhiju);
+        save(&dir, Settings { context_ranking: false, ..load(&dir) }).unwrap();
+        assert!(!load(&dir).context_ranking && load(&dir).zhiju);
+        save(&dir, Settings { zhiju: false, context_ranking: true, ..load(&dir) }).unwrap();
+        assert!(load(&dir).context_ranking && !load(&dir).zhiju);
+        assert!(!load(&dir).typo_correction);
+        assert_eq!(read_json(&dir.join("settings.json")).unwrap()["futureSetting"], 7);
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

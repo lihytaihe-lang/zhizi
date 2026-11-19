@@ -1,0 +1,24 @@
+{
+  "format": "zhizi-windows-models/1",
+  "release": "0.3.45",
+  "ranking": {
+    "checkpointSHA256": "1e1a1485003391694a0fd44145d83e219c72e9258b0ae7c2fb75e25f89f0f261",
+    "files": {
+      "zhizi30m_v2.onnx": "07c8a48dcc58f80d761c06f4c38ee6b805d222684d56ed7795787f573062358b",
+      "itos.json": "1ab058ffeac9885fe12b86abe45a5caa33899e4904feff961cc0c3e8f46b6a33"
+    }
+  },
+  "generation": {
+    "checkpointSHA256": "1e1a1485003391694a0fd44145d83e219c72e9258b0ae7c2fb75e25f89f0f261",
+    "files": {
+      "model.json": "660261672d767c4a4ec80381e5b9e97905a32ac966bf35d31cd6b8b7b52ab4a5",
+      "PARITY.json": "cefcd9307e79d898a13bb75a4ee66005b2f53549d92da6d07d781f09ec52fb67",
+      "zhiju30m_v3_step.onnx": "c0ff358b6367f4ef6e26b55ba3ed66c9191e4b30f8aee64443ba119380c737ea",
+      "zhiju30m_v3.onnx": "be4b1491074867429111461ab34a834f84597b86862393e49611192a94d1b454",
+      "itos.json": "1ab058ffeac9885fe12b86abe45a5caa33899e4904feff961cc0c3e8f46b6a33",
+      "SHA256SUMS": "c854dc7718e76526d5a05e880fcd3aee4605529a0284e553bca8a90d682833af"
+    }
+  },
+  "newTraining": false,
+  "quantized": false
+}

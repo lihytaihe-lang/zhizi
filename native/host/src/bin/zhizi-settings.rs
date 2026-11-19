@@ -34,20 +34,21 @@ fn notice(text: &str) {
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let on = match args.iter().map(String::as_str).collect::<Vec<_>>().as_slice() {
-        ["--typo-correction", "on"] => true,
-        ["--typo-correction", "off"] => false,
+    let (setting, on) = match args.iter().map(String::as_str).collect::<Vec<_>>().as_slice() {
+        [setting @ ("--typo-correction" | "--context-ranking" | "--zhiju"), value @ ("on" | "off")] => (*setting, *value == "on"),
         _ => {
-            notice("用法：zhizi-settings --typo-correction on|off");
+            notice("用法：zhizi-settings --typo-correction|--context-ranking|--zhiju on|off");
             std::process::exit(2);
         }
     };
-    match zhizi_host::settings::save(&data_directory(), zhizi_host::settings::Settings { typo_correction: on }) {
-        Ok(()) => notice(if on {
-            "已开启键位纠错（打错、打反的字母会自动纠正）。正在使用的程序在下次切换窗口后生效。"
-        } else {
-            "已关闭键位纠错。正在使用的程序在下次切换窗口后生效。"
-        }),
+    let mut settings = zhizi_host::settings::load(&data_directory());
+    let label = match setting {
+        "--typo-correction" => { settings.typo_correction = on; "键位纠错" },
+        "--context-ranking" => { settings.context_ranking = on; "顺手·知字候选排序" },
+        _ => { settings.zhiju = on; "知句整句生成" },
+    };
+    match zhizi_host::settings::save(&data_directory(), settings) {
+        Ok(()) => notice(&format!("已{}{}。正在使用的程序在下次切换窗口后生效。", if on { "开启" } else { "关闭" }, label)),
         Err(error) => {
             notice(&format!("没能保存设置：{error}"));
             std::process::exit(1);

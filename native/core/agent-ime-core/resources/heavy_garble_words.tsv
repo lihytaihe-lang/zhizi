@@ -1,4 +1,4 @@
-# Generated from pinned pinyin_simp (weight >= 500) and the agent everyday layers; sources_sha256=cba994b30bff02dbd422ecb091d0434b9faca2443bcc19153e46e5a3a1b938a5
+# Generated from pinned pinyin_simp (weight >= 500) and the agent everyday layers; sources_sha256=38b6b6e11f4952c53e2a66212ba002a7f76ef13cf4445a7ee6bd85d9f117aa80
 # maximum_characters=7
 扒	ba	523
 坝	ba	701
@@ -80008,3 +80008,5 @@
 完成了	wan cheng le	520
 难用	nan yong	520
 超级烦	chao ji fan	520
+改法	gai fa	520
+这种改法	zhe zhong gai fa	260

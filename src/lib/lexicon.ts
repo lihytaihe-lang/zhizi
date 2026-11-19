@@ -67,6 +67,9 @@ export type CandidateSkinEntry = {
   status: "ready" | "conflict";
   reason: string | null;
   canUninstall: boolean;
+  version?: string;
+  animated?: boolean;
+  tags?: readonly string[];
 };
 export type CandidateSkinIssue = { package: string; reason: string };
 export type CandidateSkinCatalogSnapshot = {
@@ -313,14 +316,6 @@ export const setSecondaryLayerEnabled = (enabled: boolean) =>
   invokeLocal<ProjectRuntimeConfiguration>("set_secondary_layer_enabled", { enabled });
 export const setPredictionEnabled = (enabled: boolean) =>
   invokeLocal<ProjectRuntimeConfiguration>("set_prediction_enabled", { enabled });
-export const setCandidateTheme = (candidateTheme: CandidateSkinId) =>
-  invokeLocal<ProjectRuntimeConfiguration>("set_candidate_theme", { candidateTheme });
-export const listCandidateSkins = () =>
-  invokeLocal<CandidateSkinCatalogSnapshot>("list_candidate_skins");
-export const installCandidateSkin = (sourcePath: string) =>
-  invokeLocal<CandidateSkinCatalogSnapshot>("install_candidate_skin", { sourcePath });
-export const uninstallCandidateSkin = (id: string) =>
-  invokeLocal<CandidateSkinCatalogSnapshot>("uninstall_candidate_skin", { id });
 export const compileSecondaryPredictionSnapshot = (version: number) =>
   invokeLocal<SnapshotMeta>("compile_secondary_prediction_snapshot", { version });
 export const runHotwordQualityGate = () =>

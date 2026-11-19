@@ -12,6 +12,7 @@ pub use agent_ime_core::ranking::{
 };
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, channel};
 use std::time::{Duration, Instant};
+use std::sync::{Arc, atomic::{AtomicU64, Ordering}};
 
 /// Log probability of each candidate after the context, summed over the candidate's
 /// characters (the same protocol as eval_owner.ZhiziScorer and the macOS scorer).
@@ -36,16 +37,43 @@ pub(crate) struct Done {
     pub elapsed: Duration,
 }
 
+/// An optional comparison queued only after the primary page decision.
+pub(crate) struct Comparison {
+    pub id: u64,
+    pub generation: u64,
+    pub context: String,
+    pub texts: Vec<String>,
+}
+
+pub(crate) struct Compared {
+    pub id: u64,
+    pub generation: u64,
+    pub scores: Option<Vec<f64>>,
+    pub elapsed: Duration,
+}
+
+enum Work { Rank(Job), Compare(Comparison) }
+impl Work {
+    fn generation(&self) -> u64 {
+        match self { Self::Rank(job) => job.generation, Self::Compare(job) => job.generation }
+    }
+}
+
 /// The worker thread that owns the scorer.
 pub(crate) struct Worker {
-    jobs: Sender<Job>,
+    jobs: Sender<Work>,
     done: Receiver<Done>,
+    compared: Receiver<Compared>,
+    generation: Arc<AtomicU64>,
 }
 
 impl Worker {
     pub fn start(mut scorer: Box<dyn Scorer>, notify: Option<Box<dyn Fn() + Send>>) -> Self {
-        let (jobs, job_receiver) = channel::<Job>();
+        let (jobs, job_receiver) = channel::<Work>();
         let (done_sender, done) = channel::<Done>();
+        let (compared_sender, compared) = channel();
+        let generation = Arc::new(AtomicU64::new(0));
+        let current = generation.clone();
         std::thread::Builder::new()
             .name("zhizi-model".into())
             .spawn(move || {
@@ -54,6 +82,19 @@ impl Worker {
                     while let Ok(newer) = job_receiver.try_recv() {
                         job = newer;
                     }
+                    if job.generation() != current.load(Ordering::Acquire) { continue; }
+                    let job = match job {
+                        Work::Rank(job) => job,
+                        Work::Compare(job) => {
+                            let started = Instant::now();
+                            let scores = scorer.score(&job.context, &job.texts).ok()
+                                .filter(|scores| scores.len() == job.texts.len() && scores.iter().all(|s| s.is_finite()));
+                            if compared_sender.send(Compared { id: job.id, generation: job.generation,
+                                scores, elapsed: started.elapsed() }).is_err() { break; }
+                            if let Some(notify) = &notify { notify(); }
+                            continue;
+                        }
+                    };
                     let started = Instant::now();
                     let composition_scores = (job.composition.len() >= 2)
                         .then(|| scorer.score(&job.context, &job.composition).ok())
@@ -78,11 +119,23 @@ impl Worker {
                 }
             })
             .expect("model thread");
-        Self { jobs, done }
+        Self { jobs, done, compared, generation }
     }
 
     pub fn submit(&self, job: Job) {
-        let _ = self.jobs.send(job);
+        let _ = self.jobs.send(Work::Rank(job));
+    }
+
+    pub fn advance(&self, generation: u64) { self.generation.store(generation, Ordering::Release); }
+
+    pub fn compare(&self, job: Comparison) { let _ = self.jobs.send(Work::Compare(job)); }
+
+    pub fn try_comparison(&self, generation: u64) -> Option<Compared> {
+        let mut found = None;
+        while let Ok(done) = self.compared.try_recv() {
+            if done.generation == generation { found = Some(done); }
+        }
+        found
     }
 
     /// Waits up to `budget` for the result of `generation`, dropping older ones.

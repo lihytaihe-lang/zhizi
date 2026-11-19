@@ -17,7 +17,7 @@ const MAX_CACHE_BYTES: usize = 4 * 1024 * 1024;
 
 pub trait SkinEntitlements: Send + Sync {
     fn owns(&self, product_id: &str) -> Result<bool, EntitlementError>;
-    fn purchase(&self, product_id: &str, price_cents: u32) -> Result<String, EntitlementError>;
+    fn purchase(&self, product_id: &str, price_cents: u32, currency: &str) -> Result<CheckoutInfo, EntitlementError>;
     fn authorized_bundle_url(&self, product_id: &str) -> Result<String, EntitlementError>;
 }
 
@@ -30,6 +30,7 @@ pub enum EntitlementError {
     Cancelled,
     Network(String),
     Declined(String),
+    ServiceMessage(String),
 }
 
 impl EntitlementError {
@@ -41,6 +42,8 @@ impl EntitlementError {
             // Provider errors may contain authorization URLs; never send them to the UI.
             Self::Network(_) => "暂时无法连接购买服务，请稍后重试",
             Self::Declined(_) => "购买未完成，请稍后重试",
+            Self::ServiceMessage(message) if crate::skin_commerce::approved_service_message(message) => message,
+            Self::ServiceMessage(_) => "购买未完成，请稍后重试",
         }
         .into()
     }
@@ -51,7 +54,7 @@ impl SkinEntitlements for NotConfiguredEntitlements {
     fn owns(&self, _: &str) -> Result<bool, EntitlementError> {
         Err(EntitlementError::NotConfigured)
     }
-    fn purchase(&self, _: &str, _: u32) -> Result<String, EntitlementError> {
+    fn purchase(&self, _: &str, _: u32, _: &str) -> Result<CheckoutInfo, EntitlementError> {
         Err(EntitlementError::NotConfigured)
     }
     fn authorized_bundle_url(&self, _: &str) -> Result<String, EntitlementError> {
@@ -78,6 +81,9 @@ pub struct StoreSkin {
     pub version: String,
     pub tier: String,
     pub price_cents: u32,
+    pub currency: String,
+    pub platforms: Vec<String>,
+    pub available_for_sale: bool,
     pub product_id: String,
     pub animated: bool,
     pub bundle_bytes: u64,
@@ -105,6 +111,18 @@ pub struct StoreSnapshot {
 pub struct PurchaseResult {
     pub ok: bool,
     pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub checkout_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub order_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CheckoutInfo {
+    pub owned: bool,
+    pub checkout_url: Option<String>,
+    pub order_id: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -132,6 +150,20 @@ pub struct StoreBackend {
 }
 
 impl StoreBackend {
+    pub fn enrich_catalog(&self, mut catalog: CandidateSkinCatalogSnapshot) -> CandidateSkinCatalogSnapshot {
+        let versions: BTreeMap<String, InstalledVersion> = read_bounded(&self.versions_path(), 128 * 1024)
+            .ok().and_then(|bytes| serde_json::from_slice(&bytes).ok()).unwrap_or_default();
+        for entry in &mut catalog.skins {
+            if entry.origin != "external" || entry.status != "ready" { continue; }
+            if let Some(record) = versions.get(&entry.id).filter(|record| {
+                protocol::compare_versions(&record.version, &record.version).is_ok()
+                    && read_bounded(&self.skins_root.join(&entry.id).join("skin.json"), skin_packages::MAXIMUM_SKIN_JSON_BYTES as usize)
+                        .is_ok_and(|bytes| protocol::sha256_hex(&bytes) == record.manifest_sha256)
+            }) { entry.version = Some(record.version.clone()); }
+        }
+        catalog
+    }
+
     pub fn new(data_dir: PathBuf, skins_root: PathBuf) -> Self {
         Self {
             data_dir,
@@ -303,6 +335,9 @@ impl StoreBackend {
                     version: skin.version,
                     tier: skin.tier,
                     price_cents: skin.price_cents,
+                    currency: skin.currency,
+                    platforms: skin.platforms,
+                    available_for_sale: skin.available_for_sale,
                     product_id: skin.product_id,
                     animated: skin.animated,
                     bundle_bytes: skin.bundle_bytes,
@@ -520,6 +555,9 @@ impl StoreBackend {
         {
             return Err("需要升级知字后才能安装此皮肤。".into());
         }
+        if !skin.platforms.iter().any(|platform| platform == std::env::consts::OS) {
+            return Err("这款皮肤暂不支持当前系统。".into());
+        }
         let url = if skin.tier == "paid" {
             if !entitlements
                 .owns(&skin.product_id)
@@ -580,32 +618,47 @@ impl StoreBackend {
         self.data_dir.join("skin-store-versions.json")
     }
 
+    pub fn purchase_entry(&self, storage: &AppStorage, id: &str) -> Result<IndexSkin, String> {
+        let skin = self.entry(storage, id)?;
+        if !skin.platforms.iter().any(|platform| platform == std::env::consts::OS) {
+            return Err("这款皮肤暂不支持当前系统，请勿购买。".into());
+        }
+        if !skin.available_for_sale { return Err("这款皮肤已停止新购；已购账号仍可恢复和下载。".into()); }
+        Ok(skin)
+    }
+
+    #[cfg(test)]
     pub fn purchase(
         &self,
         storage: &AppStorage,
         entitlements: &dyn SkinEntitlements,
         id: &str,
     ) -> Result<PurchaseResult, String> {
-        let skin = self.entry(storage, id)?;
+        let skin = self.purchase_entry(storage, id)?;
+        Ok(purchase_product(entitlements, &skin))
+    }
+}
+
+pub(crate) fn purchase_product(entitlements: &dyn SkinEntitlements, skin: &IndexSkin) -> PurchaseResult {
         if skin.tier == "free" {
-            return Ok(PurchaseResult {
+            return PurchaseResult {
                 ok: true,
                 message: "此皮肤免费，可以直接获取。".into(),
-            });
+                checkout_url: None, order_id: None,
+            };
         }
-        Ok(
-            match entitlements.purchase(&skin.product_id, skin.price_cents) {
-                Ok(_) => PurchaseResult {
-                    ok: true,
-                    message: "购买成功，可以获取皮肤。".into(),
+            match entitlements.purchase(&skin.product_id, skin.price_cents, &skin.currency) {
+                Ok(checkout) => PurchaseResult {
+                    ok: checkout.owned,
+                    message: if checkout.owned { "已恢复该皮肤权益，可以获取。" } else { "请在付款页面完成支付，然后刷新订单确认。" }.into(),
+                    checkout_url: checkout.checkout_url, order_id: checkout.order_id,
                 },
                 Err(error) => PurchaseResult {
                     ok: false,
                     message: error.message(),
+                    checkout_url: None, order_id: None,
                 },
-            },
-        )
-    }
+            }
 }
 
 fn ownership(
@@ -629,7 +682,8 @@ fn skin_state(
     version: Option<&str>,
     app_version: &str,
 ) -> &'static str {
-    if protocol::compare_versions(&skin.min_app_version, app_version).ok()
+    if !skin.platforms.iter().any(|platform| platform == std::env::consts::OS) { "unsupportedPlatform" }
+    else if protocol::compare_versions(&skin.min_app_version, app_version).ok()
         == Some(std::cmp::Ordering::Greater)
     {
         "needsAppUpgrade"
@@ -964,11 +1018,30 @@ mod tests {
     }
 
     struct PanickingEntitlements;
+    #[test]
+    fn pending_checkout_is_never_reported_as_owned_or_paid() {
+        struct Pending;
+        impl SkinEntitlements for Pending {
+            fn owns(&self, _: &str) -> Result<bool, EntitlementError> { Ok(false) }
+            fn purchase(&self, _: &str, _: u32, _: &str) -> Result<CheckoutInfo, EntitlementError> {
+                Ok(CheckoutInfo { owned: false, checkout_url: Some("https://checkout.stripe.com/c/pay/test".into()), order_id: Some("ord_pending".into()) })
+            }
+            fn authorized_bundle_url(&self, _: &str) -> Result<String, EntitlementError> { panic!("pending payment must not authorize a download") }
+        }
+        let mut skin = protocol::verify_index_with_key(FIXTURE_INDEX, FIXTURE_SIG, FIXTURE_KEY).unwrap().skins.remove(0);
+        skin.tier = "paid".into(); skin.price_cents = 1200;
+        let result = purchase_product(&Pending, &skin);
+        assert!(!result.ok);
+        assert_eq!(result.order_id.as_deref(), Some("ord_pending"));
+        assert!(result.message.contains("刷新订单确认"));
+        skin.platforms = vec!["unimplemented".into()];
+        assert_eq!(skin_state(&skin, false, None, "99.0.0"), "unsupportedPlatform");
+    }
     impl SkinEntitlements for PanickingEntitlements {
         fn owns(&self, _: &str) -> Result<bool, EntitlementError> {
             panic!("free skin queried entitlements")
         }
-        fn purchase(&self, _: &str, _: u32) -> Result<String, EntitlementError> {
+        fn purchase(&self, _: &str, _: u32, _: &str) -> Result<CheckoutInfo, EntitlementError> {
             panic!("free skin queried entitlements")
         }
         fn authorized_bundle_url(&self, _: &str) -> Result<String, EntitlementError> {
@@ -1325,7 +1398,7 @@ mod tests {
             fn owns(&self, _: &str) -> Result<bool, EntitlementError> {
                 self.0.clone()
             }
-            fn purchase(&self, _: &str, _: u32) -> Result<String, EntitlementError> {
+            fn purchase(&self, _: &str, _: u32, _: &str) -> Result<CheckoutInfo, EntitlementError> {
                 Err(EntitlementError::Cancelled)
             }
             fn authorized_bundle_url(&self, _: &str) -> Result<String, EntitlementError> {
@@ -1370,7 +1443,7 @@ mod tests {
     }
 }
 
-mod protocol {
+pub(crate) mod protocol {
     use crate::skin_catalog::is_candidate_skin_id;
     use chrono::{DateTime, NaiveDate};
     use ring::signature::{UnparsedPublicKey, ED25519};
@@ -1416,6 +1489,12 @@ mod protocol {
         pub version: String,
         pub tier: String,
         pub price_cents: u32,
+        #[serde(default = "default_currency")]
+        pub currency: String,
+        #[serde(default = "default_platforms")]
+        pub platforms: Vec<String>,
+        #[serde(default = "default_for_sale")]
+        pub available_for_sale: bool,
         pub product_id: String,
         pub animated: bool,
         pub preview_url: String,
@@ -1428,6 +1507,10 @@ mod protocol {
         pub license: String,
         pub changelog: String,
     }
+
+    fn default_currency() -> String { "CNY".into() }
+    fn default_for_sale() -> bool { true }
+    fn default_platforms() -> Vec<String> { vec!["macos".into()] }
 
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
@@ -1602,6 +1685,9 @@ mod protocol {
                 return Err("皮肤 SHA-256 必须为 64 位十六进制。".into());
             }
             if skin.price_cents > 99_900
+                || !["CNY", "USD", "HKD", "EUR", "GBP", "JPY"].contains(&skin.currency.as_str())
+                || skin.platforms.is_empty() || skin.platforms.len() > 3
+                || skin.platforms.iter().any(|platform| !["macos", "windows", "linux"].contains(&platform.as_str()))
                 || !matches!(skin.tier.as_str(), "free" | "paid")
                 || ((skin.tier == "free") != (skin.price_cents == 0))
             {

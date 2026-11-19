@@ -79,6 +79,12 @@ test("twitch accepts a short burst with rest and rejects invalid timing", async 
     const motion = { kind: "twitch", degrees: 8, period: 6, delay: 1.2, duration: 0.4 };
     context.skin.decorations = [{ type: "sprite", sheet: "frame.png", frames: 1,
       size: { width: 256, height: 72 }, motion: [motion] }];
+    // Animation now belongs to the generated library metadata as well as the renderer.
+    await writeFile(path.join(context.directory, "skin.json"), `${JSON.stringify(context.skin, null, 2)}\n`);
+    const generated = spawnSync(process.execPath, [path.join(context.root, "scripts/generate_candidate_skins.mjs")], { encoding: "utf8" });
+    assert.equal(generated.status, 0, generated.stderr);
+    const catalog = await readFile(path.join(context.root, "src/domain/skinCatalog.ts"), "utf8");
+    assert.match(catalog, /id: "xuanmo"[^\n]*animated: true/u);
     assert.equal((await check(context)).status, 0);
     for (const delay of [0, 0.5]) {
       context.skin.decorations[0].motion = [{ ...motion, period: 1, delay, duration: 0.5 }];

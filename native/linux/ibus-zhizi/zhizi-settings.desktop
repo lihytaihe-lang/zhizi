@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=知字设置与个人词
+Name[en]=Zhizi Settings
+Comment=输入设置、当前学习与备份
+Exec=zhizi-settings
+Icon=zhizi
+Terminal=false
+Categories=Settings;Utility;

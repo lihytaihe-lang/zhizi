@@ -6,7 +6,6 @@ import { SkinStorePreview } from "./SkinStorePreview";
 
 type SkinStoreDetailsProps = {
   skin: StoreSkin;
-  current: boolean;
   operation?: SkinStoreOperation;
   disabled: boolean;
   previewEnabled: boolean;
@@ -49,7 +48,8 @@ export function SkinStoreDetails({ previewEnabled, loadPreview, message, error, 
         <SkinStorePreview name={skin.name.zh} enabled={previewEnabled} load={loadPreview} />
         <p>{skin.description}</p>
         <dl className="skin-store-details">
-          <dt>价格</dt><dd>{formatSkinPrice(skin.priceCents)}</dd>
+          <dt>价格</dt><dd>{formatSkinPrice(skin.priceCents, skin.currency)}</dd>
+          <dt>适用系统</dt><dd>{(skin.platforms ?? ["macos"]).map((platform) => (({ macos: "macOS", windows: "Windows", linux: "Ubuntu / Linux" } as Record<string, string>)[platform] ?? platform)).join("、")}</dd>
           <dt>版本</dt><dd>{skin.version}</dd>
           <dt>大小</dt><dd>{size}</dd>
           <dt>更新日期</dt><dd>{skin.updatedAt}</dd>

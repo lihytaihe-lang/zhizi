@@ -318,7 +318,7 @@ private final class BehaviorVerifier {
                     (42, "\\", "\\", []),
                     (22, "^", "6", [.shift]),
                     (27, "_", "-", [.shift]),
-                    (19, "@", "2", [.shift]),
+                    (50, "`", "`", []),
                     (21, "$", "4", [.shift]),
                 ]
                 let chinesePunctuation = try typeVisible(newPunctuationFixtures)
@@ -326,6 +326,8 @@ private final class BehaviorVerifier {
                     chinesePunctuation == "、……——·￥",
                     "new-chinese-punctuation-mismatch"
                 )
+                let literalAt = try typeVisible([(19, "@", "2", [.shift])])
+                try require(literalAt == "@", "at-sign-must-remain-literal")
 
                 let bookOpen = try processMapped(
                     session, keyCode: 43, characters: "<", ignoringModifiers: ",", modifiers: .shift
@@ -353,8 +355,9 @@ private final class BehaviorVerifier {
 
                 let shift = try processShiftTap(session)
                 try require(shift.directEnglish, "direct-english-for-tag-not-enabled")
-                let asciiPunctuation = try typeVisible(newPunctuationFixtures)
-                try require(asciiPunctuation == "\\^_@$", "new-ascii-punctuation-mismatch")
+                let asciiFixtures = newPunctuationFixtures + [(19, "@", "2", [.shift])]
+                let asciiPunctuation = try typeVisible(asciiFixtures)
+                try require(asciiPunctuation == "\\^_`$@", "new-ascii-punctuation-mismatch")
                 let tag = try typeVisible([
                     (43, "<", ",", [.shift]), (17, "t", "t", []),
                     (0, "a", "a", []), (5, "g", "g", []),
@@ -365,7 +368,7 @@ private final class BehaviorVerifier {
                 try withSession("punctuation.code", appIdentifier: "com.apple.dt.Xcode") {
                     codeSession in
                     var codeVisible = ""
-                    for (keyCode, characters, ignoringModifiers, modifiers) in newPunctuationFixtures {
+                    for (keyCode, characters, ignoringModifiers, modifiers) in asciiFixtures {
                         try require(
                             codeSession.setPrecedingText("ASCII"),
                             "code-punctuation-context-unavailable"
@@ -380,7 +383,7 @@ private final class BehaviorVerifier {
                         codeVisible += codeResult.commitText
                         if !codeResult.consumed { codeVisible += characters }
                     }
-                    try require(codeVisible == "\\^_@$", "new-code-punctuation-mismatch")
+                    try require(codeVisible == "\\^_`$@", "new-code-punctuation-mismatch")
                 }
                 return "decimal-book-title-new-punctuation-contexts-and-ascii-tag"
             }
@@ -423,14 +426,13 @@ private final class BehaviorVerifier {
 
         case "shift-composing":
             return try withSession(id) { session in
-                let composition = try type("ni", into: session)
-                let candidate = try highlightedCandidate(in: composition)
+                _ = try type("ni", into: session)
                 let shift = try processShiftTap(session)
-                try require(shift.consumed && shift.directEnglish && shift.commitText == candidate,
+                try require(shift.consumed && shift.directEnglish && shift.commitText == "ni",
                             "composing-shift-commit-mismatch")
                 try require(shift.markedText.isEmpty, "composing-shift-did-not-clear")
                 try require(session.setDirectEnglish(false), "mode-reset-failed")
-                return "real-candidate-commit-then-mode-toggle"
+                return "literal-pinyin-commit-then-mode-toggle"
             }
 
         case "shift-letter":
@@ -544,7 +546,8 @@ private final class BehaviorVerifier {
     private func verifyControlDelete() throws -> String {
         let query = "shi"
         let target = "时"
-        try withSession("control-delete.training") { session in
+        let app = "com.agentinputlayer.behavior.control.delete"
+        try withSession("control-delete.training", appIdentifier: app) { session in
             for iteration in 0..<30 {
                 let composition = try type(query, into: session)
                 guard let index = composition.candidates.firstIndex(where: { $0.text == target }),
@@ -559,9 +562,10 @@ private final class BehaviorVerifier {
                 )
                 try require(selected.commitText == target, "learning-selection-mismatch")
             }
+            _ = try process(session, kind: .focusLost)
         }
 
-        try withSession("control-delete.delete") { session in
+        try withSession("control-delete.delete", appIdentifier: app) { session in
             let promoted = try type(query, into: session)
             try require(promoted.candidates.first?.text == target, "learning-did-not-promote")
             let mapped = try mappedEvent(
@@ -576,7 +580,7 @@ private final class BehaviorVerifier {
             _ = try process(session, kind: .escape)
         }
 
-        try withSession("control-delete.verify") { session in
+        try withSession("control-delete.verify", appIdentifier: app) { session in
             let cleared = try type(query, into: session)
             try require(cleared.candidates.first?.text != target, "deleted-learning-remained-top1")
         }

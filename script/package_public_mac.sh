@@ -7,6 +7,7 @@
 #
 #   SIGN_IDENTITY              required; Developer ID identity, or "-" for an ad-hoc dry run
 #   ZHIZI_MANAGER_CARGO_FLAGS  must contain --no-default-features (guards the build context)
+#   ZHIZI_PUBLIC_MAC_OUTPUT_SUFFIX  optional suffix for a new candidate directory
 #   NOTARIZE                   1 = staple + assess the freshly packaged dmg (only after the
 #                              maintainer has notarized that exact dmg); default prints instead
 #   --staple-only <dmg>        only staple + assess an already-notarized dmg
@@ -52,12 +53,18 @@ MANAGER="$ROOT_DIR/src-tauri/target/release/bundle/macos/Agent Input Method.app"
 RELEASE_VERSION="$(tr -d '[:space:]' < "$ROOT_DIR/VERSION")"
 [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "bad VERSION file: $RELEASE_VERSION" >&2; exit 2; }
 OUT="$ROOT_DIR/releases/public-mac/$RELEASE_VERSION"
+if [[ -n "${ZHIZI_PUBLIC_MAC_OUTPUT_SUFFIX:-}" ]]; then
+  [[ "$ZHIZI_PUBLIC_MAC_OUTPUT_SUFFIX" =~ ^[a-z0-9][a-z0-9-]{0,63}$ ]] || { echo "invalid output suffix" >&2; exit 2; }
+  OUT="$OUT-$ZHIZI_PUBLIC_MAC_OUTPUT_SUFFIX"
+  [[ ! -e "$OUT" && ! -L "$OUT" ]] || { echo "candidate output already exists: $OUT" >&2; exit 2; }
+else
+  rm -rf "$OUT"
+fi
 STAGE="$OUT/stage"
 APP="$STAGE/知字.app"
 NESTED="$APP/Contents/Resources/InputMethod/Agent Input Method.app"
 DMG="$OUT/知字-$RELEASE_VERSION.dmg"
 
-rm -rf "$OUT"
 mkdir -p "$STAGE"
 trap 'rm -rf "$OUT"' EXIT
 ditto "$MANAGER" "$APP"

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act } from "react";
 import { SkinStore } from "../components/SkinStore";
-import { SettingsPanel } from "../components/SettingsPanel";
+import { SkinCommercePanel } from "../components/SkinCommercePanel";
 import type { CandidateSkinCatalogSnapshot } from "../lib/lexicon";
 import type { StoreSkin, StoreSnapshot } from "../lib/skinStore";
 import { findButton, installMiniDom, MiniEvent, MiniKeyboardEvent, MiniMouseEvent, type MiniElement } from "./support/miniDom";
@@ -54,18 +54,15 @@ async function enterText(element: MiniElement | null, value: string) {
 
 async function mountStore(
   options: {
-    skins?: StoreSkin[]; initial?: StoreSnapshot; url?: string; currentSkinId?: string;
+    skins?: StoreSkin[]; initial?: StoreSnapshot; url?: string;
     handler?: (command: string, args?: Record<string, unknown>) => unknown;
     beforeCheck?: boolean;
   },
-  check: (container: MiniElement, calls: InvokeCall[], actions: {
-    used: string[]; removed: string[]; catalogs: CandidateSkinCatalogSnapshot[];
-  }) => Promise<void>,
+  check: (container: MiniElement, calls: InvokeCall[]) => Promise<void>,
 ) {
   const dom = installMiniDom();
   const runtime = window as unknown as { __TAURI_INTERNALS__?: { invoke: (command: string, args?: Record<string, unknown>) => Promise<unknown> } };
   const calls: InvokeCall[] = [];
-  const actions = { used: [] as string[], removed: [] as string[], catalogs: [] as CandidateSkinCatalogSnapshot[] };
   (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   runtime.__TAURI_INTERNALS__ = { invoke: async (command, args) => {
     calls.push({ command, args });
@@ -84,15 +81,12 @@ async function mountStore(
   const root = createRoot(dom.container as unknown as Element);
   try {
     await act(async () => {
-      root.render(<SkinStore currentSkinId={options.currentSkinId ?? "system"}
-        onUseSkin={async (id) => { actions.used.push(id); }}
-        onCatalogChange={(value) => { actions.catalogs.push(value); }}
-        onUninstallSkin={async (id) => { actions.removed.push(id); }} />);
+      root.render(<SkinStore />);
     });
     if (options.beforeCheck !== false) {
       await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
     }
-    await check(dom.container, calls, actions);
+    await check(dom.container, calls);
   } finally {
     await act(async () => { root.unmount(); });
     delete runtime.__TAURI_INTERNALS__;
@@ -165,7 +159,7 @@ test("refresh rejection retains cached cards and permits retry without duplicate
 });
 
 test("cards show all state labels, exact prices and an upgrade explanation", async () => {
-  await mountStore({ currentSkinId: "当前皮肤", skins: [
+  await mountStore({ skins: [
     skin("免费皮肤"), skin("付费皮肤", { tier: "paid", priceCents: 1200, owned: null, ownedError: "notConfigured" }),
     skin("半元皮肤", { tier: "paid", priceCents: 1250, owned: false }),
     skin("已购皮肤", { tier: "paid", priceCents: 1200, owned: true }),
@@ -173,13 +167,13 @@ test("cards show all state labels, exact prices and an upgrade explanation", asy
     skin("当前皮肤", { state: "installed", installedVersion: "1.2.0" }),
     skin("新版皮肤", { state: "updateAvailable", installedVersion: "1.0.0" }),
     skin("升级皮肤", { state: "needsAppUpgrade", minAppVersion: "99.0.0" }),
-  ] }, async (container, _calls, actions) => {
+  ] }, async (container) => {
     assert.ok(findButton(row(container, "免费皮肤"), "获取"));
     assert.ok(findButton(row(container, "付费皮肤"), "购买 ¥12"));
     assert.ok(findButton(row(container, "半元皮肤"), "购买 ¥12.50"));
     assert.ok(findButton(row(container, "已购皮肤"), "获取"));
-    assert.ok(findButton(row(container, "已装皮肤"), "设为当前"));
-    assert.equal(findButton(row(container, "当前皮肤"), "使用中")?.disabled, true);
+    assert.equal(findButton(row(container, "已装皮肤"), "已安装")?.disabled, true);
+    assert.equal(findButton(row(container, "当前皮肤"), "已安装")?.disabled, true);
     assert.match(row(container, "新版皮肤").textContent, /新版/);
     assert.ok(findButton(row(container, "新版皮肤"), "更新"));
     assert.equal(findButton(row(container, "升级皮肤"), "需要升级知字")?.disabled, true);
@@ -187,17 +181,17 @@ test("cards show all state labels, exact prices and an upgrade explanation", asy
     assert.match(row(container, "免费皮肤").textContent, /免费/);
     assert.match(row(container, "免费皮肤").textContent, /English 免费皮肤/);
     assert.match(row(container, "免费皮肤").textContent, /测试作者/);
-    await click(findButton(row(container, "已装皮肤"), "设为当前"));
-    assert.deepEqual(actions.used, ["已装皮肤"]);
+    assert.equal(findButton(row(container, "已装皮肤"), "设为当前"), null);
+    assert.equal(findButton(row(container, "已装皮肤"), "卸载"), null);
   });
 });
 
-test("free and owned installs and updates invoke install once, show pending progress and publish the returned catalog", async () => {
+test("free and owned installs and updates invoke install once, show pending progress and mark the installed product", async () => {
   for (const entry of [skin("下载皮肤"), skin("下载皮肤", { tier: "paid", priceCents: 1200, owned: true }),
     skin("下载皮肤", { state: "updateAvailable", installedVersion: "1.0.0" })]) {
     let resolveInstall!: (value: CandidateSkinCatalogSnapshot) => void;
     await mountStore({ skins: [entry], handler: (command) => command === "skin_store_install"
-      ? new Promise((resolve) => { resolveInstall = resolve; }) : undefined }, async (container, calls, actions) => {
+      ? new Promise((resolve) => { resolveInstall = resolve; }) : undefined }, async (container, calls) => {
       const button = findButton(row(container, "下载皮肤"), entry.state === "updateAvailable" ? "更新" : "获取");
       await click(button);
       assert.equal(button?.disabled, true);
@@ -210,8 +204,8 @@ test("free and owned installs and updates invoke install once, show pending prog
       assert.ok(!calls.some((call) => call.command === "skin_store_purchase"));
       const installed = catalog("下载皮肤");
       await act(async () => { resolveInstall(installed); });
-      assert.deepEqual(actions.catalogs, [installed]);
-      assert.ok(findButton(row(container, "下载皮肤"), "设为当前"));
+      assert.equal(findButton(row(container, "下载皮肤"), "已安装")?.disabled, true);
+      assert.match(container.textContent, /皮肤管理/);
     });
   }
 });
@@ -271,7 +265,7 @@ test("login placeholder remains available and only displays its account message"
   await mountStore({ skins: [] }, async (container, calls) => {
     const before = calls.length;
     await click(findButton(container, "登录"));
-    assert.match(container.textContent, /账号功能尚未开放/);
+    assert.match(container.textContent, /请打开账号与订单登录。/);
     assert.equal(calls.length, before);
   });
 });
@@ -336,84 +330,6 @@ test("previews wait for explicit refresh and intersection and failures retain a 
   }
 });
 
-test("store uninstall requires a second confirmation and delegates the existing removal action", async () => {
-  await mountStore({ skins: [skin("卸载皮肤", { state: "installed", installedVersion: "1.2.0" })] }, async (container, _calls, actions) => {
-    const uninstall = row(container, "卸载皮肤").querySelector('[aria-label="卸载 卸载皮肤"]');
-    assert.ok(uninstall);
-    uninstall.focus();
-    await click(uninstall);
-    assert.deepEqual(actions.removed, []);
-    assert.ok(document.activeElement === findButton(container, "确认卸载"), "confirmation should receive focus");
-    await click(findButton(container, "取消"));
-    assert.deepEqual(actions.removed, []);
-    assert.ok(document.activeElement === uninstall, "cancellation should return focus to uninstall");
-    await click(row(container, "卸载皮肤").querySelector('[aria-label="卸载 卸载皮肤"]'));
-    await click(findButton(container, "确认卸载"));
-    assert.deepEqual(actions.removed, ["卸载皮肤"]);
-    assert.ok(findButton(row(container, "卸载皮肤"), "获取"));
-  });
-});
-
-
-test("SettingsPanel keeps local skin management and shares store install and current-theme actions", async () => {
-  const dom = installMiniDom();
-  const calls: InvokeCall[] = [];
-  const runtime = window as unknown as { __TAURI_INTERNALS__?: { invoke: (command: string, args?: Record<string, unknown>) => Promise<unknown> } };
-  let current = "system";
-  const local = catalog("外部皮肤");
-  local.skins.unshift({ id: "system", displayName: { zh: "简洁", en: "Clean" }, author: "测试作者",
-    description: "内置皮肤", origin: "builtIn", status: "ready", reason: null, canUninstall: false });
-  runtime.__TAURI_INTERNALS__ = { invoke: async (command, args) => {
-    calls.push({ command, args });
-    switch (command) {
-      case "project_runtime_configuration": return { candidateTheme: current, contextModelRankingEnabled: false };
-      case "context_model_availability": return { available: false, reason: "本机模型不可用" };
-      case "list_candidate_skins": return local;
-      case "skin_store_get_settings": return { indexUrl: storeUrl, lastRefreshedAtMs: updatedAt };
-      case "skin_store_list": return snapshot([
-        skin("外部皮肤", { state: "installed", installedVersion: "1.2.0" }), skin("新安装皮肤"),
-      ]);
-      case "set_candidate_theme":
-        current = args?.candidateTheme as string;
-        return { candidateTheme: current, contextModelRankingEnabled: false };
-      case "skin_store_install": return { ...local, skins: [...local.skins, ...catalog("新安装皮肤").skins] };
-      default: throw new Error(`Unexpected command: ${command}`);
-    }
-  } };
-  (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  const { createRoot } = await import("react-dom/client");
-  const root = createRoot(dom.container as unknown as Element);
-  try {
-    await act(async () => { root.render(<SettingsPanel
-      providerSettings={{ enabled: false, baseUrl: "", model: "", apiKey: "" }}
-      shortcutSettings={{ shortcut: "control+space" }} settingsMessage=""
-      onProviderChange={() => {}} onShortcutChange={() => {}} onApplyShortcut={() => {}}
-      mcpStatus={{ enabled: false, endpoint: null }} />); });
-    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
-    assert.ok(findButton(dom.container, "我的皮肤"));
-    assert.ok(findButton(dom.container, "皮肤商店"));
-    assert.ok(findButton(dom.container, "安装皮肤目录"));
-    assert.ok(findButton(dom.container, "安装 .json"));
-    assert.match(dom.container.textContent, /简洁/);
-    assert.match(dom.container.textContent, /外部皮肤/);
-    assert.ok(!calls.some((call) => call.command.startsWith("skin_store_")));
-    await click(findButton(dom.container, "皮肤商店"));
-    await click(findButton(row(dom.container, "外部皮肤"), "设为当前"));
-    assert.deepEqual(calls.find((call) => call.command === "set_candidate_theme")?.args, { candidateTheme: "外部皮肤" });
-    assert.match(dom.container.textContent, /已保存；当前 composition 保持原皮肤，下次 composition 生效。/);
-    assert.ok(findButton(row(dom.container, "外部皮肤"), "使用中"));
-    await click(findButton(row(dom.container, "新安装皮肤"), "获取"));
-    await click(findButton(dom.container, "我的皮肤"));
-    assert.ok(findButton(dom.container, "安装皮肤目录"));
-    assert.match(dom.container.textContent, /新安装皮肤/);
-    assert.match(dom.container.textContent, /简洁/);
-  } finally {
-    await act(async () => { root.unmount(); });
-    delete runtime.__TAURI_INTERNALS__;
-    dom.cleanup();
-  }
-});
-
 test("purchase progress blocks repeat submissions and success changes to acquisition without installing", async () => {
   let resolvePurchase!: (value: { ok: boolean; message: string }) => void;
   let purchased = false;
@@ -435,8 +351,8 @@ test("purchase progress blocks repeat submissions and success changes to acquisi
   });
 });
 
-test("an update remains actionable for the current skin instead of showing the disabled current pill", async () => {
-  await mountStore({ currentSkinId: "当前新版", skins: [skin("当前新版", {
+test("an installed skin with an available update remains actionable", async () => {
+  await mountStore({ skins: [skin("当前新版", {
     state: "updateAvailable", installedVersion: "1.0.0",
   })] }, async (container) => {
     assert.equal(findButton(row(container, "当前新版"), "更新")?.disabled, false);
@@ -445,9 +361,8 @@ test("an update remains actionable for the current skin instead of showing the d
 });
 
 test("details contain Tab and Shift+Tab focus and main actions do not open the drawer", async () => {
-  await mountStore({ skins: [skin("键盘皮肤", { state: "installed", installedVersion: "1.2.0" })] }, async (container, _calls, actions) => {
-    await click(findButton(row(container, "键盘皮肤"), "设为当前"));
-    assert.deepEqual(actions.used, ["键盘皮肤"]);
+  await mountStore({ skins: [skin("键盘皮肤", { state: "installed", installedVersion: "1.2.0" })] }, async (container) => {
+    await click(findButton(row(container, "键盘皮肤"), "已安装"));
     assert.equal(container.querySelector('[role="dialog"]'), null);
     await click(container.querySelector('[aria-label="查看 键盘皮肤 详情"]'));
     const drawer = container.querySelector('[role="dialog"]');
@@ -510,21 +425,28 @@ test("installation serializes other store actions until its catalog update compl
   });
 });
 
-async function mountSettingsStore(
+async function mountCommerce(
   handler: (command: string, args?: Record<string, unknown>) => unknown,
-  check: (container: MiniElement, calls: InvokeCall[]) => Promise<void>,
+  check: (container: MiniElement, calls: InvokeCall[], focus: () => void) => Promise<void>,
 ) {
   const dom = installMiniDom();
   const calls: InvokeCall[] = [];
-  const runtime = window as unknown as { __TAURI_INTERNALS__?: { invoke: (command: string, args?: Record<string, unknown>) => Promise<unknown> } };
+  const runtime = window as unknown as {
+    __TAURI_INTERNALS__?: { invoke: (command: string, args?: Record<string, unknown>) => Promise<unknown> };
+    addEventListener?: (event: string, listener: () => void) => void;
+    removeEventListener?: (event: string, listener: () => void) => void;
+  };
+  const previousAdd = runtime.addEventListener;
+  const previousRemove = runtime.removeEventListener;
+  const focusListeners = new Set<() => void>();
+  runtime.addEventListener = (event, listener) => { if (event === "focus") focusListeners.add(listener); };
+  runtime.removeEventListener = (event, listener) => { if (event === "focus") focusListeners.delete(listener); };
   runtime.__TAURI_INTERNALS__ = { invoke: async (command, args) => {
     calls.push({ command, args });
     const result = handler(command, args);
     if (result !== undefined) return result;
     switch (command) {
-      case "project_runtime_configuration": return { candidateTheme: "system", contextModelRankingEnabled: false };
-      case "context_model_availability": return { available: false, reason: "本机模型不可用" };
-      case "list_candidate_skins": return { skins: [], issues: [] };
+      case "skin_account_cached": return { serviceUrl: "", account: null, orders: [], ownedProductIds: [] };
       case "skin_store_get_settings":
       case "skin_store_set_url": return { indexUrl: storeUrl, lastRefreshedAtMs: updatedAt };
       case "skin_store_list":
@@ -537,62 +459,50 @@ async function mountSettingsStore(
   const { createRoot } = await import("react-dom/client");
   const root = createRoot(dom.container as unknown as Element);
   try {
-    await act(async () => { root.render(<SettingsPanel
-      providerSettings={{ enabled: false, baseUrl: "", model: "", apiKey: "" }}
-      shortcutSettings={{ shortcut: "control+space" }} settingsMessage=""
-      onProviderChange={() => {}} onShortcutChange={() => {}} onApplyShortcut={() => {}}
-      mcpStatus={{ enabled: false, endpoint: null }} />); });
-    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
-    await check(dom.container, calls);
+    await act(async () => { root.render(<SkinCommercePanel />); });
+    await check(dom.container, calls, () => focusListeners.forEach((listener) => listener()));
   } finally {
     await act(async () => { root.unmount(); });
     delete runtime.__TAURI_INTERNALS__;
+    runtime.addEventListener = previousAdd;
+    runtime.removeEventListener = previousRemove;
     dom.cleanup();
   }
 }
 
-test("SettingsPanel preserves a connected store across segment switches without reading it again", async () => {
-  await mountSettingsStore(() => undefined, async (container, calls) => {
-    assert.equal(calls.filter((call) => call.command === "skin_store_list").length, 0);
-    await click(findButton(container, "皮肤商店"));
+test("the store retains its catalog when the user opens orders and returns", async () => {
+  await mountCommerce(() => undefined, async (container, calls) => {
     const store = container.querySelector(".skin-store");
     assert.ok(store);
+    assert.equal(calls.filter((call) => call.command === "skin_account_cached").length, 0);
     await click(findButton(store, "刷新"));
-    assert.match(store.textContent, /皮肤预览/);
-    assert.doesNotMatch(store.textContent, /刷新后加载预览/);
-    await click(findButton(container, "我的皮肤"));
+    await click(findButton(store, "登录"));
+    assert.equal(findButton(container, "账号与订单")?.getAttribute("aria-pressed"), "true");
+    assert.equal(calls.filter((call) => call.command === "skin_account_cached").length, 1);
     await click(findButton(container, "皮肤商店"));
     assert.equal(calls.filter((call) => call.command === "skin_store_list").length, 1);
-    assert.equal(calls.filter((call) => call.command === "skin_store_get_settings").length, 1);
     assert.equal(calls.filter((call) => call.command === "skin_store_refresh").length, 1);
-    const retained = container.querySelector(".skin-store");
-    assert.ok(retained);
-    assert.match(retained.textContent, /皮肤预览/);
-    assert.doesNotMatch(retained.textContent, /刷新后加载预览/);
+    assert.match(store.textContent, /皮肤预览/);
+    assert.doesNotMatch(store.textContent, /刷新后加载预览/);
   });
 });
 
-test("store installation disables segment switches until it completes", async () => {
+test("the shop holds its active tab until an installation finishes", async () => {
   let resolveInstall!: (value: CandidateSkinCatalogSnapshot) => void;
-  await mountSettingsStore((command) => command === "skin_store_install"
+  await mountCommerce((command) => command === "skin_store_install"
     ? new Promise((resolve) => { resolveInstall = resolve; }) : undefined,
   async (container, calls) => {
-    await click(findButton(container, "皮肤商店"));
     const store = container.querySelector(".skin-store");
     assert.ok(store);
     await click(findButton(row(store, "settings-install"), "获取"));
-    const mine = findButton(container, "我的皮肤");
-    const storeSegment = findButton(container, "皮肤商店");
-    assert.equal(mine?.disabled, true);
-    assert.equal(storeSegment?.disabled, true);
-    await click(mine);
-    assert.equal(storeSegment?.getAttribute("aria-pressed"), "true");
+    const orders = findButton(container, "账号与订单");
+    assert.equal(orders?.disabled, true);
+    await click(orders);
+    assert.equal(findButton(container, "皮肤商店")?.getAttribute("aria-pressed"), "true");
     assert.equal(calls.filter((call) => call.command === "skin_store_install").length, 1);
     await act(async () => { resolveInstall(catalog("settings-install")); });
-    assert.equal(mine?.disabled, false);
-    assert.equal(storeSegment?.disabled, false);
-    await click(mine);
-    assert.equal(findButton(container, "安装皮肤目录")?.disabled, false);
+    assert.equal(orders?.disabled, false);
+    assert.equal(findButton(row(store, "settings-install"), "已安装")?.disabled, true);
   });
 });
 
@@ -661,26 +571,6 @@ test("a rejected cache read exits loading and offers an explicit successful retr
   });
 });
 
-test("local import dialog disables both import actions and store navigation until cancellation", async () => {
-  let resolveDialog!: (value: null) => void;
-  await mountSettingsStore((command) => command === "plugin:dialog|open"
-    ? new Promise((resolve) => { resolveDialog = resolve; }) : undefined,
-  async (container, calls) => {
-    const directory = findButton(container, "安装皮肤目录");
-    await click(directory);
-    assert.equal(directory?.disabled, true);
-    assert.equal(findButton(container, "安装 .json")?.disabled, true);
-    const store = findButton(container, "皮肤商店");
-    assert.equal(store?.disabled, true);
-    await click(store);
-    assert.equal(calls.filter((call) => call.command.startsWith("skin_store_")).length, 0);
-    assert.equal(calls.filter((call) => call.command === "plugin:dialog|open").length, 1);
-    await act(async () => { resolveDialog(null); });
-    assert.equal(directory?.disabled, false);
-    assert.equal(store?.disabled, false);
-  });
-});
-
 test("purchase notices and action errors remain readable inside the open details dialog", async () => {
   for (const mode of ["purchase", "install"] as const) {
     const notice = mode === "purchase" ? "购买功能尚未开放" : "皮肤下载失败，请重试";
@@ -727,60 +617,19 @@ test("details retain Tab focus when its pending action becomes disabled or focus
   });
 });
 
-test("a local uninstall refreshes the retained store state from the local cache", async () => {
+test("returning from the gallery reloads the local install state without a remote refresh", async () => {
   let installed = true;
-  await mountSettingsStore((command) => {
-    if (command === "list_candidate_skins") return installed ? catalog("local-resync") : { skins: [], issues: [] };
+  await mountCommerce((command) => {
     if (command === "skin_store_list") return snapshot([skin("local-resync", installed
       ? { state: "installed", installedVersion: "1.2.0" } : {})]);
-    if (command === "uninstall_candidate_skin") { installed = false; return { skins: [], issues: [] }; }
-  }, async (container, calls) => {
-    await click(findButton(container, "皮肤商店"));
-    assert.ok(findButton(row(container.querySelector(".skin-store")!, "local-resync"), "设为当前"));
-    await click(findButton(container, "我的皮肤"));
-    const localList = container.querySelector(".skin-list");
-    assert.ok(localList);
-    await click(localList.querySelector('[aria-label="卸载 local-resync"]'));
-    await click(findButton(container, "确认卸载"));
-    assert.equal(installed, false);
-    await click(findButton(container, "皮肤商店"));
-    const updated = row(container.querySelector(".skin-store")!, "local-resync");
-    assert.ok(findButton(updated, "获取"));
-    assert.equal(findButton(updated, "设为当前"), null);
-    assert.equal(calls.filter((call) => call.command === "skin_store_list").length, 2);
-    assert.equal(calls.filter((call) => call.command === "skin_store_refresh").length, 0);
-  });
-});
-
-test("local catalog synchronization blocks stale store actions until its delayed cache read finishes", async () => {
-  let installed = true;
-  let reads = 0;
-  let resolveSynchronization!: (value: StoreSnapshot) => void;
-  await mountSettingsStore((command) => {
-    if (command === "list_candidate_skins") return installed ? catalog("delayed-resync") : { skins: [], issues: [] };
-    if (command === "skin_store_list") {
-      reads += 1;
-      if (reads === 1) return snapshot([skin("delayed-resync", { state: "installed", installedVersion: "1.2.0" })]);
-      return new Promise((resolve) => { resolveSynchronization = resolve; });
-    }
-    if (command === "uninstall_candidate_skin") { installed = false; return { skins: [], issues: [] }; }
-    if (command === "set_candidate_theme") return { candidateTheme: "delayed-resync", contextModelRankingEnabled: false };
-  }, async (container, calls) => {
-    await click(findButton(container, "皮肤商店"));
-    await click(findButton(container, "我的皮肤"));
-    await click(container.querySelector(".skin-list")?.querySelector('[aria-label="卸载 delayed-resync"]'));
-    await click(findButton(container, "确认卸载"));
-    assert.equal(installed, false);
-    assert.equal(reads, 2);
-    await click(findButton(container, "皮肤商店"));
+  }, async (container, calls, focus) => {
     const store = container.querySelector(".skin-store");
     assert.ok(store);
-    const staleUse = findButton(store, "设为当前");
-    if (staleUse) await click(staleUse);
-    assert.equal(calls.filter((call) => ["set_candidate_theme", "skin_store_install", "skin_store_purchase"].includes(call.command)).length, 0);
-    assert.ok(store.querySelector(".skin-store-skeleton"));
-    await act(async () => { resolveSynchronization(snapshot([skin("delayed-resync")])); });
-    assert.equal(store.querySelector(".skin-store-skeleton"), null);
-    assert.ok(findButton(row(store, "delayed-resync"), "获取"));
+    assert.equal(findButton(row(store, "local-resync"), "已安装")?.disabled, true);
+    installed = false;
+    await act(async () => { focus(); });
+    assert.equal(findButton(row(store, "local-resync"), "获取")?.disabled, false);
+    assert.equal(calls.filter((call) => call.command === "skin_store_list").length, 2);
+    assert.equal(calls.filter((call) => call.command === "skin_store_refresh").length, 0);
   });
 });

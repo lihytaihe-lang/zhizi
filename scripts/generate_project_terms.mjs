@@ -46,6 +46,13 @@ const internalSourcePaths = new Set([
   "src-tauri/src/quality_log.rs",
   "src-tauri/src/quality_records.rs",
   "src-tauri/src/quality_records_tests.rs",
+  // Account credentials, payment transport and preview runners are management plumbing.
+  // Their protocol fields and lifecycle verbs must not become typing candidates.
+  "src-tauri/src/skin_commerce.rs",
+  "src-tauri/src/skin_credentials.rs",
+  "src-tauri/src/skin_choice.rs",
+  "src-tauri/src/skin_store_window.rs",
+  "src-tauri/src/skin_qa.rs",
 ]);
 // This page records the generator's own before/after terms and checksums.
 // Counting it would make the evidence mutate the surface it is proving.
@@ -56,6 +63,8 @@ const stopwords = new Set([
   "about", "after", "allow", "before", "between", "build", "candidate", "change", "check",
   "const", "continue", "current", "default", "error", "expected", "false", "function", "input",
   "local", "return", "script", "source", "string", "tests", "true", "value", "version",
+  "cached", "cancel", "logout", "refresh", "render", "resume", "select",
+  "cny", "eur", "gbp", "hkd", "jpy", "usd",
 ]);
 
 // Project vocabulary is an owner-facing input surface, not an index of every

@@ -174,3 +174,31 @@ fn learning_state_rime_switch_keeps_default_key_commit_and_candidate_results() {
         }
     });
 }
+
+#[test]
+fn managed_blacklist_change_waits_for_next_composition_and_keeps_digit_meaning() {
+    use crate::blacklist::{self, BlacklistEntry};
+    use std::fs;
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
+    let directory = std::env::temp_dir().join(format!("managed-menu-{}-{}", std::process::id(), NEXT_APP.fetch_add(1, Ordering::Relaxed)));
+    fs::create_dir(&directory).unwrap();
+    #[cfg(unix)]
+    fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).unwrap();
+    let dictionary = Arc::new(Index::from_data(DictionaryData { entries: ["你好", "拟好"].into_iter().enumerate().map(|(i, text)|
+        Entry { text: text.into(), reading: "ni hao".into(), weight: 1000-i as u32, layer: "fixture".into() }).collect() }));
+    let blocked = blacklist::shared_blacklist(&directory).unwrap();
+    blocked.lock().unwrap().insert("nihao", "你好").unwrap();
+    let mut value = Session::new_native(format!("managed-menu-{}", NEXT_APP.fetch_add(1, Ordering::Relaxed)), blocked, dictionary).unwrap();
+    let before = type_text(&mut value, "nihao");
+    assert!(!before.candidates.iter().any(|c| c.text == "你好"));
+    assert!(!before.candidates.is_empty());
+    blacklist::managed_remove(&directory, &[BlacklistEntry { reading: "nihao".into(), text: "你好".into() }]).unwrap();
+    let unchanged = value.process(event(KeyKind::Down, ""));
+    assert_eq!(unchanged.candidates, before.candidates, "manager edit must not replace the active menu");
+    let chosen = value.process(event(KeyKind::Text, "1"));
+    assert_eq!(chosen.commit_text, before.candidates[0].text, "digit still selects the visible entry");
+    let after = type_text(&mut value, "nihao");
+    assert!(after.candidates.iter().any(|c| c.text == "你好"), "next composition reloads without restarting the host");
+    drop(value); fs::remove_dir_all(directory).unwrap();
+}

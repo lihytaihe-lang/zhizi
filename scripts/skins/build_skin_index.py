@@ -66,7 +66,7 @@ def validate_index(value):
         raise ValueError("索引必须包含最多 200 条皮肤。")
     ids = set()
     for item in skins:
-        if not isinstance(item, dict) or set(item) != SKIN_FIELDS:
+        if not isinstance(item, dict) or not SKIN_FIELDS.issubset(item) or bool(set(item) - SKIN_FIELDS - {"currency", "platforms", "availableForSale"}):
             raise ValueError("皮肤索引条目字段不完整或包含未知字段。")
         identifier = skin_id(item.get("id"))
         if (ROOT / "native/resources/Skins/Builtin" / identifier).is_dir():
@@ -88,6 +88,13 @@ def validate_index(value):
         tier = item.get("tier")
         if type(price) is not int or not 0 <= price <= 99900 or tier not in ("free", "paid") or (tier == "free") != (price == 0):
             raise ValueError("价格必须为 0–99900 的整数，且免费当且仅当价格为 0。")
+        if item.get("currency", "CNY") not in ("CNY", "USD", "HKD", "EUR", "GBP", "JPY"):
+            raise ValueError("不支持的价格币种。")
+        if type(item.get("availableForSale", True)) is not bool:
+            raise ValueError("availableForSale 必须是布尔值。")
+        platforms = item.get("platforms", ["macos"])
+        if not isinstance(platforms, list) or not 1 <= len(platforms) <= 3 or any(p not in ("macos", "windows", "linux") for p in platforms) or len(set(platforms)) != len(platforms):
+            raise ValueError("适用系统必须是 macos、windows、linux 中不重复的项目。")
         if type(item.get("animated")) is not bool:
             raise ValueError("animated 必须为布尔值。")
         for key in ("previewUrl", "bundleUrl"):

@@ -89,4 +89,23 @@ final class SkinGalleryPackageTests: XCTestCase {
         try image.write(to: URL(fileURLWithPath: out).appendingPathComponent("external-window.png"))
         gallery.close()
     }
+
+    func testStandaloneJSONImportAndRemovalUseTheGalleryPackage() throws {
+        let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: temporary) }
+        let source = try package(temporary, "standalone")
+        let document = source.appendingPathComponent("skin.json")
+        let skin = try XCTUnwrap(CandidateThemeIdentifier(rawValue: "standalone"))
+        let store = SkinGalleryPackages(root: temporary.appendingPathComponent("Skins"))
+
+        XCTAssertEqual(try store.install(document), skin)
+        XCTAssertEqual(store.scan().packages.map(\.identifier), [skin])
+        XCTAssertThrowsError(try store.install(document))
+        try store.remove(skin)
+
+        let link = temporary.appendingPathComponent("link.json")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: document)
+        XCTAssertThrowsError(try store.install(link))
+        XCTAssertTrue(store.scan().packages.isEmpty)
+    }
 }

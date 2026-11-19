@@ -2,6 +2,92 @@ import XCTest
 @_spi(PerformanceHarness) @testable import AgentInputMethodHostKit
 
 final class ContextRankingTests: XCTestCase {
+    func testFullPinyinOffpageMarginUsesTheCurrentComparisonBatchReference() throws {
+        let directories = try RealZhixuProcessFixture.directories.get()
+        let user = FileManager.default.temporaryDirectory.appendingPathComponent("exact-margin-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: user, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: user) }
+        let session = try XCTUnwrap(CoreSession(sharedDirectory: directories.shared,
+            userDirectory: user, appIdentifier: "com.agentinputlayer.exact-margin-test"))
+        defer { session.close() }
+        _ = session.setPrecedingText("他每天阅读新闻，关注国内外最新的")
+        session.contextRankingColdForTesting = false
+        session.setContextRankingEnabled(true)
+        session.defersRanking = true
+        let finished = expectation(description: "optional comparison delivered")
+        let lock = NSLock()
+        var optionalScored = false
+        var delivered: IMEViewModel?
+        session.contextRankingScoreForTesting = { _, candidates in
+            if candidates.contains("时事") {
+                lock.lock(); optionalScored = true; lock.unlock()
+                // One point above the fifth in this batch must not pass a two-point margin.
+                return candidates.map { $0 == "时事" ? 1 : 0 }
+            }
+            // Older primary scores deliberately differ, as can happen when the
+            // longest candidate changes the model's retained context window.
+            return candidates.indices.map { $0 == 0 ? 0 : -100 }
+        }
+        session.onDeferredRanking = { view, generation in
+            guard generation == session.currentRankingGeneration else { return }
+            lock.lock()
+            let first = optionalScored && delivered == nil
+            if first { delivered = view }
+            lock.unlock()
+            if first { finished.fulfill() }
+        }
+        var original: IMEViewModel?
+        for key in "shishi" { original = session.process(kind: .text, text: String(key), security: .nonSecure) }
+        let before = try XCTUnwrap(original).candidates
+        wait(for: [finished], timeout: 5)
+        lock.lock(); let final = delivered; lock.unlock()
+        let shown = try XCTUnwrap(final)
+        XCTAssertEqual(shown.candidates.map(\.text), before.map(\.text))
+        XCTAssertFalse(shown.candidates.contains { $0.text == "时事" })
+        XCTAssertEqual(shown.candidates.map(\.text), session.corePageTexts())
+    }
+
+    func testFullPinyinOffpageWordCanFillFifthWithoutChangingFirstFourOrDigitIdentity() throws {
+        let directories = try RealZhixuProcessFixture.directories.get()
+        let user = FileManager.default.temporaryDirectory.appendingPathComponent("exact-offpage-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: user, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: user) }
+        let session = try XCTUnwrap(CoreSession(sharedDirectory: directories.shared,
+            userDirectory: user, appIdentifier: "com.agentinputlayer.exact-offpage-test"))
+        defer { session.close() }
+        _ = session.setPrecedingText("他每天阅读新闻，关注国内外最新的")
+        session.contextRankingColdForTesting = false
+        session.contextRankingScoreForTesting = { _, candidates in
+            candidates.map { $0 == "时事" ? 100 : 0 }
+        }
+        session.setContextRankingEnabled(true)
+        session.defersRanking = true
+        let offered = expectation(description: "exact off-page word offered in fifth")
+        let lock = NSLock()
+        var delivered: IMEViewModel?
+        session.onDeferredRanking = { view, generation in
+            guard generation == session.currentRankingGeneration, view.candidates.count == 5,
+                  view.candidates[4].text == "时事" else { return }
+            lock.lock()
+            let first = delivered == nil
+            delivered = view
+            lock.unlock()
+            if first { offered.fulfill() }
+        }
+        var original: IMEViewModel?
+        for key in "shishi" { original = session.process(kind: .text, text: String(key), security: .nonSecure) }
+        let before = try XCTUnwrap(original).candidates
+        XCTAssertFalse(before.contains { $0.text == "时事" })
+        wait(for: [offered], timeout: 5)
+        lock.lock(); let final = delivered; lock.unlock()
+        let shown = try XCTUnwrap(final)
+        XCTAssertEqual(shown.candidates.prefix(4).map(\.text), before.prefix(4).map(\.text))
+        XCTAssertEqual(shown.candidates.map(\.text), session.corePageTexts())
+        let selection = try XCTUnwrap(session.process(kind: .text, text: "5", security: .nonSecure))
+        XCTAssertEqual(selection.commitText, "时事")
+        XCTAssertTrue(selection.markedText.isEmpty)
+    }
+
     func testHanContextCapsHomophonePriorButKeepsEmptyAndLatinContextOrder() {
         let words = ["实施", "事实", "试试", "实时"]
         let scores = [-11.80078125, -9.984375, -18.0, -7.00390625]
@@ -632,8 +718,12 @@ final class ContextRankingTests: XCTestCase {
         let lock = NSLock()
         var step: DeferredRankingStep?
         session.deferredApplier = { handed in
-            lock.lock(); step = handed; lock.unlock()
-            if handed.generation == session.currentRankingGeneration { ready.fulfill() }
+            guard handed.stage == 1 else { return }
+            lock.lock()
+            let first = step == nil && handed.generation == session.currentRankingGeneration
+            if first { step = handed }
+            lock.unlock()
+            if first { ready.fulfill() }
         }
         var shown: IMEViewModel?
         for c in "zhineng" { shown = session.process(kind: .text, text: String(c), security: .nonSecure) }
