@@ -11,7 +11,9 @@ assert_manager_binary_clean() {
   for pattern in "${FORBIDDEN_STRINGS[@]}"; do
     # No grep -q here: with pipefail, grep -q's early exit SIGPIPEs strings and turns a hit into a non-zero pipeline status.
     if strings "$executable" | {
-      if [[ "$pattern" == 'test-upload' ]]; then
+      if [[ "$pattern" == 'zhizi.ihongui' ]]; then
+        sed 's|https://zhizi\.ihongui\.com/zhizi/v1/experience||g'
+      elif [[ "$pattern" == 'test-upload' ]]; then
         sed -e 's/com\.agentinputlayer\.zhizi\.test-upload//g'
       else
         cat

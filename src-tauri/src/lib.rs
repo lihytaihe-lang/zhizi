@@ -39,7 +39,8 @@ mod skin_choice;
 mod skin_qa;
 mod snapshot;
 mod storage;
-#[cfg(feature = "test-upload")]
+#[cfg(any(feature = "test-upload", target_os = "macos"))]
+#[path = "quality_upload.rs"]
 pub mod test_upload;
 mod userdb_maintenance;
 
@@ -1252,6 +1253,40 @@ fn test_upload_enabled() -> bool {
     cfg!(feature = "test-upload")
 }
 
+#[tauri::command]
+fn experience_plan_status() -> Result<Option<bool>, String> {
+    #[cfg(all(target_os = "macos", not(feature = "test-upload")))]
+    return Ok(Some(test_upload::participation_since(&quality_directory()?).is_some()));
+    #[cfg(not(all(target_os = "macos", not(feature = "test-upload"))))]
+    Ok(None)
+}
+
+#[tauri::command]
+fn set_experience_plan(enabled: bool) -> Result<(), String> {
+    #[cfg(all(target_os = "macos", not(feature = "test-upload")))]
+    {
+        let directory = prepare_quality_directory()?;
+        let now = current_time_ms()?;
+        if enabled {
+            if test_upload::participation_since(&directory).is_none() {
+                test_upload::set_participation(&directory, true, now)?;
+            }
+            set_quality_recording_at(&directory, "continuous", now)?;
+            if let Err(error) = test_upload::schedule_upload() {
+                test_upload::set_participation(&directory, false, now)?;
+                set_quality_recording_at(&directory, "off", now)?;
+                return Err(error);
+            }
+        } else {
+            test_upload::set_participation(&directory, false, now)?;
+            set_quality_recording_at(&directory, "off", now)?;
+        }
+        Ok(())
+    }
+    #[cfg(not(all(target_os = "macos", not(feature = "test-upload"))))]
+    { let _ = enabled; Err("当前版本不提供用户体验改进计划".into()) }
+}
+
 fn grant_quality_recording_consent_at(
     directory: &std::path::Path,
     now: i64,
@@ -1424,6 +1459,8 @@ fn revoke_quality_recording_consent_at(
     now: i64,
 ) -> Result<QualityConsentRevocationResult, String> {
     let _lock = acquire_quality_lock(directory)?;
+    #[cfg(target_os = "macos")]
+    test_upload::write_participation(directory, false, now)?;
     let consent = QualityRecordingConsent {
         granted: false,
         granted_at_ms: 0,
@@ -2364,6 +2401,8 @@ lexicon_download::lexicon_packs_installed,
             grant_quality_recording_consent,
             confirm_test_recording_consent,
             test_upload_enabled,
+            experience_plan_status,
+            set_experience_plan,
             revoke_quality_recording_consent,
             list_quality_records,
             quality_records_page,
@@ -2418,6 +2457,10 @@ lexicon_download::lexicon_packs_installed,
                     legacy_upload_task::retire_from_environment()
                 {
                     eprintln!("retiring the stale hourly upload agent failed: {error}");
+                }
+                #[cfg(not(feature = "test-upload"))]
+                if quality_directory().is_ok_and(|dir| test_upload::participation_since(&dir).is_some()) {
+                    test_upload::ensure_scheduled();
                 }
                 let installed = friend_install::ensure_input_method_installed();
                 let mut message = String::new();

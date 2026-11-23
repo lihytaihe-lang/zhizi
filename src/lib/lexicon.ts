@@ -256,6 +256,8 @@ export const qualityRecordingConsentStatus = () =>
 export const grantQualityRecordingConsent = () =>
   invokeLocal<QualityRecordingConsent>("grant_quality_recording_consent");
 export const confirmTestRecordingConsent = () => invokeLocal<boolean>("confirm_test_recording_consent");
+export const experiencePlanStatus = () => invokeLocal<boolean | null>("experience_plan_status");
+export const setExperiencePlan = (enabled: boolean) => invokeLocal<void>("set_experience_plan", { enabled });
 export const testUploadEnabled = () => invokeLocal<boolean>("test_upload_enabled");
 export const revokeQualityRecordingConsent = (deleteRecords: boolean) =>
   invokeLocal<QualityConsentRevocationResult>("revoke_quality_recording_consent", { deleteRecords });

@@ -2,7 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    #[cfg(feature = "test-upload")]
+    #[cfg(any(feature = "test-upload", target_os = "macos"))]
     if std::env::args().any(|argument| argument == agent_input_layer_lib::test_upload::FLAG) {
         std::process::exit(agent_input_layer_lib::test_upload::run_headless());
     }
