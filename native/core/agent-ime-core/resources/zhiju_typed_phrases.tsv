@@ -1,0 +1,206 @@
+# text	reading	domain	source
+还给你了	huan gei ni le	chat	codex-authored
+还是明天吧	hai shi ming tian ba	chat	codex-authored
+行得通	xing de tong	chat	codex-authored
+银行账号	yin hang zhang hao	office	codex-authored
+重新发一下	chong xin fa yi xia	office	codex-authored
+重点说一下	zhong dian shuo yi xia	office	codex-authored
+我得走了	wo dei zou le	chat	codex-authored
+我记得了	wo ji de le	chat	codex-authored
+了解一下	liao jie yi xia	chat	codex-authored
+稍后联系你	shao hou lian xi ni	chat	codex-authored
+资料发你了	zi liao fa ni le	office	codex-authored
+约个时间吧	yue ge shi jian ba	chat	codex-authored
+时间改一下	shi jian gai yi xia	office	codex-authored
+稍等片刻	shao deng pian ke	chat	codex-authored
+方便说话吗	fang bian shuo hua ma	chat	codex-authored
+请查收附件	qing cha shou fu jian	office	codex-authored
+晚点告诉你	wan dian gao su ni	chat	codex-authored
+稍后给你答复	shao hou gei ni da fu	office	codex-authored
+帮我确认一下	bang wo que ren yi xia	office	codex-authored
+等你有空再说	deng ni you kong zai shuo	chat	codex-authored
+改好了发给我	gai hao le fa gei wo	office	codex-authored
+方便时回一下	fang bian shi hui yi xia	chat	codex-authored
+明天上午再确认	ming tian shang wu zai que ren	office	codex-authored
+麻烦帮我核对下	ma fan bang wo he dui xia	office	codex-authored
+有变动随时说	you bian dong sui shi shuo	office	codex-authored
+开完会联系	kai wan hui lian xi	office	codex-authored
+爱谁谁	ai shei shei	chat	agent_spoken
+爱谁谁	ai shui shui	chat	agent_spoken
+等一下	deng yi xia	chat	codex-authored
+稍等一下	shao deng yi xia	chat	codex-authored
+稍等一会	shao deng yi hui	chat	codex-authored
+马上回来	ma shang hui lai	chat	codex-authored
+我马上到	wo ma shang dao	chat	codex-authored
+你到家了吗	ni dao jia le ma	chat	codex-authored
+回头再说	hui tou zai shuo	chat	codex-authored
+什么时候方便	shen me shi hou fang bian	chat	codex-authored
+到家说一声	dao jia shuo yi sheng	chat	codex-authored
+今天有空吗	jin tian you kong ma	chat	codex-authored
+明天有时间吗	ming tian you shi jian ma	chat	codex-authored
+可以帮忙吗	ke yi bang mang ma	chat	codex-authored
+给我打个电话	gei wo da ge dian hua	chat	codex-authored
+我先去忙了	wo xian qu mang le	chat	codex-authored
+过一会回你	guo yi hui hui ni	chat	codex-authored
+改天一起吃饭	gai tian yi qi chi fan	chat	codex-authored
+路上注意安全	lu shang zhu yi an quan	chat	codex-authored
+今天辛苦了	jin tian xin ku le	chat	codex-authored
+有事找我	you shi zhao wo	chat	codex-authored
+谢谢提醒	xie xie ti xing	chat	codex-authored
+没事别着急	mei shi bie zhao ji	chat	codex-authored
+不用着急	bu yong zhao ji	chat	codex-authored
+方便发一下吗	fang bian fa yi xia ma	chat	codex-authored
+我这边没问题	wo zhe bian mei wen ti	chat	codex-authored
+可以稍等吗	ke yi shao deng ma	chat	codex-authored
+具体几点	ju ti ji dian	chat	codex-authored
+几点到	ji dian dao	chat	codex-authored
+明天几点见	ming tian ji dian jian	chat	codex-authored
+太感谢了	tai gan xie le	chat	codex-authored
+好的没问题	hao de mei wen ti	chat	codex-authored
+收到谢谢	shou dao xie xie	chat	codex-authored
+我已经收到了	wo yi jing shou dao le	chat	codex-authored
+能听到吗	neng ting dao ma	chat	codex-authored
+稍等我一下	shao deng wo yi xia	chat	codex-authored
+我还没到	wo hai mei dao	chat	codex-authored
+我快到了	wo kuai dao le	chat	codex-authored
+我在路上	wo zai lu shang	chat	codex-authored
+辛苦你了	xin ku ni le	chat	codex-authored
+晚安早点休息	wan an zao dian xiu xi	chat	codex-authored
+明天见	ming tian jian	chat	codex-authored
+下次再聊	xia ci zai liao	chat	codex-authored
+我出去一趟	wo chu qu yi tang	chat	codex-authored
+我发个定位	wo fa ge ding wei	chat	codex-authored
+麻烦发个地址	ma fan fa ge di zhi	chat	codex-authored
+晚点聊	wan dian liao	chat	codex-authored
+先这样吧	xian zhe yang ba	chat	codex-authored
+回头联系	hui tou lian xi	chat	codex-authored
+我来处理	wo lai chu li	office	codex-authored
+请发我看下	qing fa wo kan xia	office	codex-authored
+请确认一下	qing que ren yi xia	office	codex-authored
+收到请回复	shou dao qing hui fu	office	codex-authored
+附件请查收	fu jian qing cha shou	office	codex-authored
+会议纪要	hui yi ji yao	office	codex-authored
+安排会议	an pai hui yi	office	codex-authored
+确认会议时间	que ren hui yi shi jian	office	codex-authored
+调整会议时间	tiao zheng hui yi shi jian	office	codex-authored
+把资料发给我	ba zi liao fa gei wo	office	codex-authored
+检查一下格式	jian cha yi xia ge shi	office	codex-authored
+麻烦再发一次	ma fan zai fa yi ci	office	codex-authored
+我先看一下	wo xian kan yi xia	office	codex-authored
+我核对一下	wo he dui yi xia	office	codex-authored
+改完通知你	gai wan tong zhi ni	office	codex-authored
+本周内完成	ben zhou nei wan cheng	office	codex-authored
+晚点发给你	wan dian fa gei ni	office	codex-authored
+时间可以调整	shi jian ke yi tiao zheng	office	codex-authored
+明天再跟进	ming tian zai gen jin	office	codex-authored
+进度如何了	jin du ru he le	office	codex-authored
+有什么问题吗	you shen me wen ti ma	office	codex-authored
+麻烦抄送给我	ma fan chao song gei wo	office	codex-authored
+请补充说明	qing bu chong shuo ming	office	codex-authored
+需要我配合吗	xu yao wo pei he ma	office	codex-authored
+我来跟进	wo lai gen jin	office	codex-authored
+临时有点事	lin shi you dian shi	office	codex-authored
+提前说一声	ti qian shuo yi sheng	office	codex-authored
+消息收到了	xiao xi shou dao le	office	codex-authored
+我看完再回复	wo kan wan zai hui fu	office	codex-authored
+方便的话回电	fang bian de hua hui dian	office	codex-authored
+需要改一下	xu yao gai yi xia	office	codex-authored
+记得留个备份	ji de liu ge bei fen	office	codex-authored
+请查收邮件	qing cha shou you jian	office	codex-authored
+我在开会	wo zai kai hui	office	codex-authored
+稍后回电	shao hou hui dian	office	codex-authored
+会议取消了	hui yi qu xiao le	office	codex-authored
+重新约时间	chong xin yue shi jian	office	codex-authored
+调整一下时间	tiao zheng yi xia shi jian	office	codex-authored
+请发会议链接	qing fa hui yi lian jie	office	codex-authored
+邮件收到了	you jian shou dao le	office	codex-authored
+我再检查一下	wo zai jian cha yi xia	office	codex-authored
+今天先到这里	jin tian xian dao zhe li	office	codex-authored
+我刚看到消息	wo gang kan dao xiao xi	office	codex-authored
+具体再商量	ju ti zai shang liang	office	codex-authored
+把文件传给我	ba wen jian chuan gei wo	office	codex-authored
+我稍后回复	wo shao hou hui fu	office	codex-authored
+稍后再联系你	shao hou zai lian xi ni	chat	zcode-glm-authored
+回头再说吧	hui tou zai shuo ba	chat	zcode-glm-authored
+咱们改天再聊	zan men gai tian zai liao	chat	zcode-glm-authored
+行我知道了	xing wo zhi dao le	chat	zcode-glm-authored
+还得再等等	hai dei zai deng deng	chat	zcode-glm-authored
+你还真别说	ni hai zhen bie shuo	chat	zcode-glm-authored
+忙完就回你	mang wan jiu hui ni	chat	zcode-glm-authored
+方便留个电话吗	fang bian liu ge dian hua ma	chat	zcode-glm-authored
+晚上几点方便	wan shang ji dian fang bian	chat	zcode-glm-authored
+明天上午行吗	ming tian shang wu xing ma	chat	zcode-glm-authored
+那就这么定了	na jiu zhe me ding le	chat	zcode-glm-authored
+你看着安排就行	ni kan zhe an pai jiu xing	chat	zcode-glm-authored
+重发一遍给你	chong fa yi bian gei ni	chat	zcode-glm-authored
+文件我收到了	wen jian wo shou dao le	chat	zcode-glm-authored
+麻烦确认一下	ma fan que ren yi xia	office	zcode-glm-authored
+回个邮件给我	hui ge you jian gei wo	office	zcode-glm-authored
+会议改到下午了	hui yi gai dao xia wu le	office	zcode-glm-authored
+版本还没定稿	ban ben hai mei ding gao	office	zcode-glm-authored
+这份还得改一改	zhe fen hai dei gai yi gai	office	zcode-glm-authored
+进度怎么样了	jin du zen me yang le	office	zcode-glm-authored
+按时提交就行	an shi ti jiao jiu xing	office	zcode-glm-authored
+项目排在下个月	xiang mu pai zai xia ge yue	office	zcode-glm-authored
+明天再说吧	ming tian zai shuo ba	chat	opencode-glm53flash-authored
+等下再发你	deng xia zai fa ni	chat	opencode-glm53flash-authored
+吃完饭再聊	chi wan fan zai liao	chat	opencode-glm53flash-authored
+今晚再改	jin wan zai gai	chat	opencode-glm53flash-authored
+稍后再发	shao hou zai fa	chat	opencode-glm53flash-authored
+中午再回你	zhong wu zai hui ni	chat	opencode-glm53flash-authored
+明早再确认一遍	ming zao zai que ren yi bian	chat	opencode-glm53flash-authored
+过会再打给你	guo hui zai da gei ni	chat	opencode-glm53flash-authored
+下午联系你	xia wu lian xi ni	chat	opencode-glm53flash-authored
+明天回复你	ming tian hui fu ni	chat	opencode-glm53flash-authored
+稍后查看消息	shao hou cha kan xiao xi	chat	opencode-glm53flash-authored
+睡前回复消息	shui qian hui fu xiao xi	chat	opencode-glm53flash-authored
+晚上再核对	wan shang zai he dui	office	opencode-glm53flash-authored
+会后再整理	hui hou zai zheng li	office	opencode-glm53flash-authored
+下班再处理	xia ban zai chu li	office	opencode-glm53flash-authored
+月底再汇总	yue di zai hui zong	office	opencode-glm53flash-authored
+上午再排期	shang wu zai pai qi	office	opencode-glm53flash-authored
+周末再补记录	zhou mo zai bu ji lu	office	opencode-glm53flash-authored
+明早确认时间	ming zao que ren shi jian	office	opencode-glm53flash-authored
+会后回复邮件	hui hou hui fu you jian	office	opencode-glm53flash-authored
+上午查收文件	shang wu cha shou wen jian	office	opencode-glm53flash-authored
+稍后跟进	shao hou gen jin	office	opencode-glm53flash-authored
+下午回复客户	xia wu hui fu ke hu	office	opencode-glm53flash-authored
+周末跟进一下	zhou mo gen jin yi xia	office	opencode-glm53flash-authored
+下周再约	xia zhou zai yue	chat	codex-reviewed
+马上答复	ma shang da fu	office	codex-reviewed
+已经确认了	yi jing que ren le	office	opencode-glm53flash-authored
+刚确认完	gang que ren wan	chat	opencode-glm53flash-authored
+文件已经发出	wen jian yi jing fa chu	office	opencode-glm53flash-authored
+刚把文件发出去	gang ba wen jian fa chu qu	chat	opencode-glm53flash-authored
+文件晚点发	wen jian wan dian fa	chat	opencode-glm53flash-authored
+资料已经整理好	zi liao yi jing zheng li hao	office	opencode-glm53flash-authored
+刚整理完	gang zheng li wan	office	opencode-glm53flash-authored
+等会儿再整理	deng hui er zai zheng li	chat	opencode-glm53flash-authored
+已经登记过了	yi jing deng ji guo le	office	opencode-glm53flash-authored
+名单刚登记完	ming dan gang deng ji wan	office	opencode-glm53flash-authored
+回头再登记	hui tou zai deng ji	chat	opencode-glm53flash-authored
+已经回过话了	yi jing hui guo hua le	chat	opencode-glm53flash-authored
+已经停止了	yi jing ting zhi le	office	opencode-glm53flash-authored
+已经开始了	yi jing kai shi le	office	opencode-glm53flash-authored
+刚刚开始	gang gang kai shi	chat	opencode-glm53flash-authored
+一会儿就开始	yi hui er jiu kai shi	chat	opencode-glm53flash-authored
+他们已经确认了	ta men yi jing que ren le	office	codex-reviewed
+我们已经确认了	wo men yi jing que ren le	office	codex-reviewed
+对方已经确认了	dui fang yi jing que ren le	office	codex-reviewed
+会议时间定了吗	hui yi shi jian ding le ma	office	opencode-glm53flash-authored
+交接清单发你了	jiao jie qing dan fa ni le	office	opencode-glm53flash-authored
+文件已同步过去	wen jian yi tong bu guo qu	office	opencode-glm53flash-authored
+等你确认再推进	deng ni que ren zai tui jin	office	opencode-glm53flash-authored
+有问题随时找我	you wen ti sui shi zhao wo	office	opencode-glm53flash-authored
+今晚一起吃个饭	jin wan yi qi chi ge fan	chat	opencode-glm53flash-authored
+明早十点老地方	ming zao shi dian lao di fang	chat	opencode-glm53flash-authored
+我路上堵车了	wo lu shang du che le	chat	codex-reviewed
+到了楼下叫我	dao le lou xia jiao wo	chat	codex-reviewed
+再问问	zai wen wen	chat	codex-reviewed
+再想想	zai xiang xiang	chat	codex-reviewed
+再看看	zai kan kan	chat	codex-reviewed
+再找找	zai zhao zhao	chat	codex-reviewed
+再等等	zai deng deng	chat	codex-reviewed
+我们现在去窗口	wo men xian zai qu chuang kou	office	codex-reviewed
+我们现在去车库	wo men xian zai qu che ku	chat	codex-reviewed
+我们一起先办理	wo men yi qi xian ban li	office	codex-reviewed

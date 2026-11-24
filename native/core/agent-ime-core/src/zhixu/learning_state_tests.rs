@@ -200,5 +200,8 @@ fn managed_blacklist_change_waits_for_next_composition_and_keeps_digit_meaning()
     assert_eq!(chosen.commit_text, before.candidates[0].text, "digit still selects the visible entry");
     let after = type_text(&mut value, "nihao");
     assert!(after.candidates.iter().any(|c| c.text == "你好"), "next composition reloads without restarting the host");
-    drop(value); fs::remove_dir_all(directory).unwrap();
+    drop(value);
+    assert!(zhixu::index_cache::flush(std::time::Duration::from_secs(2)),
+        "pending dictionary cache should be written before teardown");
+    crate::remove_dir_all_settled(directory);
 }

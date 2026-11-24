@@ -43,6 +43,15 @@ pub struct AimKeyEvent {
     pub delivery_id: u64,
 }
 
+/// Candidate eligibility and contextual prior for one original page.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct AimContextRankingInputs {
+    pub homophone_mask: u32,
+    pub complete_mask: u32,
+    pub contextual_prior_allowed: i32,
+}
+
 #[repr(C)]
 pub struct AimCandidate {
     pub text: *mut u8,
@@ -105,6 +114,21 @@ impl Default for AimResult {
 pub struct AimSession {
     app_id: String,
     inner: Session,
+}
+
+/// Eligible later-page dictionary words and whether the first one matches a
+/// specific left-context cue. The caller must still score it and offer it
+/// through the session before drawing or selecting it.
+#[derive(Default)]
+pub struct OffpageCandidates {
+    pub words: Vec<String>,
+    pub first_matches_context: bool,
+}
+
+impl AimSession {
+    pub fn offpage_candidates(&self) -> OffpageCandidates {
+        self.inner.offpage_candidates()
+    }
 }
 
 pub struct AimLexiconSnapshot {
@@ -417,6 +441,17 @@ pub unsafe extern "C" fn aim_session_set_zhixu_whole(session: *mut AimSession, o
 }
 
 #[unsafe(no_mangle)]
+/// Controls reading-backed common phrases on subsequently generated candidate pages.
+/// # Safety
+/// `session` must be null or a live, exclusively accessed session.
+pub unsafe extern "C" fn aim_session_set_zhiju_phrases(session: *mut AimSession, enabled: u8) -> i32 {
+    let Some(session) = (unsafe { session.as_mut() }) else { return -1 };
+    if enabled > 1 { return -2; }
+    session.inner.configure_zhiju_phrases(enabled != 0);
+    0
+}
+
+#[unsafe(no_mangle)]
 /// Retired migration entry point (Rime user dictionaries are gone): always
 /// returns -50 (capability removed) and never reads or writes `user`.
 /// # Safety
@@ -624,6 +659,25 @@ pub unsafe extern "C" fn aim_session_zhiju_snapshot(session: *const AimSession, 
 }
 
 #[unsafe(no_mangle)]
+/// Captures a speculative append without entering the native input path.
+/// # Safety
+/// Session is live and exclusive; out is writable. Destroy the snapshot after use.
+pub unsafe extern "C" fn aim_session_zhiju_preview(
+    session: *const AimSession, next_letter: u8, out: *mut *mut AimZhijuSnapshot,
+) -> i32 {
+    if out.is_null() { return -1; }
+    unsafe { *out = ptr::null_mut(); }
+    if session.is_null() { return -1; }
+    match unsafe { &*session }.inner.zhiju_preview(next_letter) {
+        Ok(inner) => {
+            unsafe { *out = Box::into_raw(Box::new(AimZhijuSnapshot { inner })); }
+            0
+        }
+        Err(status) => status,
+    }
+}
+
+#[unsafe(no_mangle)]
 /// # Safety
 /// `snapshot` is null or a live snapshot, destroyed once after its last use.
 pub unsafe extern "C" fn aim_zhiju_snapshot_destroy(snapshot: *mut AimZhijuSnapshot) {
@@ -674,6 +728,34 @@ pub unsafe extern "C" fn aim_zhiju_snapshot_step(
 }
 
 #[unsafe(no_mangle)]
+/// Returns full-reading lexical candidates separately from neural search scores.
+/// # Safety
+/// The snapshot is live and exclusive. out_len is writable; out is writable
+/// for the supplied capacity, or null when querying the required size.
+pub unsafe extern "C" fn aim_zhiju_snapshot_lexical(
+    snapshot: *mut AimZhijuSnapshot, budget_ms: u64, out: *mut u8, out_len: *mut usize,
+) -> i32 {
+    if out_len.is_null() { return -1; }
+    let capacity = unsafe { *out_len };
+    unsafe { *out_len = 0; }
+    if snapshot.is_null() || (out.is_null() && capacity != 0) { return -1; }
+    let snapshot = &mut unsafe { &mut *snapshot }.inner;
+    let candidates = match snapshot.lexical_candidates(Duration::from_millis(budget_ms)) {
+        Ok(candidates) => candidates,
+        Err(status) => return status,
+    };
+    let mut encoded = String::new();
+    for candidate in candidates {
+        use std::fmt::Write;
+        let _ = writeln!(encoded, "{}\t{}\t{}", candidate.text, candidate.reading, candidate.consumed);
+    }
+    unsafe { *out_len = encoded.len(); }
+    if encoded.len() > capacity { return -6; }
+    if !encoded.is_empty() { unsafe { ptr::copy_nonoverlapping(encoded.as_ptr(), out, encoded.len()); } }
+    0
+}
+
+#[unsafe(no_mangle)]
 /// Validates identity, optionally promotes the best result, and reads the page once.
 /// # Safety
 /// Session access is exclusive; snapshot is live and no longer being advanced.
@@ -687,6 +769,53 @@ pub unsafe extern "C" fn aim_session_apply_zhiju_snapshot(
     let session = unsafe { &mut *session };
     let (status, page) = match session.inner.apply_zhiju_snapshot(&unsafe { &*snapshot }.inner, promote != 0) {
         Ok(result) => result, Err(status) => return status,
+    };
+    fill_result(unsafe { &mut *out }, page, 0);
+    status
+}
+
+#[unsafe(no_mangle)]
+/// Promotes a named, previously proved candidate from this snapshot.
+/// # Safety
+/// Session and snapshot are live and exclusively accessed. text is readable
+/// for text_length bytes; out is uninitialized, writable AimResult storage.
+pub unsafe extern "C" fn aim_session_apply_zhiju_snapshot_selected(
+    session: *mut AimSession, snapshot: *const AimZhijuSnapshot,
+    text: *const u8, text_length: usize, out: *mut AimResult,
+) -> i32 {
+    unsafe { apply_zhiju_named(session, snapshot, text, text_length, out, false) }
+}
+
+#[unsafe(no_mangle)]
+/// Applies a proved lexical preview after its exact, following key was consumed.
+/// # Safety
+/// Same pointer and ownership rules as aim_session_apply_zhiju_snapshot_selected.
+pub unsafe extern "C" fn aim_session_apply_zhiju_preview(
+    session: *mut AimSession, snapshot: *const AimZhijuSnapshot,
+    text: *const u8, text_length: usize, out: *mut AimResult,
+) -> i32 {
+    unsafe { apply_zhiju_named(session, snapshot, text, text_length, out, true) }
+}
+
+unsafe fn apply_zhiju_named(
+    session: *mut AimSession, snapshot: *const AimZhijuSnapshot,
+    text: *const u8, text_length: usize, out: *mut AimResult, preview: bool,
+) -> i32 {
+    if out.is_null() { return -1; }
+    unsafe { ptr::write(out, AimResult::default()); }
+    if session.is_null() || snapshot.is_null() || text.is_null() || text_length == 0
+        || text_length > isize::MAX as usize { return -1; }
+    let Ok(text) = std::str::from_utf8(unsafe { slice::from_raw_parts(text, text_length) }) else { return -1; };
+    let session = unsafe { &mut *session };
+    let snapshot = &unsafe { &*snapshot }.inner;
+    let applied = if preview {
+        session.inner.apply_zhiju_preview(snapshot, text)
+    } else {
+        session.inner.apply_zhiju_snapshot_selected(snapshot, text)
+    };
+    let (status, page) = match applied {
+        Ok(result) => result,
+        Err(status) => return status,
     };
     fill_result(unsafe { &mut *out }, page, 0);
     status
@@ -758,6 +887,19 @@ pub unsafe extern "C" fn aim_session_context_complete_mask(session: *mut AimSess
 pub unsafe extern "C" fn aim_session_contextual_prior_allowed(session: *mut AimSession) -> i32 {
     if session.is_null() { return 0; }
     i32::from(unsafe { &*session }.inner.contextual_prior_allowed())
+}
+
+#[unsafe(no_mangle)]
+/// Reads eligibility and contextual prior from the same original page.
+/// # Safety
+/// `session` must be null or a live, exclusively accessed session.
+pub unsafe extern "C" fn aim_session_context_ranking_inputs(
+    session: *mut AimSession,
+) -> AimContextRankingInputs {
+    if session.is_null() {
+        return AimContextRankingInputs::default();
+    }
+    unsafe { &*session }.inner.context_ranking_inputs()
 }
 
 #[unsafe(no_mangle)]
@@ -1067,6 +1209,20 @@ pub unsafe extern "C" fn aim_session_abbreviation_alternatives(
     if text.len() > capacity || buffer.is_null() { return -(text.len() as isize); }
     unsafe { ptr::copy_nonoverlapping(text.as_ptr(), buffer, text.len()) };
     text.len() as isize
+}
+
+#[unsafe(no_mangle)]
+/// Bounded two-syllable words for one likely final letter, separated by tabs and newlines.
+/// # Safety
+/// The session must be live and exclusively accessed. Buffer follows page_texts.
+pub unsafe extern "C" fn aim_session_exact_lookahead(
+    session: *mut AimSession, buffer: *mut u8, capacity: usize,
+) -> isize {
+    if session.is_null() { return 0; }
+    let words = unsafe { &*session }.inner.exact_lookahead();
+    if words.len() > capacity || buffer.is_null() { return -(words.len() as isize); }
+    unsafe { ptr::copy_nonoverlapping(words.as_ptr(), buffer, words.len()) };
+    words.len() as isize
 }
 
 #[unsafe(no_mangle)]
@@ -1501,6 +1657,59 @@ mod ffi_tests {
     }
 
     #[test]
+    fn ffi_context_ranking_inputs_match_legacy_across_page_and_commit() {
+        use crate::zhixu::loader::{DictionaryData, Entry};
+
+        assert_eq!(unsafe { aim_session_context_ranking_inputs(ptr::null_mut()) },
+            AimContextRankingInputs::default());
+        let dictionary = std::sync::Arc::new(crate::zhixu::Index::from_data(DictionaryData {
+            entries: ["食物", "事物", "事务", "失误", "十五", "实物", "实务"].into_iter()
+                .enumerate().map(|(rank, text)| Entry {
+                    text: text.into(), reading: "shi wu".into(), weight: 30_000 - rank as u32 * 1_000,
+                    layer: "fixture".into(),
+                }).collect(),
+        }));
+        crate::zhixu::with_index(dictionary.clone(), || {
+            for (context, protected) in [("正常看待", false), ("上次犯了个低级", true)] {
+                let app_id = format!("ffi.ranking-inputs.{protected}");
+                let mut inner = Session::new_native(app_id.clone(), Default::default(), dictionary.clone()).unwrap();
+                inner.set_host_preceding_text(context);
+                for character in "shiwu".chars() {
+                    inner.process(KeyEvent { kind: KeyKind::Text, text: character.to_string(), modifiers: 0,
+                        security: SecurityState::NonSecure, delivery_id: 1 });
+                }
+                let mut session = AimSession { inner, app_id };
+                let mut check = || {
+                    let mut before = AimResult::default();
+                    let mut after = AimResult::default();
+                    assert_eq!(unsafe { aim_session_current_page(&mut session, &mut before) }, 0);
+                    let inputs = unsafe { aim_session_context_ranking_inputs(&mut session) };
+                    assert_eq!(inputs.homophone_mask, unsafe { aim_session_context_group_mask(&mut session) });
+                    assert_eq!(inputs.complete_mask, unsafe { aim_session_context_complete_mask(&mut session) });
+                    assert_eq!(inputs.contextual_prior_allowed, unsafe { aim_session_contextual_prior_allowed(&mut session) });
+                    assert_eq!(unsafe { aim_session_current_page(&mut session, &mut after) }, 0);
+                    assert_same_ffi_page(&before, &after);
+                    unsafe { aim_result_free(&mut before); aim_result_free(&mut after); }
+                    inputs
+                };
+                let inputs = check();
+                assert!(inputs.complete_mask.count_ones() >= 2);
+                assert_eq!(inputs.complete_mask & 1 == 0, protected);
+                drop(check);
+                for kind in [KeyKind::PageDown, KeyKind::PageUp, KeyKind::Space] {
+                    session.inner.process(KeyEvent { kind, text: String::new(), modifiers: 0,
+                        security: SecurityState::NonSecure, delivery_id: 2 });
+                    let inputs = unsafe { aim_session_context_ranking_inputs(&mut session) };
+                    assert_eq!(inputs.homophone_mask, unsafe { aim_session_context_group_mask(&mut session) });
+                    assert_eq!(inputs.complete_mask, unsafe { aim_session_context_complete_mask(&mut session) });
+                    assert_eq!(inputs.contextual_prior_allowed, unsafe { aim_session_contextual_prior_allowed(&mut session) });
+                }
+                assert_eq!(unsafe { aim_session_context_ranking_inputs(&mut session) }.complete_mask, 0);
+            }
+        });
+    }
+
+    #[test]
     fn ffi_current_page_matches_process_and_accepts_uninitialized_output() {
         let app_id = "ffi.current-page".to_string();
         let mut session = AimSession { inner: Session::new(Box::new(crate::state::MockDecoder::default()), app_id.clone()), app_id };
@@ -1682,6 +1891,122 @@ mod ffi_tests {
             assert_eq!(committed.commit_text, target);
             assert!(committed.marked_text.is_empty());
             assert!(committed.candidates.is_empty());
+        });
+    }
+
+    #[test]
+    fn ffi_zhiju_selects_a_lexical_proof_without_running_gen() {
+        use crate::zhixu::loader::{DictionaryData, Entry};
+        let dictionary = std::sync::Arc::new(crate::zhixu::Index::from_data(DictionaryData { entries: [
+            ("我们要求", "wo men yao qiu", 500), ("我们一起", "wo men yi qi", 400),
+            ("下班了", "xia ban le", 600), ("先保留", "xian bao liu", 300),
+        ].into_iter().map(|(text, reading, weight)| Entry {
+            text: text.into(), reading: reading.into(), weight, layer: "fixture".into(),
+        }).collect() }));
+        dictionary.warm_whole();
+        crate::zhixu::with_index(dictionary.clone(), || {
+            let app_id = "ffi.zhiju-select-lexical".to_string();
+            let mut session = AimSession { inner: Session::new_native(app_id.clone(),
+                std::sync::Arc::new(std::sync::Mutex::new(crate::blacklist::Store::default())), dictionary).unwrap(), app_id };
+            for ch in "wmyqxbl".chars() {
+                session.inner.process(KeyEvent { kind: KeyKind::Text, text: ch.to_string(), modifiers: 0,
+                    security: SecurityState::NonSecure, delivery_id: 0 });
+            }
+            let before = session.inner.current_result();
+            let mut snapshot = ptr::null_mut();
+            assert_eq!(unsafe { aim_session_zhiju_snapshot(&session, &mut snapshot) }, 0);
+            let target = "我们要求先保留";
+            let competing = "我们一起下班了";
+            let mut page = AimResult::default();
+            assert_eq!(unsafe { aim_session_apply_zhiju_snapshot_selected(&mut session, snapshot,
+                target.as_ptr(), target.len(), &mut page) }, -2);
+            unsafe { aim_result_free(&mut page) };
+            let mut output = [0; 2048];
+            let mut length = output.len();
+            assert_eq!(unsafe { aim_zhiju_snapshot_lexical(snapshot, 4, output.as_mut_ptr(), &mut length) }, 0);
+            let encoded = std::str::from_utf8(&output[..length]).unwrap();
+            assert!(encoded.lines().any(|line| line == "我们要求先保留\two men yao qiu xian bao liu\t7"));
+            assert!(encoded.lines().any(|line| line.starts_with(competing)));
+            assert_eq!(session.inner.current_result().candidates, before.candidates);
+            assert_eq!(unsafe { aim_session_apply_zhiju_snapshot_selected(&mut session, snapshot,
+                target.as_ptr(), target.len(), &mut page) }, 0);
+            assert_eq!(session.inner.current_result().candidates[0].text, target);
+            unsafe { aim_result_free(&mut page) };
+            let committed = session.inner.process(KeyEvent { kind: KeyKind::Space, text: String::new(), modifiers: 0,
+                security: SecurityState::NonSecure, delivery_id: 1 });
+            assert_eq!(committed.commit_text, target);
+            assert!(committed.marked_text.is_empty());
+            assert_eq!(unsafe { aim_session_apply_zhiju_snapshot_selected(&mut session, snapshot,
+                competing.as_ptr(), competing.len(), &mut page) }, -8);
+            unsafe { aim_result_free(&mut page); aim_zhiju_snapshot_destroy(snapshot); }
+        });
+    }
+
+    #[test]
+    fn ffi_zhiju_preview_requires_the_next_native_append_and_commits_by_space() {
+        use crate::zhixu::loader::{DictionaryData, Entry};
+        let dictionary = std::sync::Arc::new(crate::zhixu::Index::from_data(DictionaryData { entries: [
+            ("我们要求", "wo men yao qiu", 500), ("我们一起", "wo men yi qi", 400),
+            ("下班了", "xia ban le", 600), ("先保留", "xian bao liu", 300),
+        ].into_iter().map(|(text, reading, weight)| Entry {
+            text: text.into(), reading: reading.into(), weight, layer: "fixture".into(),
+        }).collect() }));
+        dictionary.warm_whole();
+        crate::zhixu::with_index(dictionary.clone(), || {
+            let app_id = "ffi.zhiju-next-key-preview".to_string();
+            let mut session = AimSession { inner: Session::new_native(app_id.clone(),
+                std::sync::Arc::new(std::sync::Mutex::new(crate::blacklist::Store::default())), dictionary).unwrap(), app_id };
+            let key = |kind, text: &str| KeyEvent { kind, text: text.into(), modifiers: 0,
+                security: SecurityState::NonSecure, delivery_id: 1 };
+            session.inner.set_host_preceding_text("提案还需要讨论，");
+            for ch in "wmyqxb".chars() { session.inner.process(key(KeyKind::Text, &ch.to_string())); }
+            let capture = |session: &AimSession| {
+                let mut snapshot = ptr::null_mut();
+                assert_eq!(unsafe { aim_session_zhiju_preview(session, b'l', &mut snapshot) }, 0);
+                let mut output = [0; 2048];
+                let mut length = output.len();
+                assert_eq!(unsafe { aim_zhiju_snapshot_lexical(snapshot, 4, output.as_mut_ptr(), &mut length) }, 0);
+                assert!(std::str::from_utf8(&output[..length]).unwrap().lines()
+                    .any(|line| line == "我们要求先保留\two men yao qiu xian bao liu\t7"));
+                snapshot
+            };
+            let apply = |session: &mut AimSession, snapshot, text: &str| {
+                let mut page = AimResult::default();
+                let status = unsafe { aim_session_apply_zhiju_preview(
+                    session, snapshot, text.as_ptr(), text.len(), &mut page) };
+                unsafe { aim_result_free(&mut page) };
+                status
+            };
+            let target = "我们要求先保留";
+            let mut invalid = ptr::null_mut();
+            assert_eq!(unsafe { aim_session_zhiju_preview(&session, b'L', &mut invalid) }, -2);
+            assert!(invalid.is_null());
+            let stale = capture(&session);
+            assert_eq!(apply(&mut session, stale, target), -8);
+            session.inner.process(key(KeyKind::Text, "x"));
+            assert_eq!(apply(&mut session, stale, target), -8);
+            session.inner.process(key(KeyKind::Backspace, ""));
+            session.inner.process(key(KeyKind::Text, "l"));
+            assert_eq!(apply(&mut session, stale, target), -8, "the same raw bytes after an intervening edit are stale");
+            unsafe { aim_zhiju_snapshot_destroy(stale) };
+            session.inner.process(key(KeyKind::Backspace, ""));
+            let fresh = capture(&session);
+            session.inner.process(key(KeyKind::Text, "l"));
+            let mut page = AimResult::default();
+            assert_eq!(unsafe { aim_session_apply_zhiju_snapshot(&mut session, fresh, 0, &mut page) }, -8);
+            unsafe { aim_result_free(&mut page) };
+            assert_eq!(unsafe { aim_session_apply_zhiju_snapshot_selected(&mut session, fresh,
+                target.as_ptr(), target.len(), &mut page) }, -8);
+            unsafe { aim_result_free(&mut page) };
+            assert_eq!(apply(&mut session, fresh, "不在同一快照的词"), -2);
+            assert_eq!(apply(&mut session, fresh, target), 0);
+            assert_eq!(apply(&mut session, fresh, target), -8, "the same letter can authorize at most one apply");
+            assert_eq!(session.inner.process(key(KeyKind::Space, "")).commit_text, target);
+            unsafe { aim_zhiju_snapshot_destroy(fresh) };
+            for ch in "wmyqxb".chars() { session.inner.process(key(KeyKind::Text, &ch.to_string())); }
+            session.inner.process(key(KeyKind::Left, ""));
+            assert_eq!(unsafe { aim_session_zhiju_preview(&session, b'l', &mut invalid) }, -3);
+            assert!(invalid.is_null());
         });
     }
 

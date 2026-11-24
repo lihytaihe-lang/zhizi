@@ -4,3 +4,16 @@ text	pinyin	weight	frozen_source	trigger	selection_reason
 超级烦	chao ji fan	520	docs/current/tasks/INPUT-QUALITY.md:Chunk Q1	chaojifan	Explicit owner acceptance example remained absent from Top-5 on the current build.
 改法	gai fa	520	quality/corpus/public-mac-0350-targeted.json	gaifa	Exact word and reading were absent from the 0.3.41 public dictionary.
 这种改法	zhe zhong gai fa	260	quality/corpus/public-mac-0350-targeted.json	zhezhonggaifa	The short phrase keeps the existing sentence decoder on the correct segment boundary.
+指定专人	zhi ding zhuan ren	520	zhizi-0.3.53-reviewed-phrases	zhidingzhuanren	Reviewed generic phrase for the public release.
+指定代理人	zhi ding dai li ren	520	zhizi-0.3.53-reviewed-phrases	zhidingdailiren	Reviewed generic phrase for the public release.
+先保留	xian bao liu	400	zhizi-0.3.53-reviewed-phrases	xianbaoliu	Reviewed generic phrase for the public release.
+先办理	xian ban li	400	zhizi-0.3.53-reviewed-phrases	xianbanli	Reviewed generic phrase for the public release.
+再次确认	zai ci que ren	260	zhizi-0.3.53-reviewed-phrases	zaiciqueren	Reviewed generic phrase for the public release.
+及时反馈	ji shi fan kui	260	zhizi-0.3.53-reviewed-phrases	jishifankui	Reviewed generic phrase for the public release.
+确认信息	que ren xin xi	260	zhizi-0.3.53-reviewed-phrases	querenxinxi	Reviewed generic phrase for the public release.
+反馈意见	fan kui yi jian	260	zhizi-0.3.53-reviewed-phrases	fankuiyijian	Reviewed generic phrase for the public release.
+齐了	qi le	180	zhizi-0.3.53-reviewed-phrases	qile	Reviewed generic phrase for the public release.
+再出发	zai chu fa	180	zhizi-0.3.53-reviewed-phrases	zaichufa	Reviewed generic phrase for the public release.
+熟品	shu pin	50	zhizi-0.3.53-reviewed-phrases	shupin	Reviewed generic phrase for the public release.
+去车库	qu che ku	80	zhizi-0.3.53-reviewed-phrases	qucheku	Reviewed generic phrase for the public release.
+升级前	sheng ji qian	120	zhizi-0.3.53-reviewed-phrases	shengjiqian	Reviewed generic phrase for the public release.

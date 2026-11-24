@@ -10,7 +10,8 @@ import {
   deleteQualityRecordsByTimeRange, countQualityRecords, exportQualityRecordsFile,
   freezeReplayGoldenSet, grantQualityRecordingConsent, listPersonalProfileAutoUpdates,
   qualityRecordsPage, qualityRecordsOverview, nextSnapshotVersion, personalProfileIntrospection,
-  experiencePlanStatus, setExperiencePlan, qualityRecordingConsentStatus, qualityRecordingStatus, revokePersonalProfileAutoUpdate,
+  experiencePlanStatus, setExperiencePlan, qualityRecordingConsentStatus, qualityRecordingStatus, confirmTestRecordingConsent, testUploadEnabled,
+  revokePersonalProfileAutoUpdate,
   revokeQualityRecordingConsent, runPersonalReplayGate, setQualityRecording,
   type FrozenGoldenMeta, type PersonalProfileAutoUpdateItem,
   type PersonalProfileIntrospection, type QualityRecordingConsent,
@@ -91,6 +92,7 @@ function ownerStatus(item: PersonalProfileAutoUpdateItem): string {
 export function QualityRecordingPanel() {
   const [joined, setJoined] = useState<boolean | null>(null);
   const [changingPlan, setChangingPlan] = useState(false);
+  const [offersTestUpload, setOffersTestUpload] = useState(false);
   const [status, setStatus] = useState<QualityRecordingStatus>({ enabled: false, expiresAtMs: 0, continuous: false });
   const [consent, setConsent] = useState<QualityRecordingConsent>({ granted: false, grantedAtMs: 0, noticeVersion: "w7-v1" });
   const [records, setRecords] = useState<QualityRecordingEvent[]>([]);
@@ -260,6 +262,7 @@ export function QualityRecordingPanel() {
 
   useEffect(() => { void refresh(); }, []);
   useEffect(() => { void experiencePlanStatus().then(setJoined).catch(reportError); }, []);
+  useEffect(() => { void testUploadEnabled().then(setOffersTestUpload).catch(() => {}); }, []);
   useEffect(() => {
     const range = rangeMilliseconds(rangeStart, rangeEnd);
     setRangeCount(null);
@@ -302,7 +305,7 @@ export function QualityRecordingPanel() {
           } catch (error) { reportError(error); }
           finally { setChangingPlan(false); }
         }} /><span>加入用户体验改进计划</span></label>
-      <p id="experience-plan-details">帮助知字改善候选排序和拼音纠错。勾选后开启持续质量记录，每小时向知字服务器发送加入后产生的拼音、候选、上屏文字、选词、退格和耗时等记录。服务器保留最近 30 个自然日的计划记录。本机质量日志还可能包含脱敏的短上文。取消勾选会停止录制和后续上传，已有本机记录可在此删除。</p>
+      <p id="experience-plan-details">帮助知字改善候选排序和拼音纠错。勾选后开启持续质量记录，每小时向知字服务器发送加入后产生的拼音、候选、上屏文字、选词、退格和耗时等记录。本机质量日志还可能包含脱敏的短上文。取消勾选会停止录制和后续上传，已有本机记录可在此删除。</p>
     </section>}
 
     <section className={`recording-status is-${presentation.kind}`} aria-labelledby="recording-status-title">
@@ -442,10 +445,20 @@ export function QualityRecordingPanel() {
         <strong id="quality-consent-title">本地质量记录知情同意与独立开关</strong>
         <ul>
           <li>记录什么：拼音、候选与提交词、最多 8 个 UTF-16 单元的脱敏前文片段、App 标识的 SHA-256 散列及本地候选配置。</li>
-          <li>本机记录保存在 <code>Quality/events.jsonl</code>。另行勾选「加入用户体验改进计划」才会上传。</li>
+          <li>记录保存在本机 <code>Quality/events.jsonl</code>。{offersTestUpload
+            ? "如另行同意参加测试，录制期间会向作者的服务器上传同意后产生的记录。"
+            : "本机质量记录可单独开启。官网 Mac 版只有加入用户体验改进计划后才会上传。"}</li>
           <li>保留多久：2 小时只限制采集时段；已记录内容保留到手动删除，持续采集本身不自动过期。</li>
           <li>怎么撤回：撤回后立即停止新记录，可保留既有记录。</li>
         </ul>
+        {offersTestUpload && <button className="secondary-button" type="button" onClick={async () => {
+          try {
+            if (!await confirmTestRecordingConsent()) return;
+            setStatus(await setQualityRecording("continuous"));
+            setConsent(await qualityRecordingConsentStatus());
+            setNotice("已参加测试并开启持续记录。可随时停止或撤回。");
+          } catch (error) { reportError(error); }
+        }}>参加测试并开启持续记录</button>}
         <div className="quality-actions">
           {!consent.granted ? <button className="secondary-button" onClick={async () => { try { setConsent(await grantQualityRecordingConsent()); setNotice("已同意，但还没有开始记录。"); } catch (error) { reportError(error); } }} type="button">只同意，暂不开始</button> : <>
             <span className="consent-state">已同意 · {new Date(consent.grantedAtMs).toLocaleString()}</span>

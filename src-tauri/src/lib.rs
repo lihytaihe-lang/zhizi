@@ -32,11 +32,7 @@ mod skin_packages {
 }
 mod skin_store;
 mod skin_store_window;
-mod skin_commerce;
-mod skin_credentials;
 mod skin_choice;
-#[cfg(debug_assertions)]
-mod skin_qa;
 mod snapshot;
 mod storage;
 #[cfg(any(feature = "test-upload", target_os = "macos"))]
@@ -1159,7 +1155,12 @@ fn set_quality_recording_at(
 fn set_quality_recording(mode: String) -> Result<QualityRecordingConfiguration, String> {
     let now = current_time_ms()?;
     let directory = prepare_quality_directory()?;
-    set_quality_recording_at(&directory, &mode, now)
+    let result = set_quality_recording_at(&directory, &mode, now)?;
+    #[cfg(all(target_os = "macos", feature = "test-upload"))]
+    if result.enabled && test_upload::participation_since(&directory).is_some() {
+        test_upload::ensure_scheduled();
+    }
+    Ok(result)
 }
 
 fn quality_recording_configuration(
@@ -1196,48 +1197,23 @@ fn grant_quality_recording_consent() -> Result<QualityRecordingConsent, String> 
     grant_quality_recording_consent_at(&directory, current_time_ms()?)
 }
 
-/// What a test build says about recording. The owner tells friends in person when he hands the
-/// build over, so recording starts on; this text stays as a plain notice (and in the install
-/// message), and it must stay true to what the recorder and uploader do.
 #[cfg(all(target_os = "macos", feature = "test-upload"))]
-const TEST_RECORDING_NOTICE: &str = "这是知字测试版，已默认开启测试记录：\n\
-· 输入的拼音、候选词、您选了哪一个\n\
-· 光标前最近 8 个字（网址、邮箱、长串字母数字会先被替换掉；密码框不记录）\n\
-· 电脑名称（用来区分设备）\n\n\
-这些记录每小时上传一次到作者的服务器，只用来改进输入法，不会给别人。\n\
-随时可以在知字首页的「常用」里关掉「持续记录」，关掉后不再记录、不再上传。";
+const TEST_RECORDING_NOTICE: &str = "参加输入法测试后，会记录拼音、候选、选词和光标前最多 8 个字。密码框跳过记录，网址、邮箱和长串字母数字会先替换。启用记录期间，知字每小时向作者上传同意后产生的记录和设备名称。服务器保留最近 30 个自然日的记录。可在管理台停止记录或撤回。需要提前删除服务器记录时，请联系发给你测试包的人并提供设备名称。";
 
-/// A machine with no recording choice yet starts recording (the owner has told the tester), and
-/// is told so. A choice already made on this machine is never overridden.
 #[cfg(all(target_os = "macos", feature = "test-upload"))]
-fn start_test_recording_if_unset() -> bool {
-    let Ok(directory) = prepare_quality_directory() else { return false };
-    if directory.join("consent.json").exists() || directory.join("config.json").exists() {
-        return false;
-    }
-    let Ok(now) = current_time_ms() else { return false };
-    grant_quality_recording_consent_at(&directory, now).is_ok()
-        && set_quality_recording_at(&directory, "continuous", now).is_ok()
+fn test_participation_dialog<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri_plugin_dialog::MessageDialogBuilder<R> {
+    use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
+    app.dialog().message(TEST_RECORDING_NOTICE).title("参加知字输入法测试吗？")
+        .buttons(MessageDialogButtons::OkCancelCustom("同意参与".into(), "不参与".into()))
 }
 
-/// The Home switch: turning recording on without consent on file asks first, with the same notice.
 #[cfg(all(target_os = "macos", feature = "test-upload"))]
 #[tauri::command]
 async fn confirm_test_recording_consent<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<bool, String> {
-    use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
     let directory = prepare_quality_directory()?;
-    if quality_recording_consent_status_at(&directory)?.granted {
-        return Ok(true);
-    }
-    let agreed = app
-        .dialog()
-        .message(TEST_RECORDING_NOTICE.replacen("已默认开启测试记录", "会记录", 1))
-        .title("开启测试记录吗？")
-        .buttons(MessageDialogButtons::OkCancelCustom("同意并开启".into(), "不参与".into()))
-        .blocking_show();
-    if agreed {
-        grant_quality_recording_consent_at(&directory, current_time_ms()?)?;
-    }
+    if test_upload::participation_since(&directory).is_some() { return Ok(true); }
+    let agreed = test_participation_dialog(&app).blocking_show();
+    test_upload::set_participation(&directory, agreed, current_time_ms()?)?;
     Ok(agreed)
 }
 
@@ -1459,7 +1435,7 @@ fn revoke_quality_recording_consent_at(
     now: i64,
 ) -> Result<QualityConsentRevocationResult, String> {
     let _lock = acquire_quality_lock(directory)?;
-    #[cfg(target_os = "macos")]
+    #[cfg(any(feature = "test-upload", target_os = "macos"))]
     test_upload::write_participation(directory, false, now)?;
     let consent = QualityRecordingConsent {
         granted: false,
@@ -1680,8 +1656,6 @@ fn shared_snapshot_store() -> Result<SnapshotStore, String> {
 }
 
 fn project_runtime_path() -> Result<std::path::PathBuf, String> {
-    #[cfg(debug_assertions)]
-    if let Some(root) = skin_qa::root()? { return Ok(root.join("Runtime/runtime.json")); }
     let home = std::env::var_os("HOME").ok_or_else(|| "无法确定用户目录。".to_string())?;
     Ok(std::path::PathBuf::from(home)
         .join("Library/Application Support/AgentInputMethod/Shared/Profiles/runtime.json"))
@@ -1828,14 +1802,12 @@ fn skin_store_set_url(
 async fn skin_store_refresh(
     storage: State<'_, AppStorage>,
     backend: State<'_, skin_store::StoreBackend>,
-    entitlements: State<'_, skin_store::Entitlements>,
 ) -> Result<skin_store::StoreSnapshot, String> {
     backend
         .refresh(
             &storage,
             current_time_ms()?,
             skin_packages::catalog_snapshot(None)?,
-            entitlements.as_ref(),
         )
         .await
 }
@@ -1844,12 +1816,10 @@ async fn skin_store_refresh(
 fn skin_store_list(
     storage: State<'_, AppStorage>,
     backend: State<'_, skin_store::StoreBackend>,
-    entitlements: State<'_, skin_store::Entitlements>,
 ) -> Result<skin_store::StoreSnapshot, String> {
     backend.list(
         &storage,
         skin_packages::catalog_snapshot(None)?,
-        entitlements.as_ref(),
     )
 }
 
@@ -1866,81 +1836,14 @@ async fn skin_store_preview(
 async fn skin_store_install(
     storage: State<'_, AppStorage>,
     backend: State<'_, skin_store::StoreBackend>,
-    entitlements: State<'_, skin_store::Entitlements>,
     id: String,
 ) -> Result<CandidateSkinCatalogSnapshot, String> {
     let catalog = backend
-        .install(&storage, entitlements.as_ref(), &id)
+        .install(&storage, &id)
         .await?;
     #[cfg(target_os = "macos")]
     skin_store_window::notify_packages_changed();
     Ok(backend.enrich_catalog(catalog))
-}
-
-#[tauri::command]
-async fn skin_store_purchase(
-    app: tauri::AppHandle,
-    storage: State<'_, AppStorage>,
-    backend: State<'_, skin_store::StoreBackend>,
-    entitlements: State<'_, skin_store::Entitlements>,
-    id: String,
-) -> Result<skin_store::PurchaseResult, String> {
-    use tauri_plugin_opener::OpenerExt;
-    let skin = backend.purchase_entry(&storage, &id)?;
-    let entitlements = entitlements.inner().clone();
-    let mut result = tauri::async_runtime::spawn_blocking(move || skin_store::purchase_product(entitlements.as_ref(), &skin))
-        .await.map_err(|_| "购买服务暂不可用。")?;
-    if let Some(url) = &result.checkout_url {
-        skin_commerce::validate_checkout_url(url)?;
-        if app.opener().open_url(url, None::<&str>).is_err() {
-            result.message = "订单已创建，但付款页面未打开；可在订单页继续付款。".into();
-        }
-    }
-    // A checkout URL is a pending order, never a purchase receipt.
-    Ok(result)
-}
-
-async fn commerce_work<T: Send + 'static>(client: skin_commerce::Client,
-    work: impl FnOnce(&skin_commerce::CommerceClient) -> Result<T, String> + Send + 'static) -> Result<T, String> {
-    tauri::async_runtime::spawn_blocking(move || work(&client)).await.map_err(|_| "账号服务暂不可用。")?
-}
-
-#[tauri::command]
-fn skin_account_cached(client: State<'_, skin_commerce::Client>) -> Result<skin_commerce::Snapshot, String> { client.cached() }
-#[tauri::command]
-async fn skin_account_set_service(client: State<'_, skin_commerce::Client>, url: String) -> Result<skin_commerce::Snapshot, String> {
-    commerce_work(client.inner().clone(), move |client| client.set_url(&url)).await
-}
-#[tauri::command]
-async fn skin_account_request_code(client: State<'_, skin_commerce::Client>, email: String) -> Result<(), String> {
-    commerce_work(client.inner().clone(), move |client| client.request_code(&email)).await
-}
-#[tauri::command]
-async fn skin_account_login(client: State<'_, skin_commerce::Client>, email: String, code: String) -> Result<skin_commerce::Snapshot, String> {
-    commerce_work(client.inner().clone(), move |client| client.login(&email, &code)).await
-}
-#[tauri::command]
-async fn skin_account_refresh(client: State<'_, skin_commerce::Client>) -> Result<skin_commerce::Snapshot, String> {
-    commerce_work(client.inner().clone(), |client| client.refresh()).await
-}
-#[tauri::command]
-async fn skin_account_more_orders(client: State<'_, skin_commerce::Client>) -> Result<skin_commerce::Snapshot, String> {
-    commerce_work(client.inner().clone(), |client| client.more_orders()).await
-}
-#[tauri::command]
-async fn skin_account_cancel(client: State<'_, skin_commerce::Client>, order_id: String) -> Result<skin_commerce::Snapshot, String> {
-    commerce_work(client.inner().clone(), move |client| client.cancel(&order_id)).await
-}
-#[tauri::command]
-async fn skin_account_logout(client: State<'_, skin_commerce::Client>) -> Result<skin_commerce::Snapshot, String> {
-    commerce_work(client.inner().clone(), |client| client.logout()).await
-}
-
-#[tauri::command]
-async fn skin_account_resume(app: tauri::AppHandle, client: State<'_, skin_commerce::Client>, order_id: String) -> Result<(), String> {
-    use tauri_plugin_opener::OpenerExt;
-    let url = commerce_work(client.inner().clone(), move |client| client.resume(&order_id)).await?;
-    app.opener().open_url(url, None::<&str>).map_err(|_| "付款页面未能打开，请稍后重试。".into())
 }
 
 #[tauri::command]
@@ -2307,8 +2210,6 @@ fn rollback_lexicon_snapshot(version: u64) -> Result<SnapshotMeta, String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let context = tauri::generate_context!();
-    #[cfg(debug_assertions)]
-    if std::env::var_os("ZHIZI_SKIN_QA_ROOT").is_some() { skin_qa::run(context); return; }
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -2385,12 +2286,6 @@ pub fn run() {
             skin_store_list,
             skin_store_preview,
             skin_store_install,
-            skin_store_purchase,
-            skin_account_cached, skin_account_set_service, skin_account_request_code,
-            skin_account_login, skin_account_refresh, skin_account_logout,
-            skin_account_resume,
-            skin_account_more_orders,
-            skin_account_cancel,
             lexicon_download::lexicon_packs_available,
 lexicon_download::lexicon_packs_installed,
             lexicon_download::lexicon_pack_install,
@@ -2438,20 +2333,9 @@ lexicon_download::lexicon_packs_installed,
             run_hotword_quality_gate
         ])
         .setup(|app| {
-            #[cfg(feature = "test-upload")]
-            test_upload::ensure_scheduled();
             let app_handle = app.handle().clone();
-            // Test builds start recording on a machine with no choice yet; the install message (or,
-            // without an install, a plain notice) says so.
-            #[cfg(all(target_os = "macos", feature = "test-upload"))]
-            let recording_started = start_test_recording_if_unset();
-            #[cfg(not(all(target_os = "macos", feature = "test-upload")))]
-            let recording_started = false;
             #[cfg(target_os = "macos")]
             {
-                use tauri_plugin_dialog::DialogExt;
-                // Public builds retire the hourly upload agent a test build may have
-                // left behind; failing to clean it up must not block startup.
                 #[cfg(not(feature = "test-upload"))]
                 if let legacy_upload_task::RetireOutcome::Failed(error) =
                     legacy_upload_task::retire_from_environment()
@@ -2463,19 +2347,36 @@ lexicon_download::lexicon_packs_installed,
                     test_upload::ensure_scheduled();
                 }
                 let installed = friend_install::ensure_input_method_installed();
-                let mut message = String::new();
-                if installed {
-                    message.push_str("知字输入法已经装好。\n\n点屏幕右上角菜单栏的输入法图标，选「知字拼音」就能用了。\n如果列表里没有，到「系统设置 → 键盘 → 输入法」里点「+」，在「简体中文」下添加「知字拼音」；还是没有就注销再登录一次。");
-                }
                 #[cfg(feature = "test-upload")]
-                if recording_started {
-                    if !message.is_empty() {
-                        message.push_str("\n\n———\n\n");
+                if let Ok(directory) = prepare_quality_directory() {
+                    use tauri_plugin_dialog::DialogExt;
+                    if test_upload::should_ask_on_launch(&directory) {
+                        // Older test builds could grant local consent automatically.
+                        // Stop their active recording until this person makes a choice.
+                        set_quality_recording_at(&directory, "off", current_time_ms().map_err(std::io::Error::other)?)
+                            .map_err(std::io::Error::other)?;
+                        test_participation_dialog(&app_handle).show(move |agreed| {
+                            if let Ok(now) = current_time_ms() {
+                                if let Err(error) = test_upload::set_participation(&directory, agreed, now) {
+                                    eprintln!("saving test participation failed: {error}");
+                                } else if agreed && set_quality_recording_at(&directory, "continuous", now).is_ok() {
+                                    test_upload::ensure_scheduled();
+                                }
+                            }
+                        });
+                    } else if test_upload::participation_since(&directory).is_some() {
+                        test_upload::ensure_scheduled();
                     }
-                    message.push_str(TEST_RECORDING_NOTICE);
+                    if installed {
+                        app_handle.dialog().message("知字已装好。请在系统菜单栏选择「知字拼音」。")
+                            .title("知字").show(|_| {});
+                    }
                 }
-                if !message.is_empty() {
-                    app_handle.dialog().message(message).title("知字").show(|_| {});
+                #[cfg(not(feature = "test-upload"))]
+                if installed {
+                    use tauri_plugin_dialog::DialogExt;
+                    app_handle.dialog().message("知字输入法已经装好。\n\n点屏幕右上角菜单栏的输入法图标，选「知字拼音」就能用了。如果列表里没有，请到「系统设置 → 键盘 → 输入法」添加。")
+                        .title("知字").show(|_| {});
                 }
             }
 
@@ -2485,10 +2386,6 @@ lexicon_download::lexicon_packs_installed,
                 app_handle.path().app_data_dir()?,
                 skin_packages::default_skins_root().map_err(std::io::Error::other)?,
             ));
-            let commerce: skin_commerce::Client = std::sync::Arc::new(skin_commerce::CommerceClient::new(app_handle.path().app_data_dir()?));
-            let skin_entitlements: skin_store::Entitlements = commerce.clone();
-            app.manage(commerce);
-            app.manage(skin_entitlements);
 
             install_tray(&app_handle)?;
 

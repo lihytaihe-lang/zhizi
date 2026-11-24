@@ -997,6 +997,9 @@ public final class SkinGalleryWindowController: NSObject, NSWindowDelegate {
         resetButton.action = #selector(resetToDefault)
         resetButton.bezelStyle = .rounded
         searchField.cell = GallerySearchFieldCell(textCell: "")
+        searchField.isEditable = true
+        searchField.isSelectable = true
+        searchField.setAccessibilityLabel("搜索皮肤")
         searchField.placeholderString = "搜索皮肤"
         searchField.font = .systemFont(ofSize: 13)
         searchField.target = self

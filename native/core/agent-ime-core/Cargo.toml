@@ -12,6 +12,7 @@ crate-type = ["rlib", "staticlib"]
 
 [features]
 default = []
+mac-fast-typing = []
 diagnostic-no-owner-raw-hits = []
 
 [dependencies]

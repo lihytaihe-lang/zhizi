@@ -42,6 +42,26 @@ fn fnv1a64(parts: &[&[u8]]) -> u64 {
 
 fn main() {
     let root = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+    if env::var_os("CARGO_FEATURE_MAC_FAST_TYPING").is_some() {
+        // Byte ranges into the sorted UTF-8 table allow a lookup on the first
+        // key without parsing the complete phrase vocabulary in an IMK session.
+        let data = fs::read_to_string(root.join("resources/zhiju_phrase_continuations.tsv")).unwrap();
+        let mut spans = Vec::new();
+        let mut offset = 0;
+        for line in data.split_inclusive('\n') {
+            let (head, _) = line.split_once('\t').expect("invalid Zhiju phrase row");
+            if let Some((last, _, end)) = spans.last_mut()
+                && *last == head {
+                *end += line.len();
+            } else {
+                assert!(spans.last().is_none_or(|(last, _, _)| *last < head));
+                spans.push((head, offset, offset + line.len()));
+            }
+            offset += line.len();
+        }
+        let declaration = format!("const HEADS: &[(&str, usize, usize)] = &{spans:?};");
+        fs::write(PathBuf::from(env::var_os("OUT_DIR").unwrap()).join("zhiju_phrase_offsets.rs"), declaration).unwrap();
+    }
     let mut files = BTreeMap::new();
     collect(&root.join("src"), &root, &mut files);
     collect(&root.join("resources"), &root, &mut files);

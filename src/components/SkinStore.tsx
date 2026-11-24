@@ -2,22 +2,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { candidateSkinCatalog } from "../domain/skinCatalog";
 import {
   getSkinStoreSettings, getSkinStorePreview, installStoreSkin, listStoreSkins,
-  purchaseStoreSkin, refreshSkinStore, setSkinStoreUrl,
+  refreshSkinStore, setSkinStoreUrl,
   type SkinStoreSettings, type StoreSkin, type StoreSnapshot,
 } from "../lib/skinStore";
 import { SkinStoreCard, type SkinStoreOperation } from "./SkinStoreCard";
 import { SkinStoreDetails } from "./SkinStoreDetails";
 
-type SkinStoreProps = {
-  onBusyChange?: (busy: boolean) => void;
-  onOpenAccount?: () => void;
-  focusProduct?: {id: string; nonce: number};
-  localCatalogRevision?: number;
-  busy?: boolean;
-};
-
 const emptySnapshot: StoreSnapshot = { skins: [], refreshedAtMs: null, stale: false, error: null };
-const filters = ["全部", "免费", "付费", "动画", "已安装"] as const;
+const filters = ["全部", "动画", "已安装"] as const;
 
 function updatedAgo(time: number | null): string {
   if (time === null) return "尚未更新";
@@ -30,12 +22,11 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-export function SkinStore({ onBusyChange, onOpenAccount, focusProduct, localCatalogRevision = 0, busy = false }: SkinStoreProps) {
+export function SkinStore() {
   const [settings, setSettings] = useState<SkinStoreSettings>({ indexUrl: "", lastRefreshedAtMs: null });
   const [url, setUrl] = useState("");
   const [snapshot, setSnapshot] = useState(emptySnapshot);
   const [loading, setLoading] = useState(true);
-  const cacheReadSequence = useRef(0);
   const cacheReading = useRef(true);
   const [refreshing, setRefreshing] = useState(false);
   const refreshLock = useRef(false);
@@ -45,9 +36,7 @@ export function SkinStore({ onBusyChange, onOpenAccount, focusProduct, localCata
   const [actionError, setActionError] = useState("");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<typeof filters[number]>("全部");
-  useEffect(() => { if (focusProduct) { setQuery(focusProduct.id); setFilter("全部"); } }, [focusProduct]);
   const [detailsId, setDetailsId] = useState<string | null>(null);
-  const observedCatalogRevision = useRef(localCatalogRevision);
   const [previewsEnabled, setPreviewsEnabled] = useState(false);
   const [previewEpoch, setPreviewEpoch] = useState(0);
   const previews = useRef(new Map<string, () => Promise<string>>());
@@ -55,40 +44,38 @@ export function SkinStore({ onBusyChange, onOpenAccount, focusProduct, localCata
 
   useEffect(() => {
     let active = true;
-    const sequence = ++cacheReadSequence.current;
     void Promise.allSettled([getSkinStoreSettings(), listStoreSkins()]).then(([configuration, cached]) => {
       if (!active) return;
       if (configuration.status === "fulfilled") {
         setSettings(configuration.value);
         setUrl(configuration.value.indexUrl);
       } else setActionError(errorMessage(configuration.reason));
-      if (sequence === cacheReadSequence.current) {
-        if (cached.status === "fulfilled") setSnapshot(cached.value);
-        else setSnapshot((previous) => ({ ...previous, stale: true, error: errorMessage(cached.reason) }));
-        cacheReading.current = false;
-        setLoading(false);
-      }
+      if (cached.status === "fulfilled") setSnapshot(cached.value);
+      else setSnapshot((previous) => ({ ...previous, stale: true, error: errorMessage(cached.reason) }));
+      cacheReading.current = false;
+      setLoading(false);
     });
     return () => { active = false; };
   }, []);
 
   useEffect(() => {
-    if (observedCatalogRevision.current === localCatalogRevision) return;
-    observedCatalogRevision.current = localCatalogRevision;
     let active = true;
-    const sequence = ++cacheReadSequence.current;
-    cacheReading.current = true;
-    setLoading(true);
-    void listStoreSkins().then((cached) => { if (active) setSnapshot(cached); })
-      .catch((error) => { if (active) setSnapshot((previous) => ({ ...previous, stale: true, error: errorMessage(error) })); })
-      .finally(() => {
-        if (active && sequence === cacheReadSequence.current) { cacheReading.current = false; setLoading(false); }
-      });
-    return () => { active = false; };
-  }, [localCatalogRevision]);
+    function rereadCatalog() {
+      if (cacheReading.current || refreshLock.current || operationLocks.current.size) return;
+      cacheReading.current = true;
+      void listStoreSkins().then((cached) => { if (active) setSnapshot(cached); })
+        .catch((error) => { if (active) setSnapshot((previous) => ({ ...previous, stale: true, error: errorMessage(error) })); })
+        .finally(() => { if (active) cacheReading.current = false; });
+    }
+    window.addEventListener("focus", rereadCatalog);
+    return () => {
+      active = false;
+      window.removeEventListener("focus", rereadCatalog);
+    };
+  }, []);
 
   async function refresh() {
-    if (refreshLock.current || operationLocks.current.size || cacheReading.current || busy || loading) return;
+    if (refreshLock.current || operationLocks.current.size || cacheReading.current || loading) return;
     const address = url.trim();
     if (!address) { setActionError("请在商店地址框填写皮肤发布方提供的 HTTPS 地址，再点击连接。"); return; }
     try {
@@ -96,7 +83,6 @@ export function SkinStore({ onBusyChange, onOpenAccount, focusProduct, localCata
     } catch { setActionError("皮肤商店地址必须使用 HTTPS。"); return; }
     refreshLock.current = true;
     setRefreshing(true);
-    onBusyChange?.(true);
     setActionError("");
     setMessage("");
     try {
@@ -114,7 +100,6 @@ export function SkinStore({ onBusyChange, onOpenAccount, focusProduct, localCata
     } finally {
       refreshLock.current = false;
       setRefreshing(false);
-      onBusyChange?.(false);
     }
   }
 
@@ -130,57 +115,44 @@ export function SkinStore({ onBusyChange, onOpenAccount, focusProduct, localCata
   }
 
   async function runAction(skin: StoreSkin) {
-    if (operationLocks.current.size || refreshLock.current || cacheReading.current || busy || loading) return;
+    if (operationLocks.current.size || refreshLock.current || cacheReading.current || loading) return;
     if (skin.state === "installed" || skin.state === "needsAppUpgrade" || skin.state === "unsupportedPlatform") return;
-    const operation: SkinStoreOperation = skin.state === "updateAvailable" ? "update"
-      : skin.tier === "paid" && skin.owned !== true ? "purchase" : "install";
+    if (skin.tier !== "free") return;
+    const operation: SkinStoreOperation = skin.state === "updateAvailable" ? "update" : "install";
     operationLocks.current.add(skin.id);
     setOperations((previous) => ({ ...previous, [skin.id]: operation }));
-    onBusyChange?.(true);
     setActionError("");
     setMessage("");
     try {
-      if (operation === "purchase") {
-        const result = await purchaseStoreSkin(skin.id);
-        setMessage(result.message);
-        if (result.ok) {
-          const resultSnapshot = await listStoreSkins();
-          setSnapshot(resultSnapshot);
-        }
-      } else {
-        const catalog = await installStoreSkin(skin.id);
-        if (!catalog.skins.some((entry) => entry.id === skin.id && entry.status === "ready" && entry.origin === "external")) {
-          throw new Error("皮肤安装未完成，请查看皮肤校验报告。");
-        }
-        setSnapshot((previous) => ({ ...previous, skins: previous.skins.map((item) => item.id === skin.id
-          ? { ...item, state: "installed", installedVersion: item.version } : item) }));
-        setMessage("皮肤已安装。打开输入法菜单中的「皮肤管理…」即可换肤。");
+      const catalog = await installStoreSkin(skin.id);
+      if (!catalog.skins.some((entry) => entry.id === skin.id && entry.status === "ready" && entry.origin === "external")) {
+        throw new Error("皮肤安装未完成，请查看皮肤校验报告。");
       }
+      setSnapshot((previous) => ({ ...previous, skins: previous.skins.map((item) => item.id === skin.id
+        ? { ...item, state: "installed", installedVersion: item.version } : item) }));
+      setMessage("皮肤已安装。打开输入法菜单中的「皮肤管理…」即可换肤。");
     } catch (error) { setActionError(errorMessage(error)); }
     finally {
       operationLocks.current.delete(skin.id);
       setOperations((previous) => { const next = { ...previous }; delete next[skin.id]; return next; });
-      onBusyChange?.(false);
     }
   }
 
-  const storeSkins = snapshot.skins.filter((skin) => !candidateSkinCatalog.some((builtIn) => builtIn.id === skin.id));
+  const storeSkins = snapshot.skins.filter((skin) =>
+    skin.tier === "free" && !candidateSkinCatalog.some((builtIn) => builtIn.id === skin.id));
   const search = query.trim().toLocaleLowerCase();
   const visible = storeSkins.filter((skin) => {
-    if (filter === "免费" && skin.tier !== "free") return false;
-    if (filter === "付费" && skin.tier !== "paid") return false;
     if (filter === "动画" && !skin.animated) return false;
     if (filter === "已安装" && skin.installedVersion === null) return false;
     return `${skin.name.zh} ${skin.name.en} ${skin.author} ${skin.description} ${skin.productId}`.toLocaleLowerCase().includes(search);
   });
   const selected = storeSkins.find((skin) => skin.id === detailsId);
-  const disabled = busy || refreshing || loading || Object.keys(operations).length > 0;
+  const disabled = refreshing || loading || Object.keys(operations).length > 0;
   const timestamp = snapshot.refreshedAtMs ?? settings.lastRefreshedAtMs;
   return (
     <section className="skin-store" aria-label="皮肤商店">
       <div className="skin-store-header">
         <h3>皮肤商店</h3>
-        <button className="secondary-button skin-store-account" type="button" disabled={disabled} onClick={() => { if (onOpenAccount) onOpenAccount(); else setMessage("请打开账号与订单登录。"); }}>登录</button>
       </div>
       <div className="skin-store-toolbar">
         <input className="skin-store-search" type="search" aria-label="搜索皮肤" placeholder="搜索名称、作者" value={query}

@@ -8,61 +8,12 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 use std::time::Duration;
 
 static SEQUENCE: AtomicU64 = AtomicU64::new(0);
 const PUBLIC_KEY: &str = include_str!("../resources/skin_index_pubkey.hex");
 const MAX_CACHE_BYTES: usize = 4 * 1024 * 1024;
-
-pub trait SkinEntitlements: Send + Sync {
-    fn owns(&self, product_id: &str) -> Result<bool, EntitlementError>;
-    fn purchase(&self, product_id: &str, price_cents: u32, currency: &str) -> Result<CheckoutInfo, EntitlementError>;
-    fn authorized_bundle_url(&self, product_id: &str) -> Result<String, EntitlementError>;
-}
-
-// Reserved adapter outcomes are part of the account/payment integration contract.
-#[allow(dead_code)]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum EntitlementError {
-    NotConfigured,
-    NotSignedIn,
-    Cancelled,
-    Network(String),
-    Declined(String),
-    ServiceMessage(String),
-}
-
-impl EntitlementError {
-    fn message(&self) -> String {
-        match self {
-            Self::NotConfigured => "购买功能尚未开放",
-            Self::NotSignedIn => "请先登录",
-            Self::Cancelled => "",
-            // Provider errors may contain authorization URLs; never send them to the UI.
-            Self::Network(_) => "暂时无法连接购买服务，请稍后重试",
-            Self::Declined(_) => "购买未完成，请稍后重试",
-            Self::ServiceMessage(message) if crate::skin_commerce::approved_service_message(message) => message,
-            Self::ServiceMessage(_) => "购买未完成，请稍后重试",
-        }
-        .into()
-    }
-}
-
-pub struct NotConfiguredEntitlements;
-impl SkinEntitlements for NotConfiguredEntitlements {
-    fn owns(&self, _: &str) -> Result<bool, EntitlementError> {
-        Err(EntitlementError::NotConfigured)
-    }
-    fn purchase(&self, _: &str, _: u32, _: &str) -> Result<CheckoutInfo, EntitlementError> {
-        Err(EntitlementError::NotConfigured)
-    }
-    fn authorized_bundle_url(&self, _: &str) -> Result<String, EntitlementError> {
-        Err(EntitlementError::NotConfigured)
-    }
-}
-
-pub type Entitlements = Arc<dyn SkinEntitlements>;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -80,8 +31,6 @@ pub struct StoreSkin {
     pub description: String,
     pub version: String,
     pub tier: String,
-    pub price_cents: u32,
-    pub currency: String,
     pub platforms: Vec<String>,
     pub available_for_sale: bool,
     pub product_id: String,
@@ -93,8 +42,6 @@ pub struct StoreSkin {
     pub changelog: String,
     pub state: String,
     pub installed_version: Option<String>,
-    pub owned: Option<bool>,
-    pub owned_error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -104,25 +51,6 @@ pub struct StoreSnapshot {
     pub refreshed_at_ms: Option<i64>,
     pub stale: bool,
     pub error: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PurchaseResult {
-    pub ok: bool,
-    pub message: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub checkout_url: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub order_id: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CheckoutInfo {
-    pub owned: bool,
-    pub checkout_url: Option<String>,
-    pub order_id: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -263,7 +191,6 @@ impl StoreBackend {
         &self,
         storage: &AppStorage,
         catalog: CandidateSkinCatalogSnapshot,
-        entitlements: &dyn SkinEntitlements,
     ) -> Result<StoreSnapshot, String> {
         let url = Self::configured_url(storage)?;
         let error = self
@@ -281,7 +208,7 @@ impl StoreBackend {
                 error,
             });
         };
-        Ok(self.snapshot(index, refreshed, error, catalog, entitlements))
+        Ok(self.snapshot(index, refreshed, error, catalog))
     }
 
     fn snapshot(
@@ -290,7 +217,6 @@ impl StoreBackend {
         refreshed: i64,
         error: Option<String>,
         catalog: CandidateSkinCatalogSnapshot,
-        entitlements: &dyn SkinEntitlements,
     ) -> StoreSnapshot {
         let versions: BTreeMap<String, InstalledVersion> =
             read_bounded(&self.versions_path(), 128 * 1024)
@@ -300,6 +226,7 @@ impl StoreBackend {
         let skins = index
             .skins
             .into_iter()
+            .filter(|skin| skin.tier == "free")
             .map(|skin| {
                 let installed = catalog.skins.iter().any(|entry| {
                     entry.id == skin.id && entry.origin == "external" && entry.status == "ready"
@@ -326,7 +253,6 @@ impl StoreBackend {
                     installed_version.as_deref(),
                     env!("CARGO_PKG_VERSION"),
                 );
-                let (owned, owned_error) = ownership(&skin, entitlements);
                 StoreSkin {
                     id: skin.id,
                     name: skin.name,
@@ -334,8 +260,6 @@ impl StoreBackend {
                     description: skin.description,
                     version: skin.version,
                     tier: skin.tier,
-                    price_cents: skin.price_cents,
-                    currency: skin.currency,
                     platforms: skin.platforms,
                     available_for_sale: skin.available_for_sale,
                     product_id: skin.product_id,
@@ -347,8 +271,6 @@ impl StoreBackend {
                     changelog: skin.changelog,
                     state: state.into(),
                     installed_version,
-                    owned,
-                    owned_error,
                 }
             })
             .collect();
@@ -365,38 +287,20 @@ impl StoreBackend {
         storage: &AppStorage,
         now_ms: i64,
         catalog: CandidateSkinCatalogSnapshot,
-        entitlements: &dyn SkinEntitlements,
     ) -> Result<StoreSnapshot, String> {
         let client = fetch_client();
-        self.refresh_with_entitlements(storage, now_ms, catalog, entitlements, |url, limit| {
+        self.refresh_with(storage, now_ms, catalog, |url, limit| {
             let client = client.clone();
             async move { fetch_document(client?, url, limit).await }
         })
         .await
     }
 
-    #[cfg(test)]
     async fn refresh_with<F, Fut>(
         &self,
         storage: &AppStorage,
         now_ms: i64,
         catalog: CandidateSkinCatalogSnapshot,
-        fetch: F,
-    ) -> Result<StoreSnapshot, String>
-    where
-        F: FnMut(String, usize) -> Fut,
-        Fut: std::future::Future<Output = Result<Vec<u8>, String>>,
-    {
-        self.refresh_with_entitlements(storage, now_ms, catalog, &NotConfiguredEntitlements, fetch)
-            .await
-    }
-
-    async fn refresh_with_entitlements<F, Fut>(
-        &self,
-        storage: &AppStorage,
-        now_ms: i64,
-        catalog: CandidateSkinCatalogSnapshot,
-        entitlements: &dyn SkinEntitlements,
         mut fetch: F,
     ) -> Result<StoreSnapshot, String>
     where
@@ -447,13 +351,13 @@ impl StoreBackend {
                 .map_err(|_| "无法更新皮肤商店状态。".to_string())? =
                 error.map(|error| (url, error));
         }
-        self.list(storage, catalog, entitlements)
+        self.list(storage, catalog)
     }
 
     fn entry(&self, storage: &AppStorage, id: &str) -> Result<IndexSkin, String> {
         let url = Self::configured_url(storage)?;
         self.cached(&url)
-            .and_then(|(index, _)| index.skins.into_iter().find(|skin| skin.id == id))
+            .and_then(|(index, _)| index.skins.into_iter().find(|skin| skin.tier == "free" && skin.id == id))
             .ok_or_else(|| "没有找到有效的商店皮肤，请先刷新皮肤商店。".into())
     }
 
@@ -503,13 +407,11 @@ impl StoreBackend {
     pub async fn install(
         &self,
         storage: &AppStorage,
-        entitlements: &dyn SkinEntitlements,
         id: &str,
     ) -> Result<CandidateSkinCatalogSnapshot, String> {
         let client = fetch_client()?;
         self.install_with(
             storage,
-            entitlements,
             id,
             skin_packages::catalog_snapshot(None)?,
             |url, limit| fetch_document(client.clone(), url, limit),
@@ -521,7 +423,6 @@ impl StoreBackend {
     async fn install_with<F, Fut, I>(
         &self,
         storage: &AppStorage,
-        entitlements: &dyn SkinEntitlements,
         id: &str,
         catalog: CandidateSkinCatalogSnapshot,
         fetch: F,
@@ -533,13 +434,12 @@ impl StoreBackend {
         I: FnOnce(&Path) -> Result<CandidateSkinCatalogSnapshot, String>,
     {
         let skin = self.entry(storage, id)?;
-        self.install_entry_with(entitlements, &skin, catalog, fetch, install)
+        self.install_entry_with(&skin, catalog, fetch, install)
             .await
     }
 
     async fn install_entry_with<F, Fut, I>(
         &self,
-        entitlements: &dyn SkinEntitlements,
         skin: &IndexSkin,
         catalog: CandidateSkinCatalogSnapshot,
         mut fetch: F,
@@ -558,19 +458,10 @@ impl StoreBackend {
         if !skin.platforms.iter().any(|platform| platform == std::env::consts::OS) {
             return Err("这款皮肤暂不支持当前系统。".into());
         }
-        let url = if skin.tier == "paid" {
-            if !entitlements
-                .owns(&skin.product_id)
-                .map_err(|error| error.message())?
-            {
-                return Err("请先购买此皮肤。".into());
-            }
-            entitlements
-                .authorized_bundle_url(&skin.product_id)
-                .map_err(|error| error.message())?
-        } else {
-            skin.bundle_url.clone()
-        };
+        if skin.tier != "free" {
+            return Err("当前只提供免费皮肤。".into());
+        }
+        let url = skin.bundle_url.clone();
         protocol::validate_download_url(&url)?;
         if catalog
             .skins
@@ -616,63 +507,6 @@ impl StoreBackend {
 
     fn versions_path(&self) -> PathBuf {
         self.data_dir.join("skin-store-versions.json")
-    }
-
-    pub fn purchase_entry(&self, storage: &AppStorage, id: &str) -> Result<IndexSkin, String> {
-        let skin = self.entry(storage, id)?;
-        if !skin.platforms.iter().any(|platform| platform == std::env::consts::OS) {
-            return Err("这款皮肤暂不支持当前系统，请勿购买。".into());
-        }
-        if !skin.available_for_sale { return Err("这款皮肤已停止新购；已购账号仍可恢复和下载。".into()); }
-        Ok(skin)
-    }
-
-    #[cfg(test)]
-    pub fn purchase(
-        &self,
-        storage: &AppStorage,
-        entitlements: &dyn SkinEntitlements,
-        id: &str,
-    ) -> Result<PurchaseResult, String> {
-        let skin = self.purchase_entry(storage, id)?;
-        Ok(purchase_product(entitlements, &skin))
-    }
-}
-
-pub(crate) fn purchase_product(entitlements: &dyn SkinEntitlements, skin: &IndexSkin) -> PurchaseResult {
-        if skin.tier == "free" {
-            return PurchaseResult {
-                ok: true,
-                message: "此皮肤免费，可以直接获取。".into(),
-                checkout_url: None, order_id: None,
-            };
-        }
-            match entitlements.purchase(&skin.product_id, skin.price_cents, &skin.currency) {
-                Ok(checkout) => PurchaseResult {
-                    ok: checkout.owned,
-                    message: if checkout.owned { "已恢复该皮肤权益，可以获取。" } else { "请在付款页面完成支付，然后刷新订单确认。" }.into(),
-                    checkout_url: checkout.checkout_url, order_id: checkout.order_id,
-                },
-                Err(error) => PurchaseResult {
-                    ok: false,
-                    message: error.message(),
-                    checkout_url: None, order_id: None,
-                },
-            }
-}
-
-fn ownership(
-    skin: &IndexSkin,
-    entitlements: &dyn SkinEntitlements,
-) -> (Option<bool>, Option<String>) {
-    if skin.tier == "free" {
-        return (Some(true), None);
-    }
-    match entitlements.owns(&skin.product_id) {
-        Ok(owned) => (Some(owned), None),
-        Err(EntitlementError::NotConfigured) => (None, Some("notConfigured".into())),
-        Err(EntitlementError::NotSignedIn) => (None, Some("notSignedIn".into())),
-        Err(_) => (None, None),
     }
 }
 
@@ -957,7 +791,7 @@ mod tests {
         assert!(result.error.is_some());
         assert!(
             backend
-                .list(&storage, empty_catalog(), &NotConfiguredEntitlements)
+                .list(&storage, empty_catalog())
                 .unwrap()
                 .stale
         );
@@ -965,7 +799,7 @@ mod tests {
             .set_url(&storage, "https://example.invalid/other")
             .unwrap();
         assert!(backend
-            .list(&storage, empty_catalog(), &NotConfiguredEntitlements)
+            .list(&storage, empty_catalog())
             .unwrap()
             .skins
             .is_empty());
@@ -977,7 +811,7 @@ mod tests {
         seed(&backend, &storage);
         fs::write(backend.cache_path(), b"broken").unwrap();
         assert!(backend
-            .list(&storage, empty_catalog(), &NotConfiguredEntitlements)
+            .list(&storage, empty_catalog())
             .unwrap()
             .skins
             .is_empty());
@@ -994,7 +828,6 @@ mod tests {
         let calls = AtomicUsize::new(0);
         let catalog = tauri::async_runtime::block_on(backend.install_with(
             &storage,
-            &PanickingEntitlements,
             "teststore",
             empty_catalog(),
             |_, _| {
@@ -1007,73 +840,59 @@ mod tests {
         assert_eq!(calls.load(Ordering::Relaxed), 1);
         assert!(backend.skins_root.join("teststore/skin.json").is_file());
         let snapshot = backend
-            .list(&storage, catalog, &PanickingEntitlements)
+            .list(&storage, catalog)
             .unwrap();
         assert_eq!(snapshot.skins[0].state, "installed");
         assert_eq!(
             snapshot.skins[0].installed_version.as_deref(),
             Some("1.0.0")
         );
-        assert_eq!(snapshot.skins[0].owned, Some(true));
-    }
-
-    struct PanickingEntitlements;
-    #[test]
-    fn pending_checkout_is_never_reported_as_owned_or_paid() {
-        struct Pending;
-        impl SkinEntitlements for Pending {
-            fn owns(&self, _: &str) -> Result<bool, EntitlementError> { Ok(false) }
-            fn purchase(&self, _: &str, _: u32, _: &str) -> Result<CheckoutInfo, EntitlementError> {
-                Ok(CheckoutInfo { owned: false, checkout_url: Some("https://checkout.stripe.com/c/pay/test".into()), order_id: Some("ord_pending".into()) })
-            }
-            fn authorized_bundle_url(&self, _: &str) -> Result<String, EntitlementError> { panic!("pending payment must not authorize a download") }
-        }
-        let mut skin = protocol::verify_index_with_key(FIXTURE_INDEX, FIXTURE_SIG, FIXTURE_KEY).unwrap().skins.remove(0);
-        skin.tier = "paid".into(); skin.price_cents = 1200;
-        let result = purchase_product(&Pending, &skin);
-        assert!(!result.ok);
-        assert_eq!(result.order_id.as_deref(), Some("ord_pending"));
-        assert!(result.message.contains("刷新订单确认"));
-        skin.platforms = vec!["unimplemented".into()];
-        assert_eq!(skin_state(&skin, false, None, "99.0.0"), "unsupportedPlatform");
-    }
-    impl SkinEntitlements for PanickingEntitlements {
-        fn owns(&self, _: &str) -> Result<bool, EntitlementError> {
-            panic!("free skin queried entitlements")
-        }
-        fn purchase(&self, _: &str, _: u32, _: &str) -> Result<CheckoutInfo, EntitlementError> {
-            panic!("free skin queried entitlements")
-        }
-        fn authorized_bundle_url(&self, _: &str) -> Result<String, EntitlementError> {
-            panic!("free skin queried entitlements")
-        }
     }
 
     #[test]
-    fn paid_not_configured_never_downloads() {
-        let (backend, storage) = setup();
-        let mut skin = protocol::verify_index_with_key(FIXTURE_INDEX, FIXTURE_SIG, FIXTURE_KEY)
-            .unwrap()
-            .skins
-            .remove(0);
-        skin.tier = "paid".into();
-        skin.price_cents = 1200;
-        let calls = AtomicUsize::new(0);
-        let error = tauri::async_runtime::block_on(backend.install_entry_with(
-            &NotConfiguredEntitlements,
-            &skin,
+    fn signed_mixed_catalog_exposes_and_downloads_only_free_skins() {
+        use ring::signature::{Ed25519KeyPair, KeyPair};
+        use serde_json::json;
+
+        let (mut backend, storage) = setup();
+        let mut index: serde_json::Value = serde_json::from_slice(FIXTURE_INDEX).unwrap();
+        let skins = index["skins"].as_array_mut().unwrap();
+        let mut paid = skins[0].clone();
+        paid["id"] = json!("testpaid");
+        paid["productId"] = json!("skin.testpaid");
+        paid["tier"] = json!("paid");
+        paid["priceCents"] = json!(1200);
+        skins.push(paid);
+        let document = protocol::canonical_bytes(&index).unwrap();
+        let pair = Ed25519KeyPair::from_seed_unchecked(&[7; 32]).unwrap();
+        let encode_hex = |bytes: &[u8]| bytes.iter().map(|byte| format!("{byte:02x}")).collect::<String>();
+        let signature = encode_hex(pair.sign(&document).as_ref());
+        backend.key_hex = Box::leak(encode_hex(pair.public_key().as_ref()).into_boxed_str());
+        backend.set_url(&storage, "https://example.invalid/store").unwrap();
+
+        let refreshed = tauri::async_runtime::block_on(backend.refresh_with(
+            &storage,
+            1234,
             empty_catalog(),
-            |_, _| {
-                calls.fetch_add(1, Ordering::Relaxed);
-                async { Ok(FIXTURE_BUNDLE.to_vec()) }
+            |url, _| {
+                let bytes = if url.ends_with(".sig") { signature.as_bytes().to_vec() } else { document.clone() };
+                async { Ok(bytes) }
             },
-            |_| panic!("unauthorized install"),
-        ))
-        .unwrap_err();
-        assert_eq!(error, "购买功能尚未开放");
-        assert_eq!(calls.load(Ordering::Relaxed), 0);
+        )).unwrap();
+        assert!(!refreshed.stale);
+        assert_eq!(refreshed.skins.len(), 1);
+        assert_eq!(refreshed.skins[0].id, "teststore");
+        assert!(tauri::async_runtime::block_on(backend.preview_with(
+            &storage, "testpaid", |_, _| async { panic!("paid preview must not download") },
+        )).is_err());
+        assert!(tauri::async_runtime::block_on(backend.install_with(
+            &storage,
+            "testpaid",
+            empty_catalog(),
+            |_, _| async { panic!("paid package must not download") },
+            |_| panic!("paid package must not install"),
+        )).is_err());
         assert!(!backend.skins_root.exists());
-        assert_eq!(backend.settings(&storage).unwrap().index_url, "");
     }
 
     #[test]
@@ -1120,7 +939,6 @@ mod tests {
             skin.bundle_sha256 = protocol::sha256_hex(&bytes);
             skin.bundle_bytes = bytes.len() as u64;
             let result = tauri::async_runtime::block_on(backend.install_entry_with(
-                &PanickingEntitlements,
                 &skin,
                 empty_catalog(),
                 |_, _| async { Ok(bytes.clone()) },
@@ -1140,7 +958,6 @@ mod tests {
         let mut skin = original_skin;
         skin.bundle_sha256 = "00".repeat(32);
         assert!(tauri::async_runtime::block_on(backend.install_entry_with(
-            &PanickingEntitlements,
             &skin,
             empty_catalog(),
             |_, _| async { Ok(FIXTURE_BUNDLE.to_vec()) },
@@ -1162,7 +979,6 @@ mod tests {
         skin.bundle_sha256 = protocol::sha256_hex(bytes);
         skin.bundle_bytes = bytes.len() as u64;
         let catalog = tauri::async_runtime::block_on(backend.install_entry_with(
-            &PanickingEntitlements,
             &skin,
             empty_catalog(),
             |_, _| async { Ok(bytes.to_vec()) },
@@ -1185,7 +1001,6 @@ mod tests {
         seed(&backend, &storage);
         let catalog = tauri::async_runtime::block_on(backend.install_with(
             &storage,
-            &PanickingEntitlements,
             "teststore",
             empty_catalog(),
             |_, _| async { Ok(FIXTURE_BUNDLE.to_vec()) },
@@ -1212,12 +1027,10 @@ mod tests {
             1234,
             None,
             catalog.clone(),
-            &PanickingEntitlements,
         );
         assert_eq!(before.skins[0].state, "updateAvailable");
         assert_eq!(before.skins[0].installed_version.as_deref(), Some("1.0.0"));
         let catalog = tauri::async_runtime::block_on(backend.install_entry_with(
-            &PanickingEntitlements,
             &index.skins[0],
             catalog,
             |_, _| async { Ok(bytes.clone()) },
@@ -1229,7 +1042,7 @@ mod tests {
             manifest
         );
         let reopened = StoreBackend::new(backend.data_dir.clone(), backend.skins_root.clone());
-        let after = reopened.snapshot(index, 1234, None, catalog, &PanickingEntitlements);
+        let after = reopened.snapshot(index, 1234, None, catalog);
         assert_eq!(after.skins[0].state, "installed");
         assert_eq!(after.skins[0].installed_version.as_deref(), Some("1.1.0"));
         assert_eq!(fs::read_dir(&backend.skins_root).unwrap().count(), 1);
@@ -1271,7 +1084,7 @@ mod tests {
     }
 
     #[test]
-    fn upgrade_update_and_entitlement_states_match_frontend_contract() {
+    fn upgrade_and_update_states_match_frontend_contract() {
         let mut skin = protocol::verify_index_with_key(FIXTURE_INDEX, FIXTURE_SIG, FIXTURE_KEY)
             .unwrap()
             .skins
@@ -1287,12 +1100,6 @@ mod tests {
             skin_state(&skin, true, Some("1.0.0"), "0.3.24"),
             "needsAppUpgrade"
         );
-        skin.tier = "paid".into();
-        skin.price_cents = 1200;
-        assert_eq!(
-            ownership(&skin, &NotConfiguredEntitlements),
-            (None, Some("notConfigured".into()))
-        );
         let (backend, _) = setup();
         let snapshot = backend.snapshot(
             SkinIndex {
@@ -1304,10 +1111,8 @@ mod tests {
             1234,
             None,
             empty_catalog(),
-            &NotConfiguredEntitlements,
         );
         let value = serde_json::to_value(&snapshot).unwrap();
-        assert_eq!(value["skins"][0]["ownedError"], "notConfigured");
         assert!(value["skins"][0]["installedVersion"].is_null());
         assert_eq!(value["skins"][0]["state"], "needsAppUpgrade");
         assert!(value["skins"][0].get("bundleUrl").is_none());
@@ -1391,59 +1196,9 @@ mod tests {
         }
     }
 
-    #[test]
-    fn paid_adapters_authorize_before_download_and_errors_are_human() {
-        struct Adapter(Result<bool, EntitlementError>);
-        impl SkinEntitlements for Adapter {
-            fn owns(&self, _: &str) -> Result<bool, EntitlementError> {
-                self.0.clone()
-            }
-            fn purchase(&self, _: &str, _: u32, _: &str) -> Result<CheckoutInfo, EntitlementError> {
-                Err(EntitlementError::Cancelled)
-            }
-            fn authorized_bundle_url(&self, _: &str) -> Result<String, EntitlementError> {
-                Ok("http://example.invalid/unsafe".into())
-            }
-        }
-        let (backend, _) = setup();
-        let mut skin = protocol::verify_index_with_key(FIXTURE_INDEX, FIXTURE_SIG, FIXTURE_KEY)
-            .unwrap()
-            .skins
-            .remove(0);
-        skin.tier = "paid".into();
-        skin.price_cents = 1200;
-        for (adapter, message) in [
-            (Adapter(Ok(false)), "请先购买此皮肤。"),
-            (Adapter(Err(EntitlementError::NotSignedIn)), "请先登录"),
-            (
-                Adapter(Ok(true)),
-                "下载地址必须是无参数、无身份信息的 HTTPS URL。",
-            ),
-        ] {
-            let result = tauri::async_runtime::block_on(backend.install_entry_with(
-                &adapter,
-                &skin,
-                empty_catalog(),
-                |_, _| async { panic!("unauthorized download") },
-                |_| panic!("unauthorized install"),
-            ));
-            assert_eq!(result.unwrap_err(), message);
-        }
-        assert_eq!(
-            ownership(&skin, &Adapter(Err(EntitlementError::NotSignedIn))),
-            (None, Some("notSignedIn".into()))
-        );
-        assert_eq!(EntitlementError::Cancelled.message(), "");
-        for error in [
-            EntitlementError::Network("private provider details".into()),
-            EntitlementError::Declined("private provider details".into()),
-        ] {
-            assert!(!error.message().contains("private"));
-        }
-    }
 }
 
-pub(crate) mod protocol {
+mod protocol {
     use crate::skin_catalog::is_candidate_skin_id;
     use chrono::{DateTime, NaiveDate};
     use ring::signature::{UnparsedPublicKey, ED25519};

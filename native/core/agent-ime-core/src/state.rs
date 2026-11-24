@@ -224,6 +224,8 @@ pub trait Decoder: Send {
     fn dictionary_snapshot(&self) -> Option<Arc<crate::zhixu::Index>> { None }
     /// Native editing does not need Session's Rime menu/selection restoration.
     fn native_editing(&self) -> bool { false }
+    /// Borrow an untouched, unconfirmed native composition at its append caret.
+    fn zhiju_append_raw(&self) -> Option<&str> { None }
     fn composition_boundary(&self, purpose: BoundaryPurpose) -> Option<CompositionBoundary> {
         // Only editing recovery reconstructs a boundary from the preedit; a
         // mixing consumer needs the decoder's own exact answer.
@@ -235,6 +237,9 @@ pub trait Decoder: Send {
     /// Observe manager edits only at a new composition boundary.
     fn refresh_managed_learning(&mut self) -> Result<bool, i32> { Ok(false) }
     fn configure_zhixu_whole(&mut self, _on: bool) -> Result<(), i32> { Ok(()) }
+    fn configure_zhiju_phrases(&mut self, _enabled: bool) {}
+    #[cfg(feature = "mac-fast-typing")]
+    fn zhiju_phrases_for_current_menu(&self) -> bool { false }
     fn learning_key(&mut self, _event: &KeyEvent, _now: u64) {}
     fn learning_commit(&mut self, _text: &str, _delivery_id: u64, _now: u64) {}
     fn withdraw_learning(&mut self, _raw: &str, _text: &str) -> bool { false }
@@ -257,6 +262,10 @@ pub trait Decoder: Send {
         snapshot.highlighted_index = 0;
         Some(snapshot)
     }
+    /// Uses the native paging order for one bounded, composition-local promotion.
+    fn prioritize_native_exact(&mut self, _raw: &str, _first: &str, _word: &str) -> bool { false }
+    fn native_exact_priority_active(&self) -> bool { false }
+    fn clear_native_exact_priority(&mut self) {}
     /// A raw ASCII echo anywhere in the native sequence disables whole generation.
     /// Unknown decoders conservatively require the complete snapshot.
     fn whole_prefix_has_raw_echo(&self) -> bool { true }
@@ -334,7 +343,16 @@ pub trait Decoder: Send {
         0
     }
     fn contextual_prior_allowed(&self) -> bool { false }
-    fn abbreviation_alternatives(&self) -> Vec<String> { Vec::new() }
+    fn offpage_candidates(&self) -> crate::OffpageCandidates { crate::OffpageCandidates::default() }
+    fn abbreviation_alternatives(&self) -> Vec<String> { self.offpage_candidates().words }
+    fn context_ranking_inputs(&self) -> crate::AimContextRankingInputs {
+        crate::AimContextRankingInputs {
+            homophone_mask: self.context_group_mask(),
+            complete_mask: self.context_complete_mask(),
+            contextual_prior_allowed: i32::from(self.contextual_prior_allowed()),
+        }
+    }
+    fn exact_lookahead(&self) -> String { String::new() }
     fn offer_abbreviation(&mut self, _text: &str) -> Result<(), i32> { Err(-10) }
     fn reorder_context_candidates(&mut self, _order: &[usize]) -> Result<(), i32> {
         Err(-10)
@@ -643,6 +661,7 @@ pub struct Session {
     zhiju: Option<crate::zhixu::zhiju::Search>,
     zhiju_identity: Arc<()>,
     zhiju_generation: u64,
+    zhiju_last_letter: Option<u8>,
     zhiju_pending: Option<(Arc<crate::zhixu::Index>, crate::zhixu::zhiju::Progress)>,
     pending_selection_event_id: Cell<u64>,
     secure_degraded: bool,
@@ -659,8 +678,10 @@ pub(crate) struct ZhijuSnapshot {
     context: String,
     identity: Arc<()>,
     generation: u64,
+    preview_letter: Option<u8>,
     progress: Option<crate::zhixu::zhiju::Progress>,
     pub(crate) results: Option<Vec<crate::zhixu::zhiju::Candidate>>,
+    lexical: Option<Vec<crate::zhixu::zhiju::lexical::LexicalCandidate>>,
 }
 
 impl ZhijuSnapshot {
@@ -668,10 +689,26 @@ impl ZhijuSnapshot {
         search.prepare(&self.dictionary);
     }
 
+    pub(crate) fn lexical_candidates(&mut self, budget: std::time::Duration)
+        -> Result<&[crate::zhixu::zhiju::lexical::LexicalCandidate], i32> {
+        if self.lexical.is_none() {
+            if budget.is_zero() { return Err(-9); }
+            let started = std::time::Instant::now();
+            let budget = budget.min(std::time::Duration::from_millis(4));
+            // Preview capture is on the key path. Only the detached worker
+            // runs abbreviation eligibility and typo checks.
+            if self.preview_letter.is_some() && !crate::mixer::sentence_abbreviation(&self.keys) { return Err(-3); }
+            self.lexical = crate::zhixu::zhiju::lexical::candidates(
+                &self.dictionary, &self.keys, budget.saturating_sub(started.elapsed()));
+        }
+        self.lexical.as_deref().ok_or(-9)
+    }
+
     pub(crate) fn step(&mut self, search: &mut crate::zhixu::zhiju::Search, beam: usize,
         budget: std::time::Duration, scores: &[f32], mut request: impl FnMut(&[i32], usize, usize))
         -> Result<Option<Vec<crate::zhixu::zhiju::Candidate>>, i32> {
         use crate::zhixu::zhiju::SearchError;
+        if self.preview_letter.is_some() { return Err(-3); }
         let started = std::time::Instant::now();
         if let Some(results) = &self.results {
             return if scores.is_empty() { Ok(Some(results.clone())) } else { Err(-2) };
@@ -840,6 +877,10 @@ fn max_peek_pages() -> usize {
 }
 
 impl Session {
+    pub(crate) fn configure_zhiju_phrases(&mut self, enabled: bool) {
+        self.decoder.configure_zhiju_phrases(enabled);
+    }
+
     pub fn configure_zhixu_whole(&mut self, on: bool) -> Result<(), i32> {
         if self.composing() { return Err(-10); }
         // The knob stays for the shells but no longer changes the inner decoder.
@@ -911,6 +952,7 @@ impl Session {
             zhiju: None,
             zhiju_identity: Arc::new(()),
             zhiju_generation: 0,
+            zhiju_last_letter: None,
             zhiju_pending: None,
             pending_selection_event_id: Cell::new(0),
             secure_degraded: false,
@@ -980,6 +1022,7 @@ impl Session {
 
     fn invalidate_zhiju_search(&mut self) {
         self.zhiju_pending = None;
+        self.zhiju_last_letter = None;
         self.zhiju_generation = self.zhiju_generation.wrapping_add(1).max(1);
     }
 
@@ -991,23 +1034,89 @@ impl Session {
             dictionary: self.decoder.dictionary_snapshot().ok_or(-7)?,
             keys: boundary.unconfirmed_raw,
             context: self.host_preceding_text.clone().unwrap_or_default() + &boundary.confirmed,
-            identity: self.zhiju_identity.clone(), generation: self.zhiju_generation,
-            progress: None, results: None,
+            identity: self.zhiju_identity.clone(), generation: self.zhiju_generation, preview_letter: None,
+            progress: None, results: None, lexical: None,
         })
     }
 
+    pub(crate) fn zhiju_preview(&self, letter: u8) -> Result<ZhijuSnapshot, i32> {
+        if !letter.is_ascii_lowercase() { return Err(-2); }
+        if self.mode != InputMode::Chinese || self.secure_degraded || !self.inline_ascii.is_empty() { return Err(-3); }
+        let raw = self.decoder.zhiju_append_raw().ok_or(-3)?;
+        if raw.is_empty() || raw.len() >= 48
+            || !raw.bytes().all(|byte| byte.is_ascii_lowercase() || byte == b'\'') { return Err(-3); }
+        let mut keys = raw.to_owned();
+        keys.push(char::from(letter));
+        Ok(ZhijuSnapshot {
+            dictionary: self.decoder.dictionary_snapshot().ok_or(-7)?,
+            keys, context: self.host_preceding_text.clone().unwrap_or_default(),
+            identity: self.zhiju_identity.clone(), generation: self.zhiju_generation, preview_letter: Some(letter),
+            progress: None, results: None, lexical: None,
+        })
+    }
+
+    fn matches_zhiju_snapshot(&self, snapshot: &ZhijuSnapshot) -> bool {
+        snapshot.preview_letter.is_none() && self.zhiju_generation == snapshot.generation
+            && self.matches_zhiju_dictionary(snapshot)
+    }
+
+    fn matches_zhiju_dictionary(&self, snapshot: &ZhijuSnapshot) -> bool {
+        Arc::ptr_eq(&self.zhiju_identity, &snapshot.identity)
+            && self.decoder.dictionary_snapshot().is_some_and(|dictionary| Arc::ptr_eq(&dictionary, &snapshot.dictionary))
+    }
+
+    fn apply_zhiju_proofs(&mut self, readings: Vec<(String, usize, String)>) -> (i32, ResultModel) {
+        let (status, page) = self.decoder.apply_zhiju_results(readings);
+        (status.err().unwrap_or(0), self.result_from_snapshot(page, false, String::new(), 0))
+    }
+
     pub(crate) fn apply_zhiju_snapshot(&mut self, snapshot: &ZhijuSnapshot, promote: bool) -> Result<(i32, ResultModel), i32> {
-        if !Arc::ptr_eq(&self.zhiju_identity, &snapshot.identity) || self.zhiju_generation != snapshot.generation
-            || self.decoder.dictionary_snapshot().is_none_or(|dictionary| !Arc::ptr_eq(&dictionary, &snapshot.dictionary)) {
-            return Err(-8);
-        }
+        if !self.matches_zhiju_snapshot(snapshot) { return Err(-8); }
         if promote {
             let results = snapshot.results.as_ref().ok_or(-2)?;
-            let (status, page) = self.decoder.apply_zhiju_results(results.iter()
-                .map(|candidate| (candidate.text.clone(), candidate.consumed, candidate.reading.clone())).collect());
-            return Ok((status.err().unwrap_or(0), self.result_from_snapshot(page, false, String::new(), 0)));
+            return Ok(self.apply_zhiju_proofs(results.iter()
+                .map(|candidate| (candidate.text.clone(), candidate.consumed, candidate.reading.clone())).collect()));
         }
         Ok((0, self.current_result()))
+    }
+
+    pub(crate) fn apply_zhiju_snapshot_selected(&mut self, snapshot: &ZhijuSnapshot, text: &str)
+        -> Result<(i32, ResultModel), i32> {
+        if !self.matches_zhiju_snapshot(snapshot) { return Err(-8); }
+        self.apply_named_zhiju_proof(snapshot, text)
+    }
+
+    pub(crate) fn apply_zhiju_preview(&mut self, snapshot: &ZhijuSnapshot, text: &str)
+        -> Result<(i32, ResultModel), i32> {
+        let letter = snapshot.preview_letter.ok_or(-8)?;
+        if self.zhiju_generation != snapshot.generation.wrapping_add(1).max(1)
+            || self.zhiju_last_letter != Some(letter)
+            || self.mode != InputMode::Chinese || self.secure_degraded || !self.inline_ascii.is_empty()
+            || self.decoder.zhiju_append_raw() != Some(snapshot.keys.as_str())
+            || self.host_preceding_text.as_deref().unwrap_or_default() != snapshot.context.as_str()
+            || !self.matches_zhiju_dictionary(snapshot) { return Err(-8); }
+        let result = self.apply_named_zhiju_proof(snapshot, text)?;
+        self.zhiju_last_letter = None;
+        Ok(result)
+    }
+
+    fn apply_named_zhiju_proof(&mut self, snapshot: &ZhijuSnapshot, text: &str)
+        -> Result<(i32, ResultModel), i32> {
+        let generated = snapshot.results.iter().flatten()
+            .map(|word| (&word.text, word.consumed, &word.reading));
+        let lexical = snapshot.lexical.iter().flatten()
+            .map(|word| (&word.text, word.consumed, &word.reading));
+        let mut proofs: Vec<_> = generated.chain(lexical)
+            .filter(|(_, consumed, _)| *consumed == snapshot.keys.len()).collect();
+        let selected = proofs.iter().position(|(candidate, _, _)| candidate.as_str() == text).ok_or(-2)?;
+        // Keep the original generated alternatives in their original relative
+        // order. The selector only names a validated lead from this snapshot.
+        let lead = proofs.remove(selected);
+        let mut seen = std::collections::HashSet::new();
+        let readings = std::iter::once(lead).chain(proofs)
+            .filter(|(candidate, _, _)| seen.insert(candidate.as_str()))
+            .map(|(candidate, consumed, reading)| (candidate.clone(), consumed, reading.clone())).collect();
+        Ok(self.apply_zhiju_proofs(readings))
     }
 
     pub(crate) fn zhiju_step(&mut self, generation: &mut u64, beam: usize, budget: std::time::Duration,
@@ -1089,9 +1198,24 @@ impl Session {
         self.decoder.contextual_prior_allowed()
     }
 
+    pub(crate) fn context_ranking_inputs(&self) -> crate::AimContextRankingInputs {
+        self.decoder.context_ranking_inputs()
+    }
+
+    pub(crate) fn exact_lookahead(&self) -> String {
+        if self.mode != InputMode::Chinese || self.secure_degraded || !self.inline_ascii.is_empty() {
+            return String::new();
+        }
+        self.decoder.exact_lookahead()
+    }
+
     pub fn abbreviation_alternatives(&self) -> Vec<String> {
-        if !self.inline_ascii.is_empty() { return Vec::new(); }
-        self.decoder.abbreviation_alternatives()
+        self.offpage_candidates().words
+    }
+
+    pub(crate) fn offpage_candidates(&self) -> crate::OffpageCandidates {
+        if !self.inline_ascii.is_empty() { return crate::OffpageCandidates::default(); }
+        self.decoder.offpage_candidates()
     }
 
     pub fn offer_abbreviation(&mut self, text: &str) -> Result<(), i32> {
@@ -1644,6 +1768,10 @@ impl Session {
                 return self.finish(true, commit, 0, security);
             }
             let result = self.decoder.input(text);
+            if modifiers == 0 && first.is_ascii_lowercase()
+                && result.as_ref().is_ok_and(String::is_empty) {
+                self.zhiju_last_letter = Some(first as u8);
+            }
             return self.apply_decoder_result(result, security);
         }
 
@@ -2843,6 +2971,30 @@ mod tests {
             modifiers: MOD_SHIFT,
             security: SecurityState::NonSecure,
             delivery_id: 0,
+        }
+    }
+
+    #[test]
+    fn nihao_literal_space_distinguishes_inline_english_from_pass_through() {
+        for (security, direct_english, expected) in [
+            (SecurityState::NonSecure, false, "Nihao"),
+            (SecurityState::NonSecure, true, "Nihao "),
+            (SecurityState::Unknown, false, "Nihao "),
+            (SecurityState::Secure, false, "Nihao "),
+        ] {
+            let mut session = session();
+            if direct_english { session.process(event(KeyKind::ShiftTap, "")); }
+            let mut keys = vec![shift_key("N")];
+            keys.extend("ihao".chars().map(|key| event(KeyKind::Text, &key.to_string())));
+            keys.push(event(KeyKind::Space, " "));
+            let mut delivered = String::new();
+            for key in keys {
+                let literal = key.text.clone();
+                let result = session.process(KeyEvent { security, ..key });
+                delivered.push_str(&result.commit_text);
+                if !result.consumed { delivered.push_str(&literal); }
+            }
+            assert_eq!(delivered, expected, "security={security:?} direct={direct_english}");
         }
     }
 

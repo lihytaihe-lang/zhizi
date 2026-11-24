@@ -520,7 +520,7 @@ fn visit_complete_initials<'a>(dictionary: &'a Index, tokens: &[&str],
     }
 }
 
-fn syllable_matches(token: &str, syllable: &str) -> bool {
+pub(super) fn syllable_matches(token: &str, syllable: &str) -> bool {
     token == syllable || (initial(token) && syllable.starts_with(token))
         || canonical_syllable(token) == canonical_syllable(syllable)
 }
@@ -528,7 +528,8 @@ fn syllable_matches(token: &str, syllable: &str) -> bool {
 /// Native candidates carry complete syllables; a generated raw echo is not a
 /// pronunciation. Follow only this reading through the schema's spelling edges.
 pub(crate) fn candidate_coverage(raw: &str, candidate: &Candidate) -> Option<usize> {
-    if raw.is_empty() || raw.len() > 120 || raw.starts_with('\'')
+    const MAX_RAW_LEN: usize = 120;
+    if raw.is_empty() || raw.len() > MAX_RAW_LEN || raw.starts_with('\'')
         || !raw.bytes().all(|byte| byte.is_ascii_lowercase() || byte == b'\'') {
         return None;
     }
@@ -538,11 +539,14 @@ pub(crate) fn candidate_coverage(raw: &str, candidate: &Candidate) -> Option<usi
         || !candidate.text.chars().all(|ch| ch == '〇' || ('\u{3400}'..='\u{9fff}').contains(&ch)) {
         return None;
     }
-    let mut positions = vec![false; raw.len() + 1];
+    if raw.bytes().eq(syllables.iter().flat_map(|syllable| syllable.bytes())) {
+        return Some(raw.len());
+    }
+    let mut positions = [false; MAX_RAW_LEN + 1];
     positions[0] = true;
     let mut covered = None;
     for (index, syllable) in syllables.iter().enumerate() {
-        let mut next_positions = vec![false; raw.len() + 1];
+        let mut next_positions = [false; MAX_RAW_LEN + 1];
         for start in 0..raw.len() {
             if !positions[start] { continue; }
             for end in start + 1..=raw.len().min(start + 6) {
@@ -731,6 +735,74 @@ mod candidate_tests {
             assert_eq!(sentence[0].candidate.text, "你好世界");
             assert_eq!(sentence[1].candidate.text, "你好");
         });
+    }
+
+    #[cfg(feature = "mac-fast-typing")]
+    #[test]
+    #[ignore = "uses the packaged dictionary passed in ZHIXU_Z8_SHARED"]
+    fn zhiju_packaged_common_phrase_delivery() {
+        let path = std::path::PathBuf::from(std::env::var_os("ZHIXU_Z8_SHARED").unwrap());
+        let user = std::env::temp_dir().join(format!("zhiju-common-phrases-{}", std::process::id()));
+        std::fs::create_dir(&user).unwrap();
+        super::super::loader::attach(&path, &user);
+        let index = super::super::loader::deployed_snapshot().unwrap().unwrap();
+        index.warm_whole();
+        super::super::with_index(index.clone(), || {
+            let mut decoder = ZhixuDecoder::from_ready_dictionary(index);
+            decoder.configure_zhiju_phrases(true);
+            for (raw, expected) in [("guoyihuihuini","过一会回你"),("zilfnl","资料发你了"),("huitlx","回头联系")] {
+                for byte in raw.bytes() { decoder.input(&(byte as char).to_string()).unwrap(); }
+                let offers = super::super::zhiju_typed_phrases::candidates(raw);
+                assert!(offers.iter().any(|r| r.text == expected), "{raw} returned {offers:?}");
+                let page = decoder.snapshot();
+                let rank = page.candidates.iter().position(|c| c.text == expected);
+                println!("{raw} {rank:?} caret {} of {} near {:?} all hits {:?}", decoder.caret, decoder.raw.len(),
+                    page.candidates.iter().map(|c| (&c.text, &c.comment)).collect::<Vec<_>>(),
+                    decoder.candidates.iter().enumerate().filter(|(_, e)| e.candidate.text == expected)
+                    .map(|(i, e)| (i, e.consumed, &e.candidate.reading_key)).collect::<Vec<_>>());
+                assert!(rank.is_some(), "{raw}");
+                assert_eq!(decoder.select_candidate(rank.unwrap(), 1, LearningIntent::DeliberateSelection).unwrap(), expected);
+            }
+        });
+        std::fs::remove_dir_all(user).unwrap();
+    }
+
+    #[cfg(feature = "mac-fast-typing")]
+    #[test]
+    fn zhiju_continuation_keeps_space_paging_and_the_next_spelling() {
+        let index = Arc::new(Index::from_data(DictionaryData { entries: [
+            ("稍等", "shao deng", 10000), ("稍", "shao", 7000), ("少", "shao", 6000),
+            ("烧", "shao", 5000), ("邵", "shao", 4000), ("绍", "shao", 3000),
+            ("等", "deng", 6000), ("登记", "deng ji", 3000), ("级", "ji", 2000),
+        ].into_iter().map(|(text, reading, weight)| Entry {
+            text: text.into(), reading: reading.into(), weight, layer: "pinyin_simp".into(),
+        }).collect() }));
+        let mut plain = ZhixuDecoder::from_ready_dictionary(index.clone());
+        let mut phrases = ZhixuDecoder::from_ready_dictionary(index);
+        plain.input("shaodeng").unwrap();
+        let original = plain.snapshot_all_candidates().unwrap().candidates;
+        phrases.configure_zhiju_phrases(true);
+        phrases.input("shaodeng").unwrap();
+        let all = phrases.snapshot_all_candidates().unwrap().candidates;
+        assert_eq!(original[0].text, "稍等");
+        assert_eq!(all[0].text, original[0].text);
+        let without_offers: Vec<_> = all.iter().filter(|c| c.comment != super::super::zhiju_phrase_menu::CONTINUATION)
+            .map(|c| c.text.as_str()).collect();
+        assert_eq!(without_offers, original.iter().map(|c| c.text.as_str()).collect::<Vec<_>>());
+        let position = all.iter().position(|c| c.text == "稍等一下").unwrap();
+        assert!((1..PAGE_SIZE).contains(&position));
+        phrases.page_down().unwrap();
+        phrases.page_up().unwrap();
+        phrases.configure_zhiju_phrases(false);
+        assert_eq!(phrases.select_candidate(position, 1, LearningIntent::DeliberateSelection).unwrap(), "稍等一下");
+        assert!(!phrases.is_composing());
+        phrases.input("shaodeng").unwrap();
+        assert_eq!(phrases.snapshot_all_candidates().unwrap().candidates, original);
+        phrases.configure_zhiju_phrases(true);
+        phrases.input("ji").unwrap();
+        plain.input("ji").unwrap();
+        assert_eq!(phrases.snapshot().candidates[0].text, plain.snapshot().candidates[0].text);
+        assert!(phrases.snapshot().candidates.iter().all(|c| !c.text.starts_with("稍等一下")));
     }
 
     #[test]
@@ -1132,6 +1204,8 @@ mod candidate_tests {
             ("shengc", "生成", "sheng cheng", 6), ("henkyi", "很可以", "hen ke yi", 6),
             ("clo", "丑陋", "chou lou", 2), ("sheng'c", "生成", "sheng cheng", 7),
             ("sheng'c'", "生成", "sheng cheng", 8), ("jv", "局", "ju", 2),
+            ("nihao", "你好", "ni hao", 5), ("liou", "留", "liu", 4),
+            ("xi'an", "西安", "xi an", 5), ("xi'an", "先", "xian", 1),
         ] {
             let candidate = Candidate { text: text.into(), reading_key: reading.into(), ..Candidate::default() };
             assert_eq!(candidate_coverage(raw, &candidate), Some(consumed), "{raw}: {candidate:?}");
@@ -1350,12 +1424,16 @@ pub struct ZhixuDecoder {
     confirmed: Vec<ConfirmedSegment>,
     undo_confirmation: bool,
     candidates: std::sync::Arc<Vec<GeneratedCandidate>>,
+    natural_candidates: Option<std::sync::Arc<Vec<GeneratedCandidate>>>,
     // Undoing a confirmed segment restores its spelling boundary. Menu
     // navigation must not replace that boundary with the highlighted word.
     restored_preedit: Option<GeneratedCandidate>,
     selected: usize,
     learning: LearningSession,
     whole: bool,
+    zhiju_phrases: bool,
+    #[cfg(feature = "mac-fast-typing")]
+    zhiju_menu_phrases: bool,
     dictionary: Option<std::sync::Arc<Index>>,
     lattice: std::cell::RefCell<Option<crate::mixer::WholeLattice>>,
     prefix_candidates: Vec<PrefixCandidates>,
@@ -1373,7 +1451,10 @@ impl ZhixuDecoder {
     pub fn new() -> Self {
         Self { raw: String::new(), preedit: String::new(), caret: 0, cursor_utf8: 0,
             caret_focused: false, letter_caret: false, caret_stops: Vec::new(), confirmed: Vec::new(), undo_confirmation: false, candidates: std::sync::Arc::default(),
-            restored_preedit: None, selected: 0, learning: LearningSession::default(), whole: false, dictionary: None, lattice: std::cell::RefCell::new(None), prefix_candidates: Vec::new(), prefix_candidate_bytes: 0, prefix_generation: None, prefix_bonuses: Vec::new(), fuzzy_mask: 0 }
+            natural_candidates: None, restored_preedit: None, selected: 0, learning: LearningSession::default(), whole: false, zhiju_phrases: false,
+            #[cfg(feature = "mac-fast-typing")]
+            zhiju_menu_phrases: false,
+            dictionary: None, lattice: std::cell::RefCell::new(None), prefix_candidates: Vec::new(), prefix_candidate_bytes: 0, prefix_generation: None, prefix_bonuses: Vec::new(), fuzzy_mask: 0 }
     }
 
     pub(crate) fn from_ready_dictionary(dictionary: std::sync::Arc<Index>) -> Self {
@@ -1425,6 +1506,7 @@ impl ZhixuDecoder {
         let raw = &self.raw[self.confirmed_end()..];
         // Retain a bounded LRU across edits and composition boundaries. Short
         // prefixes recur often, but remain valid only under the generation above.
+        self.natural_candidates = None;
         self.candidates = if let Some(position) = self.prefix_candidates.iter().position(|cached| cached.raw == raw) {
             let cached = self.prefix_candidates.remove(position);
             let candidates = cached.candidates.clone();
@@ -1465,6 +1547,13 @@ impl ZhixuDecoder {
             }
             candidates
         };
+        #[cfg(feature = "mac-fast-typing")]
+        {
+            self.zhiju_menu_phrases = self.zhiju_phrases && self.confirmed.is_empty() && self.caret == self.raw.len();
+            if self.zhiju_menu_phrases {
+                Self::add_zhiju_phrases(raw, &mut self.candidates, &self.learning, self.dictionary.as_deref());
+            }
+        }
         self.restored_preedit = None;
         self.selected = 0;
         self.caret_focused = false;
@@ -1473,6 +1562,105 @@ impl ZhixuDecoder {
             && !format_preedit(&self.raw[..self.caret]).contains([' ', '\'']);
         self.caret_stops.clear();
         self.refresh_preedit();
+    }
+
+    #[cfg(feature = "mac-fast-typing")]
+    fn add_zhiju_phrases(raw: &str, candidates: &mut std::sync::Arc<Vec<GeneratedCandidate>>,
+                         learning: &LearningSession, dictionary: Option<&Index>) {
+        use super::zhiju_phrase_menu::{self, CONTINUATION, TYPED_PHRASE};
+        if !(3..=49).contains(&raw.len()) || !raw.bytes().all(|b| b.is_ascii_lowercase() || b == b'\'') {
+            return;
+        }
+        let Some(head) = candidates.first() else { return };
+        let typed = super::zhiju_typed_phrases::candidates(raw);
+        // An assembled tail often carries the typed letters as a placeholder
+        // reading. Its text and consumed span can be reused once the independent
+        // phrase source has proved every syllable, including in a mixed spelling.
+        let reusable = |row: &GeneratedCandidate, consumed: usize, reading: &str| {
+            row.consumed == consumed && (row.candidate.reading_key == reading
+                || row.candidate.reading_key == raw
+                || row.candidate.reading_key.bytes().eq(reading.split_whitespace().flat_map(str::bytes)))
+        };
+        // A uniquely attested full spelling may lead an unrecognised assembly.
+        // An exact dictionary word or a user's established choice keeps priority.
+        let mut exact = typed.iter().filter(|word| word.reading.split_whitespace().flat_map(str::bytes)
+            .eq(raw.bytes().filter(|&b| b != b'\'')));
+        if let Some(word) = exact.next() && exact.next().is_none() && word.text != head.candidate.text
+            && let Some(dictionary) = dictionary
+            && !dictionary.all_readings_for_text(&head.candidate.text).any(|r|
+                r.split_whitespace().flat_map(str::bytes).eq(raw.bytes().filter(|&b| b != b'\'')))
+            && !learning.entries().iter().any(|e| e.is_learned() && e.text == head.candidate.text)
+            && !learning.choices().iter().any(|c| c.text == head.candidate.text) {
+            let original = candidates.iter().position(|entry| entry.candidate.text == word.text);
+            if original.is_none_or(|i| reusable(&candidates[i], word.consumed, word.reading)) {
+                let page = std::sync::Arc::make_mut(candidates);
+                let item = Self::take_zhiju_phrase(page, original, word.text, word.reading, word.consumed, TYPED_PHRASE);
+                page.insert(0, item);
+            }
+        }
+        let head = &candidates[0];
+        let mut offers: Vec<_> = typed.into_iter().map(|word|
+            (word.text, word.reading, word.consumed, TYPED_PHRASE)).collect();
+        if head.consumed == raw.len() && head.candidate.text.chars().count() == 2 {
+            offers.extend(zhiju_phrase_menu::continuations(raw, &head.candidate)
+                .map(|(text, reading)| (text, reading, raw.len(), CONTINUATION)));
+        }
+        if offers.is_empty() { return; }
+        let entries = learning.entries();
+        let protected = candidates.iter().take(PAGE_SIZE).rposition(|c|
+            entries.iter().any(|e| e.is_learned() && e.text == c.candidate.text
+                && e.reading == c.candidate.reading_key)).map_or(0, |i| i + 1);
+        let mut slot = 3.min(candidates.len()).max(protected);
+        if candidates.get(3).is_some_and(|item| item.consumed == raw.len()
+            && item.candidate.reading_key.split_whitespace().flat_map(str::bytes)
+                .eq(raw.bytes().filter(|&b| b != b'\''))) {
+            slot = slot.max(4);
+        }
+        if slot == PAGE_SIZE - 1 && offers.first().is_some_and(|offer| offer.3 == CONTINUATION)
+            && let Some(longer) = offers.iter().take(3).position(|offer| offer.0.chars().count() >= 4) {
+            // With one slot left, a longer phrase saves more input. Stay within
+            // the model's leading three continuations of this exact same word.
+            offers[..=longer].rotate_right(1);
+        }
+        // The display and key mapping both slice this single sequence. The prefix
+        // cache above contains only natural words, so a later letter cannot treat
+        // a predicted, untyped suffix as a spelled segment.
+        let mut shown_continuation: Option<&str> = None;
+        for (text, reading, consumed, comment) in offers {
+            if comment == CONTINUATION && shown_continuation.is_some_and(|previous|
+                text.starts_with(previous) || previous.starts_with(text)) { continue; }
+            let position = candidates.iter().position(|entry| entry.candidate.text == text);
+            if let Some(i) = position.filter(|&i| i < PAGE_SIZE) {
+                // The decoder may have assembled the same text already. Attach
+                // the verified reading to that digit without inserting a copy.
+                if comment == TYPED_PHRASE && reusable(&candidates[i], consumed, reading)
+                    && candidates[i].candidate.comment != TYPED_PHRASE
+                {
+                    let candidate = &mut std::sync::Arc::make_mut(candidates)[i].candidate;
+                    candidate.reading_key = reading.into();
+                    candidate.comment = comment.into();
+                }
+                continue;
+            }
+            if slot >= PAGE_SIZE || position.is_some_and(|i| !reusable(&candidates[i], consumed, reading)) {
+                continue;
+            }
+            let page = std::sync::Arc::make_mut(candidates);
+            let item = Self::take_zhiju_phrase(page, position, text, reading, consumed, comment);
+            page.insert(slot, item);
+            if comment == CONTINUATION { shown_continuation = Some(text); }
+            slot += 1;
+        }
+    }
+
+    #[cfg(feature = "mac-fast-typing")]
+    fn take_zhiju_phrase(page: &mut Vec<GeneratedCandidate>, position: Option<usize>, text: &str,
+                         reading: &str, consumed: usize, comment: &str) -> GeneratedCandidate {
+        let mut candidate = position.map(|pos| page.remove(pos).candidate)
+            .unwrap_or_else(|| Candidate { text: text.into(), ..Candidate::default() });
+        candidate.reading_key = reading.into();
+        candidate.comment = comment.into();
+        GeneratedCandidate { candidate, consumed }
     }
 
     fn refresh_preedit(&mut self) {
@@ -1657,7 +1845,11 @@ impl ZhixuDecoder {
             cursor_utf8: self.cursor_utf8, caret_focused: self.caret_focused, letter_caret: self.letter_caret,
             caret_stops: self.caret_stops.clone(), confirmed: self.confirmed.clone(),
             undo_confirmation: self.undo_confirmation, candidates: self.candidates.clone(),
-            restored_preedit: self.restored_preedit.clone(), selected: self.selected, learning, whole: self.whole, dictionary: self.dictionary.clone(),
+            natural_candidates: self.natural_candidates.clone(),
+            restored_preedit: self.restored_preedit.clone(), selected: self.selected, learning, whole: self.whole, zhiju_phrases: self.zhiju_phrases,
+            #[cfg(feature = "mac-fast-typing")]
+            zhiju_menu_phrases: self.zhiju_menu_phrases,
+            dictionary: self.dictionary.clone(),
             lattice: std::cell::RefCell::new(None), prefix_candidates: Vec::new(), prefix_candidate_bytes: 0, prefix_generation: None, prefix_bonuses: Vec::new(), fuzzy_mask: 0 }
     }
 
@@ -1675,6 +1867,10 @@ impl Decoder for ZhixuDecoder {
     fn dictionary_snapshot(&self) -> Option<std::sync::Arc<Index>> { self.dictionary.clone() }
 
     fn native_editing(&self) -> bool { true }
+
+    fn zhiju_append_raw(&self) -> Option<&str> {
+        (self.confirmed.is_empty() && self.caret == self.raw.len() && self.selected == 0).then_some(self.raw.as_str())
+    }
 
     fn composition_boundary(&self, _purpose: BoundaryPurpose) -> Option<CompositionBoundary> {
         Some(CompositionBoundary { confirmed: self.confirmed_text(),
@@ -1701,6 +1897,15 @@ impl Decoder for ZhixuDecoder {
         self.refresh();
         Ok(())
     }
+
+    fn configure_zhiju_phrases(&mut self, enabled: bool) {
+        // The current menu is already displayed. Only its next natural edit
+        // applies the preference, so a pending digit always picks what was shown.
+        self.zhiju_phrases = enabled;
+    }
+
+    #[cfg(feature = "mac-fast-typing")]
+    fn zhiju_phrases_for_current_menu(&self) -> bool { self.zhiju_menu_phrases }
 
     fn configure_zhixu_whole(&mut self, on: bool) -> Result<(), i32> {
         if self.is_composing() { return Err(-10); }
@@ -1736,6 +1941,37 @@ impl Decoder for ZhixuDecoder {
 
     fn snapshot_candidate_prefix(&self, maximum: usize) -> Option<DecoderSnapshot> {
         Some(self.snapshot_range(0, maximum, true))
+    }
+
+    fn prioritize_native_exact(&mut self, raw: &str, first: &str, word: &str) -> bool {
+        if self.natural_candidates.is_some() || self.fuzzy_mask != 0 || self.caret != self.raw.len()
+            || self.raw != raw || self.selected != 0 || !self.confirmed.is_empty()
+        {
+            return false;
+        }
+        let exact = |item: &GeneratedCandidate| item.consumed == raw.len()
+            && item.candidate.reading_key.split_whitespace().flat_map(str::bytes).eq(raw.bytes());
+        if !self.candidates.first().is_some_and(|item| item.candidate.text == first && exact(item)) {
+            return false;
+        }
+        let Some(position) = self.candidates.iter().take(4 * PAGE_SIZE)
+            .position(|item| item.candidate.text == word && exact(item))
+            .filter(|position| *position >= PAGE_SIZE)
+        else { return false; };
+        // Preserve the candidate cache. Only this composition sees the rotation.
+        self.natural_candidates = Some(self.candidates.clone());
+        std::sync::Arc::make_mut(&mut self.candidates)[..=position].rotate_right(1);
+        self.refresh_preedit();
+        true
+    }
+
+    fn native_exact_priority_active(&self) -> bool { self.natural_candidates.is_some() }
+
+    fn clear_native_exact_priority(&mut self) {
+        if let Some(natural) = self.natural_candidates.take() {
+            self.candidates = natural;
+            self.refresh_preedit();
+        }
     }
 
     fn whole_prefix_has_raw_echo(&self) -> bool {
@@ -1897,6 +2133,7 @@ impl Decoder for ZhixuDecoder {
         self.caret_stops.clear();
         self.confirmed.clear();
         self.undo_confirmation = false;
+        self.natural_candidates = None;
         self.candidates = std::sync::Arc::default();
         self.restored_preedit = None;
         self.selected = 0;

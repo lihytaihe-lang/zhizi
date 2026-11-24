@@ -17142,6 +17142,7 @@ withdraw	withdraw	466
 先住进去	xian zhu jin qu	250
 先例	xian li	343
 先保存	xian bao cun	250
+先保留	xian bao liu	400
 先保证	xian bao zheng	468
 先倒杯水	xian dao bei shui	250
 先候车吧	xian hou che ba	250
@@ -17199,6 +17200,7 @@ withdraw	withdraw	466
 先刷锅	xian shua guo	250
 先前	xian qian	1169
 先剪	xian jian	231
+先办理	xian ban li	400
 先加愿望单	xian jia yuan wang dan	250
 先加购	xian jia gou	250
 先占个位	xian zhan ge wei	250
@@ -20089,6 +20091,7 @@ withdraw	withdraw	466
 再决定	zai jue ding	957
 再减	zai jian	369
 再出	zai chu	175
+再出发	zai chu fa	180
 再分	zai fen	336
 再创	zai chuang	305
 再到	zai dao	972
@@ -20251,6 +20254,7 @@ withdraw	withdraw	466
 再次出现	zai ci chu xian	386
 再次发生	zai ci fa sheng	338
 再次来	zai ci lai	290
+再次确认	zai ci que ren	260
 再沟通	zai gou tong	400
 再没	zai mei	169
 再洗洗	zai xi xi	250
@@ -22441,6 +22445,7 @@ withdraw	withdraw	466
 出的	chu de	899
 出示	chu shi	781
 出示码	chu shi ma	250
+出示证件	chu shi zheng jian	120
 出神	chu shen	122
 出神入化	chu shen ru hua	119
 出票	chu piao	254
@@ -25700,6 +25705,7 @@ withdraw	withdraw	466
 办满月	ban man yue	250
 办独生子女证	ban du sheng zi nv zheng	250
 办理	ban li	8718
+办理手续	ban li shou xu	120
 办社保	ban she bao	400
 办离婚证	ban li hun zheng	250
 办税	ban shui	60
@@ -27764,6 +27770,7 @@ withdraw	withdraw	466
 升级下	sheng ji xia	250
 升级了	sheng ji le	250
 升级到	sheng ji dao	718
+升级前	sheng ji qian	120
 升级包	sheng ji bao	170
 升级后	sheng ji hou	736
 升级成	sheng ji cheng	440
@@ -29305,7 +29312,7 @@ withdraw	withdraw	466
 卸载图片	xie zai tu pian	104
 卸载掉	xie zai diao	250
 卸载看看	xie zai kan kan	250
-卸载重装	xie zai zhong zhuang	250
+卸载重装	xie zai chong zhuang	250
 卹	xu	2
 卺	jin	6
 卻	que	267
@@ -30009,6 +30016,7 @@ withdraw	withdraw	466
 去趟	qu tang	1304
 去趟超市	qu tang chao shi	250
 去跟	qu gen	146
+去车库	qu che ku	80
 去过	qu guo	3415
 去过两次	qu guo liang ci	464
 去过几次	qu guo ji ci	538
@@ -30393,6 +30401,7 @@ withdraw	withdraw	466
 及对	ji dui	106
 及早	ji zao	451
 及时	ji shi	12420
+及时反馈	ji shi fan kui	260
 及时性	ji shi xing	343
 及时行乐	ji shi xing le	119
 及格	ji ge	803
@@ -30896,6 +30905,7 @@ withdraw	withdraw	466
 反馈信息	fan kui xin xi	122
 反馈入口	fan kui ru kou	604
 反馈单	fan kui dan	104
+反馈意见	fan kui yi jian	260
 反馈控制	fan kui kong zhi	120
 反馈渠道	fan kui qu dao	422
 反馈表	fan kui biao	262
@@ -67988,6 +67998,8 @@ withdraw	withdraw	466
 指增策略	zhi zeng ce lve	250
 指头	zhi tou	428
 指定	zhi ding	6337
+指定专人	zhi ding zhuan ren	520
+指定代理人	zhi ding dai li ren	520
 指定位置	zhi ding wei zhi	240
 指定目录	zhi ding mu lu	228
 指导	zhi dao	8377
@@ -94568,6 +94580,7 @@ withdraw	withdraw	466
 熟了	shu le	250
 熟了没	shu le mei	250
 熟人	shu ren	1146
+熟品	shu pin	50
 熟啤	shu pi	159
 熟地	shu di	146
 熟女	shu nv	378
@@ -104149,6 +104162,7 @@ withdraw	withdraw	466
 确认了	que ren le	250
 确认人数	que ren ren shu	247
 确认信	que ren xin	195
+确认信息	que ren xin xi	260
 确认修改	que ren xiu gai	250
 确认其	que ren qi	602
 确认函	que ren han	551
@@ -150759,6 +150773,7 @@ withdraw	withdraw	466
 齎	ji	1
 齏	ji	1
 齐	qi	4112
+齐了	qi le	180
 齐云山	qi yun shan	250
 齐全	qi quan	1631
 齐刷刷	qi shua shua	204

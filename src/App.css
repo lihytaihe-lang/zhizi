@@ -2089,7 +2089,6 @@ select:focus {
 }
 
 /* 皮肤商店 */
-.skin-segments,
 .skin-store,
 .skin-store-confirm,
 .skin-store-drawer-backdrop {
@@ -2104,18 +2103,6 @@ select:focus {
   color: var(--skin-text);
 }
 
-.skin-segments {
-  display: inline-flex;
-  max-width: 100%;
-  gap: 4px;
-  padding: 3px;
-  margin-bottom: 14px;
-  border: 1px solid var(--skin-border);
-  border-radius: 8px;
-  background: var(--skin-surface);
-}
-
-.skin-segment,
 .skin-store-filter {
   min-height: 32px;
   border: 0;
@@ -2127,7 +2114,6 @@ select:focus {
   font-weight: 700;
 }
 
-.skin-segment.is-active,
 .skin-store-filter.is-active {
   background: var(--skin-accent);
   color: var(--skin-on-accent);
@@ -2169,10 +2155,6 @@ select:focus {
   margin: 0;
   color: var(--skin-text);
   font-size: 0.95rem;
-}
-
-.skin-store-account {
-  margin-left: auto;
 }
 
 .skin-store-search {
@@ -2500,7 +2482,6 @@ input.skin-store-search,
   font-size: 0.82rem;
 }
 
-.skin-segment:focus-visible,
 .skin-store button:focus-visible,
 .skin-store input:focus-visible,
 .skin-store-confirm button:focus-visible,
@@ -2524,7 +2505,6 @@ input.skin-store-search,
 }
 
 @media (prefers-color-scheme: dark) {
-  .skin-segments,
   .skin-store,
   .skin-store-confirm,
   .skin-store-drawer-backdrop {
@@ -2538,31 +2518,3 @@ input.skin-store-search,
     --skin-warning: #ffb19b;
   }
 }
-
-.skin-account-heading, .skin-account-connection-controls, .skin-account-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.skin-account-heading { justify-content: space-between; margin: 18px 0 12px; }
-.skin-account-heading p { margin: 5px 0; }
-.skin-account-connection-controls input { flex: 1; min-width: 180px; }
-.skin-account-actions { margin-top: 12px; }
-.skin-account-actions button { font-size: 12px; padding: 7px 11px; }
-.skin-account button:focus-visible, .skin-account input:focus-visible {
-  outline: 3px solid #82b49d;
-  outline-offset: 3px;
-}
-@media (max-width: 640px) { .skin-account-connection-controls input { flex-basis: 100%; } }
-.skin-account { margin: 16px 0; }
-.skin-account-connection, .skin-order-help { margin: 16px 0; padding: 14px; border: 1px solid #d5dfd7; border-radius: 10px; }
-.skin-account summary { cursor: pointer; font-size: 13px; }
-.skin-account p { font-size: 13px; color: #52645a; }
-.skin-account-login { display: grid; gap: 8px; max-width: 460px; margin: 18px 0; }
-.skin-account-notice { background: #f4f3e9; padding: 14px; border-radius: 8px; }
-.skin-owned-list > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 10px 0; padding: 12px; background: #f4f7f4; border-radius: 10px; overflow-wrap: anywhere; }
-.skin-order { margin: 12px 0; padding: 16px; border: 1px solid #d5dfd7; border-radius: 12px; }
-.skin-order small { overflow-wrap: anywhere; }
-.skin-order .skin-account-heading { margin-top: 0; font-size: 13px; }
-.skin-account .skin-account-error { color: #973e2b; }

@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react";
 import type { StoreSkin } from "../lib/skinStore";
-import { formatSkinPrice } from "../lib/skinStore";
 import { SkinStoreAction, type SkinStoreOperation } from "./SkinStoreCard";
 import { SkinStorePreview } from "./SkinStorePreview";
 
@@ -48,7 +47,6 @@ export function SkinStoreDetails({ previewEnabled, loadPreview, message, error, 
         <SkinStorePreview name={skin.name.zh} enabled={previewEnabled} load={loadPreview} />
         <p>{skin.description}</p>
         <dl className="skin-store-details">
-          <dt>价格</dt><dd>{formatSkinPrice(skin.priceCents, skin.currency)}</dd>
           <dt>适用系统</dt><dd>{(skin.platforms ?? ["macos"]).map((platform) => (({ macos: "macOS", windows: "Windows", linux: "Ubuntu / Linux" } as Record<string, string>)[platform] ?? platform)).join("、")}</dd>
           <dt>版本</dt><dd>{skin.version}</dd>
           <dt>大小</dt><dd>{size}</dd>

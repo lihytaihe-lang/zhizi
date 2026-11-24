@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act } from "react";
 import { SkinStore } from "../components/SkinStore";
-import { SkinCommercePanel } from "../components/SkinCommercePanel";
 import type { CandidateSkinCatalogSnapshot } from "../lib/lexicon";
 import type { StoreSkin, StoreSnapshot } from "../lib/skinStore";
 import { findButton, installMiniDom, MiniEvent, MiniKeyboardEvent, MiniMouseEvent, type MiniElement } from "./support/miniDom";
@@ -14,9 +13,9 @@ const updatedAt = Date.UTC(2026, 10, 8, 4);
 function skin(id: string, overrides: Partial<StoreSkin> = {}): StoreSkin {
   return {
     id, name: { zh: id, en: `English ${id}` }, author: "测试作者", description: `${id} 的皮肤描述`,
-    version: "1.2.0", tier: "free", priceCents: 0, productId: `skin.${id}`, animated: false,
+    version: "1.2.0", tier: "free", productId: `skin.${id}`, animated: false,
     bundleBytes: 812345, minAppVersion: "0.3.24", updatedAt: "2026-11-08", license: "测试许可",
-    changelog: "改善预览", state: "notInstalled", installedVersion: null, owned: true, ownedError: null,
+    changelog: "改善预览", state: "notInstalled", installedVersion: null,
     ...overrides,
   };
 }
@@ -58,11 +57,20 @@ async function mountStore(
     handler?: (command: string, args?: Record<string, unknown>) => unknown;
     beforeCheck?: boolean;
   },
-  check: (container: MiniElement, calls: InvokeCall[]) => Promise<void>,
+  check: (container: MiniElement, calls: InvokeCall[], focus: () => void) => Promise<void>,
 ) {
   const dom = installMiniDom();
   const runtime = window as unknown as { __TAURI_INTERNALS__?: { invoke: (command: string, args?: Record<string, unknown>) => Promise<unknown> } };
   const calls: InvokeCall[] = [];
+  const previousAdd = window.addEventListener;
+  const previousRemove = window.removeEventListener;
+  let onFocus: EventListenerOrEventListenerObject | null = null;
+  window.addEventListener = (type: string, listener: EventListenerOrEventListenerObject) => {
+    if (type === "focus") onFocus = listener;
+  };
+  window.removeEventListener = (type: string, listener: EventListenerOrEventListenerObject) => {
+    if (type === "focus" && listener === onFocus) onFocus = null;
+  };
   (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   runtime.__TAURI_INTERNALS__ = { invoke: async (command, args) => {
     calls.push({ command, args });
@@ -86,10 +94,16 @@ async function mountStore(
     if (options.beforeCheck !== false) {
       await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
     }
-    await check(dom.container, calls);
+    await check(dom.container, calls, () => {
+      if (typeof onFocus === "function") onFocus(new Event("focus"));
+    });
   } finally {
     await act(async () => { root.unmount(); });
     delete runtime.__TAURI_INTERNALS__;
+    if (previousAdd) window.addEventListener = previousAdd;
+    else Reflect.deleteProperty(window, "addEventListener");
+    if (previousRemove) window.removeEventListener = previousRemove;
+    else Reflect.deleteProperty(window, "removeEventListener");
     dom.cleanup();
   }
 }
@@ -158,20 +172,15 @@ test("refresh rejection retains cached cards and permits retry without duplicate
   });
 });
 
-test("cards show all state labels, exact prices and an upgrade explanation", async () => {
+test("free cards show state labels and an upgrade explanation", async () => {
   await mountStore({ skins: [
-    skin("免费皮肤"), skin("付费皮肤", { tier: "paid", priceCents: 1200, owned: null, ownedError: "notConfigured" }),
-    skin("半元皮肤", { tier: "paid", priceCents: 1250, owned: false }),
-    skin("已购皮肤", { tier: "paid", priceCents: 1200, owned: true }),
+    skin("免费皮肤"),
     skin("已装皮肤", { state: "installed", installedVersion: "1.2.0" }),
     skin("当前皮肤", { state: "installed", installedVersion: "1.2.0" }),
     skin("新版皮肤", { state: "updateAvailable", installedVersion: "1.0.0" }),
     skin("升级皮肤", { state: "needsAppUpgrade", minAppVersion: "99.0.0" }),
   ] }, async (container) => {
     assert.ok(findButton(row(container, "免费皮肤"), "获取"));
-    assert.ok(findButton(row(container, "付费皮肤"), "购买 ¥12"));
-    assert.ok(findButton(row(container, "半元皮肤"), "购买 ¥12.50"));
-    assert.ok(findButton(row(container, "已购皮肤"), "获取"));
     assert.equal(findButton(row(container, "已装皮肤"), "已安装")?.disabled, true);
     assert.equal(findButton(row(container, "当前皮肤"), "已安装")?.disabled, true);
     assert.match(row(container, "新版皮肤").textContent, /新版/);
@@ -186,8 +195,8 @@ test("cards show all state labels, exact prices and an upgrade explanation", asy
   });
 });
 
-test("free and owned installs and updates invoke install once, show pending progress and mark the installed product", async () => {
-  for (const entry of [skin("下载皮肤"), skin("下载皮肤", { tier: "paid", priceCents: 1200, owned: true }),
+test("free installs and updates invoke install once, show pending progress and mark the installed product", async () => {
+  for (const entry of [skin("下载皮肤"),
     skin("下载皮肤", { state: "updateAvailable", installedVersion: "1.0.0" })]) {
     let resolveInstall!: (value: CandidateSkinCatalogSnapshot) => void;
     await mountStore({ skins: [entry], handler: (command) => command === "skin_store_install"
@@ -201,7 +210,6 @@ test("free and owned installs and updates invoke install once, show pending prog
       assert.deepEqual(calls.filter((call) => call.command === "skin_store_install"), [
         { command: "skin_store_install", args: { id: "下载皮肤" } },
       ]);
-      assert.ok(!calls.some((call) => call.command === "skin_store_purchase"));
       const installed = catalog("下载皮肤");
       await act(async () => { resolveInstall(installed); });
       assert.equal(findButton(row(container, "下载皮肤"), "已安装")?.disabled, true);
@@ -220,29 +228,19 @@ test("failed installation shows the backend message and re-enables acquisition",
   });
 });
 
-test("purchase invokes its command, displays the message verbatim and does not install", async () => {
-  for (const message of ["购买功能尚未开放", "请先登录", "自定义购买失败：稍后再来", ""]) {
-    await mountStore({ skins: [skin("购买皮肤", { tier: "paid", priceCents: 1200, owned: null })],
-      handler: (command) => command === "skin_store_purchase" ? { ok: false, message } : undefined,
-    }, async (container, calls) => {
-      await click(findButton(row(container, "购买皮肤"), "购买 ¥12"));
-      assert.deepEqual(calls.find((call) => call.command === "skin_store_purchase")?.args, { id: "购买皮肤" });
-      if (message) assert.ok(container.textContent.includes(message));
-      assert.ok(!calls.some((call) => call.command === "skin_store_install"));
-      assert.ok(findButton(row(container, "购买皮肤"), "购买 ¥12"));
-    });
-  }
+test("paid entries and account actions are absent even if cached data contains a paid skin", async () => {
+  await mountStore({ skins: [skin("免费皮肤"), skin("付费样例", { tier: "paid" })] }, async (container, calls) => {
+    assert.ok(row(container, "免费皮肤"));
+    assert.doesNotMatch(container.textContent, /付费样例|账号与订单|登录|购买/);
+    assert.deepEqual(calls.map(({ command }) => command).sort(), ["skin_store_get_settings", "skin_store_list"]);
+  });
 });
 
 test("filters combine with case-insensitive search across names and authors", async () => {
   await mountStore({ skins: [skin("云朵", { name: { zh: "云朵", en: "Cloud" }, author: "Alice", animated: true }),
-    skin("墨色", { name: { zh: "墨色", en: "Ink" }, tier: "paid", priceCents: 1200 }),
+    skin("墨色", { name: { zh: "墨色", en: "Ink" }, tier: "paid" }),
     skin("雪色", { state: "installed", installedVersion: "1.2.0" }),
     skin("新版", { state: "updateAvailable", installedVersion: "1.0.0" })] }, async (container) => {
-    await click(findButton(container, "付费"));
-    assert.equal(container.querySelectorAll("article").length, 1);
-    assert.ok(row(container, "墨色"));
-    await click(findButton(container, "免费"));
     assert.equal(container.querySelectorAll("article").length, 3);
     await click(findButton(container, "动画"));
     assert.equal(container.querySelectorAll("article").length, 1);
@@ -255,18 +253,9 @@ test("filters combine with case-insensitive search across names and authors", as
     assert.ok(row(container, "云朵"));
     await enterText(container.querySelector('[aria-label="搜索皮肤"]'), "alice");
     assert.equal(container.querySelectorAll("article").length, 1);
-    await click(findButton(container, "付费"));
+    await enterText(container.querySelector('[aria-label="搜索皮肤"]'), "墨色");
     assert.equal(container.querySelectorAll("article").length, 0);
     assert.match(container.textContent, /没有|未找到/);
-  });
-});
-
-test("login placeholder remains available and only displays its account message", async () => {
-  await mountStore({ skins: [] }, async (container, calls) => {
-    const before = calls.length;
-    await click(findButton(container, "登录"));
-    assert.match(container.textContent, /请打开账号与订单登录。/);
-    assert.equal(calls.length, before);
   });
 });
 
@@ -330,27 +319,6 @@ test("previews wait for explicit refresh and intersection and failures retain a 
   }
 });
 
-test("purchase progress blocks repeat submissions and success changes to acquisition without installing", async () => {
-  let resolvePurchase!: (value: { ok: boolean; message: string }) => void;
-  let purchased = false;
-  await mountStore({ handler: (command) => {
-    if (command === "skin_store_list") return snapshot([skin("购买进度", { tier: "paid", priceCents: 1200, owned: purchased })]);
-    if (command === "skin_store_purchase") return new Promise((resolve) => {
-      resolvePurchase = (result) => { purchased = result.ok; resolve(result); };
-    });
-  } }, async (container, calls) => {
-    const purchase = findButton(row(container, "购买进度"), "购买 ¥12");
-    await click(purchase);
-    assert.equal(purchase?.disabled, true);
-    assert.match(row(container, "购买进度").textContent, /正在购买/);
-    await click(purchase);
-    assert.equal(calls.filter((call) => call.command === "skin_store_purchase").length, 1);
-    await act(async () => { resolvePurchase({ ok: true, message: "购买成功" }); });
-    assert.ok(findButton(row(container, "购买进度"), "获取"));
-    assert.ok(!calls.some((call) => call.command === "skin_store_install"));
-  });
-});
-
 test("an installed skin with an available update remains actionable", async () => {
   await mountStore({ skins: [skin("当前新版", {
     state: "updateAvailable", installedVersion: "1.0.0",
@@ -405,104 +373,36 @@ test("missing IntersectionObserver keeps placeholders and never fetches previews
   }
 });
 
-test("installation serializes other store actions until its catalog update completes", async () => {
+test("installation serializes free downloads until the catalog update completes", async () => {
   let resolveInstall!: (value: CandidateSkinCatalogSnapshot) => void;
-  await mountStore({ skins: [skin("serialize-install"), skin("serialize-purchase", { tier: "paid", priceCents: 1200, owned: false })],
-    handler: (command) => {
-      if (command === "skin_store_install") return new Promise((resolve) => { resolveInstall = resolve; });
-      if (command === "skin_store_purchase") return { ok: false, message: "购买功能尚未开放" };
-    },
+  await mountStore({ skins: [skin("first-install"), skin("second-install")],
+    handler: (command) => command === "skin_store_install"
+      ? new Promise((resolve) => { resolveInstall = resolve; }) : undefined,
   }, async (container, calls) => {
-    await click(findButton(row(container, "serialize-install"), "获取"));
-    const purchase = findButton(row(container, "serialize-purchase"), "购买 ¥12");
-    await click(purchase);
-    assert.equal(calls.filter((call) => call.command === "skin_store_purchase").length, 0);
-    assert.equal(purchase?.disabled, true);
-    await act(async () => { resolveInstall(catalog("serialize-install")); });
-    assert.equal(purchase?.disabled, false);
-    await click(purchase);
-    assert.equal(calls.filter((call) => call.command === "skin_store_purchase").length, 1);
+    await click(findButton(row(container, "first-install"), "获取"));
+    const second = findButton(row(container, "second-install"), "获取");
+    assert.equal(second?.disabled, true);
+    await click(second);
+    assert.deepEqual(calls.filter(({ command }) => command === "skin_store_install").map(({ args }) => args?.id), ["first-install"]);
+    await act(async () => { resolveInstall(catalog("first-install")); });
+    assert.equal(second?.disabled, false);
+    await click(second);
+    await act(async () => { resolveInstall(catalog("second-install")); });
+    assert.deepEqual(calls.filter(({ command }) => command === "skin_store_install").map(({ args }) => args?.id), ["first-install", "second-install"]);
   });
 });
 
-async function mountCommerce(
-  handler: (command: string, args?: Record<string, unknown>) => unknown,
-  check: (container: MiniElement, calls: InvokeCall[], focus: () => void) => Promise<void>,
-) {
-  const dom = installMiniDom();
-  const calls: InvokeCall[] = [];
-  const runtime = window as unknown as {
-    __TAURI_INTERNALS__?: { invoke: (command: string, args?: Record<string, unknown>) => Promise<unknown> };
-    addEventListener?: (event: string, listener: () => void) => void;
-    removeEventListener?: (event: string, listener: () => void) => void;
-  };
-  const previousAdd = runtime.addEventListener;
-  const previousRemove = runtime.removeEventListener;
-  const focusListeners = new Set<() => void>();
-  runtime.addEventListener = (event, listener) => { if (event === "focus") focusListeners.add(listener); };
-  runtime.removeEventListener = (event, listener) => { if (event === "focus") focusListeners.delete(listener); };
-  runtime.__TAURI_INTERNALS__ = { invoke: async (command, args) => {
-    calls.push({ command, args });
-    const result = handler(command, args);
-    if (result !== undefined) return result;
-    switch (command) {
-      case "skin_account_cached": return { serviceUrl: "", account: null, orders: [], ownedProductIds: [] };
-      case "skin_store_get_settings":
-      case "skin_store_set_url": return { indexUrl: storeUrl, lastRefreshedAtMs: updatedAt };
-      case "skin_store_list":
-      case "skin_store_refresh": return snapshot([skin("settings-install")]);
-      case "skin_store_preview": return "data:image/png;base64,dGVzdA==";
-      default: throw new Error(`Unexpected command: ${command}`);
-    }
-  } };
-  (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  const { createRoot } = await import("react-dom/client");
-  const root = createRoot(dom.container as unknown as Element);
-  try {
-    await act(async () => { root.render(<SkinCommercePanel />); });
-    await check(dom.container, calls, () => focusListeners.forEach((listener) => listener()));
-  } finally {
-    await act(async () => { root.unmount(); });
-    delete runtime.__TAURI_INTERNALS__;
-    runtime.addEventListener = previousAdd;
-    runtime.removeEventListener = previousRemove;
-    dom.cleanup();
-  }
-}
-
-test("the store retains its catalog when the user opens orders and returns", async () => {
-  await mountCommerce(() => undefined, async (container, calls) => {
-    const store = container.querySelector(".skin-store");
-    assert.ok(store);
-    assert.equal(calls.filter((call) => call.command === "skin_account_cached").length, 0);
-    await click(findButton(store, "刷新"));
-    await click(findButton(store, "登录"));
-    assert.equal(findButton(container, "账号与订单")?.getAttribute("aria-pressed"), "true");
-    assert.equal(calls.filter((call) => call.command === "skin_account_cached").length, 1);
-    await click(findButton(container, "皮肤商店"));
-    assert.equal(calls.filter((call) => call.command === "skin_store_list").length, 1);
-    assert.equal(calls.filter((call) => call.command === "skin_store_refresh").length, 1);
-    assert.match(store.textContent, /皮肤预览/);
-    assert.doesNotMatch(store.textContent, /刷新后加载预览/);
-  });
-});
-
-test("the shop holds its active tab until an installation finishes", async () => {
-  let resolveInstall!: (value: CandidateSkinCatalogSnapshot) => void;
-  await mountCommerce((command) => command === "skin_store_install"
-    ? new Promise((resolve) => { resolveInstall = resolve; }) : undefined,
-  async (container, calls) => {
-    const store = container.querySelector(".skin-store");
-    assert.ok(store);
-    await click(findButton(row(store, "settings-install"), "获取"));
-    const orders = findButton(container, "账号与订单");
-    assert.equal(orders?.disabled, true);
-    await click(orders);
-    assert.equal(findButton(container, "皮肤商店")?.getAttribute("aria-pressed"), "true");
-    assert.equal(calls.filter((call) => call.command === "skin_store_install").length, 1);
-    await act(async () => { resolveInstall(catalog("settings-install")); });
-    assert.equal(orders?.disabled, false);
-    assert.equal(findButton(row(store, "settings-install"), "已安装")?.disabled, true);
+test("returning from the gallery rereads the local store cache without reaching the network", async () => {
+  let installed = false;
+  await mountStore({ handler: (command) => command === "skin_store_list"
+    ? snapshot([skin("native-gallery", installed ? { state: "installed", installedVersion: "1.2.0" } : {})]) : undefined,
+  }, async (container, calls, focus) => {
+    assert.ok(findButton(row(container, "native-gallery"), "获取"));
+    installed = true;
+    await act(async () => focus());
+    assert.equal(findButton(row(container, "native-gallery"), "已安装")?.disabled, true);
+    assert.equal(calls.filter(({ command }) => command === "skin_store_list").length, 2);
+    assert.ok(!calls.some(({ command }) => command === "skin_store_refresh"));
   });
 });
 
@@ -571,23 +471,18 @@ test("a rejected cache read exits loading and offers an explicit successful retr
   });
 });
 
-test("purchase notices and action errors remain readable inside the open details dialog", async () => {
-  for (const mode of ["purchase", "install"] as const) {
-    const notice = mode === "purchase" ? "购买功能尚未开放" : "皮肤下载失败，请重试";
-    await mountStore({ skins: [skin("dialog-feedback", mode === "purchase" ? { tier: "paid", priceCents: 1200, owned: false } : {})],
-      handler: (command) => {
-        if (command === "skin_store_purchase") return { ok: false, message: notice };
-        if (command === "skin_store_install") throw notice;
-      },
-    }, async (container) => {
-      await click(container.querySelector('[aria-label="查看 dialog-feedback 详情"]'));
-      const dialog = container.querySelector('[role="dialog"]');
-      assert.ok(dialog);
-      await click(findButton(dialog, mode === "purchase" ? "购买 ¥12" : "获取"));
-      assert.ok(dialog.textContent.includes(notice));
-      assert.equal(container.querySelector('[role="dialog"]'), dialog);
-    });
-  }
+test("installation errors remain readable inside the open details dialog", async () => {
+  const notice = "皮肤下载失败，请重试";
+  await mountStore({ skins: [skin("dialog-feedback")],
+    handler: (command) => { if (command === "skin_store_install") throw notice; },
+  }, async (container) => {
+    await click(container.querySelector('[aria-label="查看 dialog-feedback 详情"]'));
+    const dialog = container.querySelector('[role="dialog"]');
+    assert.ok(dialog);
+    await click(findButton(dialog, "获取"));
+    assert.ok(dialog.textContent.includes(notice));
+    assert.equal(container.querySelector('[role="dialog"]'), dialog);
+  });
 });
 
 test("details retain Tab focus when its pending action becomes disabled or focus falls to the body", async () => {
@@ -614,22 +509,5 @@ test("details retain Tab focus when its pending action becomes disabled or focus
     assert.equal(fromBody.defaultPrevented, true);
     assert.ok(document.activeElement === close, "focus should stay on the dialog close action");
     await act(async () => { resolveInstall(catalog("dialog-pending")); });
-  });
-});
-
-test("returning from the gallery reloads the local install state without a remote refresh", async () => {
-  let installed = true;
-  await mountCommerce((command) => {
-    if (command === "skin_store_list") return snapshot([skin("local-resync", installed
-      ? { state: "installed", installedVersion: "1.2.0" } : {})]);
-  }, async (container, calls, focus) => {
-    const store = container.querySelector(".skin-store");
-    assert.ok(store);
-    assert.equal(findButton(row(store, "local-resync"), "已安装")?.disabled, true);
-    installed = false;
-    await act(async () => { focus(); });
-    assert.equal(findButton(row(store, "local-resync"), "获取")?.disabled, false);
-    assert.equal(calls.filter((call) => call.command === "skin_store_list").length, 2);
-    assert.equal(calls.filter((call) => call.command === "skin_store_refresh").length, 0);
   });
 });

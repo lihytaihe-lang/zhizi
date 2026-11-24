@@ -446,6 +446,11 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
         let insertTextElapsed = apply(
             result, to: client, passthroughText: needsRepairedPassthrough ? mapped.text : ""
         )
+        // The client owns an unhandled key and can edit text or move its caret.
+        // A readable client will supply the new context at the next composition.
+        if event.type == .keyDown, !result.consumed, !needsRepairedPassthrough {
+            recentCommitContext.clear()
+        }
         let elapsed = DispatchTime.now().uptimeNanoseconds &- started
         stages.insert = applyStages.insert
         stages.marked = applyStages.marked
@@ -522,6 +527,7 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
                 && NSLocationInRange(index, markedRange)
             if !clickedInsideMarkedText {
                 commitCompositionSerialized(sender)
+                recentCommitContext.clear()
             }
             // IMK owns caret movement inside marked text, and the client owns
             // normal focus/click behavior outside it. We only tear down the
@@ -538,7 +544,12 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
     }
 
     private func activateServerSerialized(_ sender: Any?) {
-        if let next = Self.bundleIdentifier(from: sender), next != appIdentifier { recentCommitContext.clear() }
+        // IMK can keep the controller while the same client changes input
+        // sources. A Shift press and release must belong to one activation.
+        mapper.cancelPendingShiftTap()
+        // A client may activate another document with the same bundle ID.
+        // If the host cannot supply text, only use commits from this activation.
+        recentCommitContext.clear()
         guard !resourcesClosed else { return }
         core?.zhijuEnabled = ZhijuPreferences.isEnabled()
         if let client = sender as? (any IMKTextInput & NSObjectProtocol) {
@@ -553,6 +564,7 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
                 rebuildCore(for: activatedIdentifier)
             }
         }
+        core?.resetSentenceContextForActivation(matchingSession: pendingAppIdentifier == nil)
         activateStatusItem()
         qualityRecorder?.refreshConfiguration()
         refreshProjectConfigurationAtSafePoint()
@@ -722,6 +734,7 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
     }
 
     private func deactivateServerSerialized(_ sender: Any?) {
+        mapper.cancelPendingShiftTap()
         defer { recentCommitContext.clear() }
         guard !resourcesClosed else { return }
         guard let core else { return }
@@ -1147,6 +1160,7 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
     }
 
     private func handleRuntimeTransitionSerialized(_ kind: IMEKeyKind, diagnostic: String) {
+        mapper.cancelPendingShiftTap()
         recentCommitContext.clear()
         guard !resourcesClosed else { return }
         if kind == .resume {

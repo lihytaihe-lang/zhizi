@@ -8,6 +8,7 @@ SIGN_IDENTITY="${SIGN_IDENTITY:--}"
 INPUT_GUARD="$ROOT_DIR/script/rc_gate_support.sh"
 CORE_TARGET_DIR="$ROOT_DIR/native/core/target"
 CORE_LIBRARY_DIR="$CORE_TARGET_DIR/release"
+CORE_BUILD_ARGS=()
 SWIFT_BUILD_ARGS=()
 if [[ "${AIM_SWIFTPM_SANDBOX_WORKAROUND:-0}" == "1" ]]; then
   SWIFT_BUILD_ARGS=(--disable-sandbox)
@@ -15,6 +16,11 @@ if [[ "${AIM_SWIFTPM_SANDBOX_WORKAROUND:-0}" == "1" ]]; then
   mkdir -p "$SWIFT_MODULE_CACHE"
   export CLANG_MODULE_CACHE_PATH="$SWIFT_MODULE_CACHE"
   export SWIFTPM_MODULECACHE_OVERRIDE="$SWIFT_MODULE_CACHE"
+fi
+# The Mac fast-typing build requires both sides of the Swift/Rust bridge.
+if [[ "${ZHIZI_NATIVE_FAST_TYPING:-0}" == "1" ]]; then
+  CORE_BUILD_ARGS+=(--features mac-fast-typing)
+  SWIFT_BUILD_ARGS+=(-Xswiftc -DZHIZI_FAST_TYPING)
 fi
 
 case "$CONFIGURATION" in
@@ -51,7 +57,7 @@ node "$ROOT_DIR/scripts/validate_native_license_assets.mjs"
 CARGO_NET_OFFLINE=true node "$ROOT_DIR/scripts/generate_locked_dependency_registry.mjs" --check
 
 CARGO_TARGET_DIR="$CORE_TARGET_DIR" cargo build --locked --offline \
-  --manifest-path "$ROOT_DIR/native/core/Cargo.toml" --release
+  --manifest-path "$ROOT_DIR/native/core/Cargo.toml" --release ${CORE_BUILD_ARGS[@]+"${CORE_BUILD_ARGS[@]}"}
 touch "$ROOT_DIR/native/macos/Sources/AgentIMECoreBridge/bridge.c"
 AIM_CORE_LIBRARY_DIR="$CORE_LIBRARY_DIR" swift build --package-path "$ROOT_DIR/native/macos" \
   -c "$CONFIGURATION" --disable-automatic-resolution ${SWIFT_BUILD_ARGS[@]+"${SWIFT_BUILD_ARGS[@]}"}

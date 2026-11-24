@@ -237,6 +237,10 @@ public final class ContextRankingScorer: @unchecked Sendable {
     /// Scores any number of candidates eight rows at a time (the model's fixed batch),
     /// all after the same context window, so the scores stay comparable.
     public func score(context: String, candidates: [String]) throws -> [Double] {
+        try score(context: context, candidates: candidates, shouldContinue: { true })
+    }
+
+    func score(context: String, candidates: [String], shouldContinue: () -> Bool) throws -> [Double] {
         guard !candidates.isEmpty,
               let longest = candidates.map({ $0.unicodeScalars.count }).max(), longest > 0, longest <= 39 else {
             throw CocoaError(.coderInvalidValue)
@@ -245,6 +249,9 @@ public final class ContextRankingScorer: @unchecked Sendable {
         var scores: [Double] = []
         scores.reserveCapacity(candidates.count)
         for start in stride(from: 0, to: candidates.count, by: 8) {
+            // Check before entering Core ML's prediction lock. Synchronous callers
+            // can hold the core lock while waiting for a prediction to finish.
+            guard shouldContinue() else { throw CancellationError() }
             let batch = Array(candidates[start..<min(start + 8, candidates.count)])
             scores += try score(prefix: prefix, batch: batch)
         }

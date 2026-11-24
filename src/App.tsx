@@ -8,7 +8,7 @@ import { ResultPanel } from "./components/ResultPanel";
 import { ReleaseControls } from "./components/ReleaseControls";
 import { RuleList } from "./components/RuleList";
 import { SettingsPanel } from "./components/SettingsPanel";
-import { SkinCommercePanel } from "./components/SkinCommercePanel";
+import { SkinStore } from "./components/SkinStore";
 import { HomePanel } from "./components/HomePanel";
 import { QualityRecordingPanel } from "./components/QualityRecordingPanel";
 import { LexiconManager } from "./components/LexiconManager";
@@ -634,7 +634,7 @@ function App() {
       <section className={`workspace ${view !== "compose" && view !== "settings" ? "is-lexicon" : ""}`}>
         <div className="primary-column">
           {view === "skins" ? (
-            <section className="panel settings-panel"><SkinCommercePanel /></section>
+            <section className="panel settings-panel"><SkinStore /></section>
           ) : view === "home" ? (
             <HomePanel onNavigate={(destination) => setView(destination === "advanced" ? "compose" : destination)} />
           ) : view === "records" ? (

@@ -128,6 +128,8 @@ int32_t aim_session_set_learning(AimSession *session, uint32_t mode);
  * decoder is native Zhixu for the session's whole life; this call no longer changes it.
  * Null=-1, invalid=-2, composing=-10. */
 int32_t aim_session_set_zhixu_whole(AimSession *session, uint32_t on);
+/* Applies to newly generated menus. An already displayed digit keeps its selection. */
+int32_t aim_session_set_zhiju_phrases(AimSession *session, uint8_t enabled);
 /* Retired: the Rime-userdb migration is complete. Always -50 (capability
  * removed); never reads or writes the filesystem. */
 int32_t aim_learning_available(const uint8_t *user, size_t user_len);
@@ -189,6 +191,12 @@ void aim_zhiju_search_destroy(AimZhijuSearch *search);
  * 0=success; -1=null; -3=not applicable; -7=no dictionary. Clears *out on error.
  * The snapshot outlives keys, dictionary reloads and session destruction. */
 int32_t aim_session_zhiju_snapshot(const AimSession *session, AimZhijuSnapshot **out);
+/* Capture a preview of one lower-case ASCII append to a native first-page
+ * composition at its unconfirmed end. The capture only copies state.
+ * Use aim_zhiju_snapshot_lexical on a worker. Preview snapshots cannot start
+ * neural search or use the normal apply APIs. -2=not lower-case ASCII;
+ * other capture statuses and snapshot ownership match the normal capture. */
+int32_t aim_session_zhiju_preview(const AimSession *session, uint8_t next_letter, AimZhijuSnapshot **out);
 void aim_zhiju_snapshot_destroy(AimZhijuSnapshot *snapshot);
 int32_t aim_zhiju_search_prepare(AimZhijuSearch *search, const AimZhijuSnapshot *snapshot);
 /* Same requests, step/budget/buffer rules and encoded results as the session
@@ -201,6 +209,12 @@ int32_t aim_zhiju_snapshot_step(AimZhijuSnapshot *snapshot, AimZhijuSearch *sear
                               size_t beam, uint64_t budget_ms,
                               const float *scores, size_t score_count,
                               uint8_t *out, size_t *out_len);
+/* Bounded dictionary-only expansion for this snapshot, independent of GEN.
+ * Output is text<TAB>full spaced reading<TAB>consumed bytes<LF> per candidate;
+ * no neural scores. out_len uses the same capacity and -6 rules as above.
+ * -9 means the warmed lexical index or time budget was unavailable. */
+int32_t aim_zhiju_snapshot_lexical(AimZhijuSnapshot *snapshot, uint64_t budget_ms,
+                                 uint8_t *out, size_t *out_len);
 /* One exclusive session call: validate originating session, key/dictionary
  * generation, optionally remember/promote the best completed result, then read
  * the current page. promote=0 only reads the page (including timeout fallback).
@@ -209,6 +223,18 @@ int32_t aim_zhiju_snapshot_step(AimZhijuSnapshot *snapshot, AimZhijuSearch *sear
  * Free out with aim_result_free on every status. */
 int32_t aim_session_apply_zhiju_snapshot(AimSession *session, const AimZhijuSnapshot *snapshot,
                                       int32_t promote, AimResult *out);
+/* Atomically selects one full-input candidate proved by this same snapshot's
+ * neural or lexical expansion. Otherwise -2 (unproved) or -8 (stale/foreign).
+ * Lead statuses and AimResult ownership match aim_session_apply_zhiju_snapshot. */
+int32_t aim_session_apply_zhiju_snapshot_selected(AimSession *session, const AimZhijuSnapshot *snapshot,
+                                               const uint8_t *text, size_t text_length, AimResult *out);
+/* After processing exactly the previewed following unmodified lower-case key,
+ * apply a lexical proof from the preview. Key generation, input, context, security,
+ * session, dictionary, and end caret must still agree. -2=unproved; -8=stale,
+ * wrong key, wrong snapshot kind or already applied. AimResult ownership and
+ * lead statuses match the normal selected apply API. */
+int32_t aim_session_apply_zhiju_preview(AimSession *session, const AimZhijuSnapshot *snapshot,
+                                      const uint8_t *text, size_t text_length, AimResult *out);
 /* Resumable search with the same results/encoding as aim_session_zhiju_search.
  * *generation=0 starts a search with no scores. A prepared search receives a
  * nonzero identity; an already exhausted start budget leaves it zero.
@@ -235,6 +261,14 @@ int32_t aim_session_zhiju_step(AimSession *session, uint64_t *generation,
 uint32_t aim_session_context_group_mask(AimSession *session);
 uint32_t aim_session_context_complete_mask(AimSession *session);
 int32_t aim_session_contextual_prior_allowed(AimSession *session);
+typedef struct {
+  uint32_t homophone_mask;
+  uint32_t complete_mask;
+  int32_t contextual_prior_allowed;
+} AimContextRankingInputs;
+/* Reads all ranking inputs from one original page. NULL returns zeros.
+ * Session access is exclusive during the call. No candidates are reordered. */
+AimContextRankingInputs aim_session_context_ranking_inputs(AimSession *session);
 intptr_t aim_session_peek_following_pages(AimSession *session, size_t count, uint8_t *buffer, size_t capacity);
 intptr_t aim_session_composition_alternatives(AimSession *session, uint8_t *buffer, size_t capacity);
 /* Texts of the current page exactly as digit keys resolve against it, tab-separated. A shell that draws a page it
@@ -257,6 +291,9 @@ int32_t aim_session_offer_composition(AimSession *session, const uint8_t *text, 
 /* Read-only, bounded off-page dictionary matches for 2–3 initials. UTF-8 TSV;
  * returns bytes written or negated required size. Same buffer contract as page_texts. */
 intptr_t aim_session_abbreviation_alternatives(AimSession *session, uint8_t *buffer, size_t capacity);
+/* Read-only lexical forecast for one final letter. At most eight raw/text pairs,
+ * separated by TAB and newline. Same buffer contract as page_texts. */
+intptr_t aim_session_exact_lookahead(AimSession *session, uint8_t *buffer, size_t capacity);
 /* Offer a current short dictionary alternative in slot five; never changes slots 1–4. */
 int32_t aim_session_offer_abbreviation(AimSession *session, const uint8_t *text, size_t length);
 int32_t aim_session_composition_guessed(AimSession *session);

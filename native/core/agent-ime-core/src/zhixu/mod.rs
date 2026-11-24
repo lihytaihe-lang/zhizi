@@ -8,7 +8,11 @@ pub(crate) mod trie;
 pub mod learning;
 pub(crate) mod learning_session;
 pub mod decoder;
+#[cfg(feature = "mac-fast-typing")]
+pub(crate) mod zhiju_phrase_menu;
 pub(crate) mod zhiju;
+#[cfg(feature = "mac-fast-typing")]
+pub(crate) mod zhiju_typed_phrases;
 pub(crate) mod fuzzy;
 #[cfg(test)]
 pub(crate) mod key_latency_profile;

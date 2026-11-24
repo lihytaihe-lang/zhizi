@@ -26946,3 +26946,5 @@ text	reading	weight	colloquial_tokens	written_tokens	source	license
 坐在里面	zuo zai li mian	435	57	3	phrase-layer-mined	project-authored (n-grams mined from licensed corpora, DeepSeek-reviewed)
 坐着等	zuo zhe deng	425	54	0	phrase-layer-mined	project-authored (n-grams mined from licensed corpora, DeepSeek-reviewed)
 做这个	zuo zhe ge	390	42	4	phrase-layer-mined	project-authored (n-grams mined from licensed corpora, DeepSeek-reviewed)
+办理手续	ban li shou xu	120	0	0	jieba	MIT (jieba 0.42.1 dict.txt, PyPI sdist sha256 055ca12f62674fafed09427f176506079bc135638a14e23e25be909131928db2)
+出示证件	chu shi zheng jian	120	0	0	jieba	MIT (jieba 0.42.1 dict.txt, PyPI sdist sha256 055ca12f62674fafed09427f176506079bc135638a14e23e25be909131928db2)

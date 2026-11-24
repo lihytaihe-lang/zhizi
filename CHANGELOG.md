@@ -1,3 +1,19 @@
+## 知字 0.3.53 · Mac
+
+- 恢复基础管理台布局，保留原生皮肤画廊和免费皮肤浏览、预览与安装。
+- 移除旧皮肤商店的账号、订单和购买入口。
+- 改进正确拼音下的词汇与首选，修正「升级前」和「核对一遍」等已确认案例。
+
+Apple Silicon，macOS 14 或以上。体验改进计划保持自愿加入。
+
+## Zhizi 0.3.53 · Mac
+
+- Restores the standard settings layout and keeps the native gallery and free skin browsing, previews, and installation.
+- Removes legacy skin store account, order, and purchase flows.
+- Improves candidate ranking for selected correctly spelled pinyin, including 升级前 and 核对一遍.
+
+Requires Apple Silicon and macOS 14 or later. Typing quality sharing remains opt-in.
+
 # 更新记录（知字输入法）
 
 版本号规则见 `docs/current/VERSIONING.md`。每次发给别人的包，包目录里放一份对应的 `更新说明-<版本>.txt`（取自这里）。

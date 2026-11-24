@@ -1,8 +1,7 @@
 import type { StoreSkin } from "../lib/skinStore";
-import { formatSkinPrice } from "../lib/skinStore";
 import { SkinStorePreview } from "./SkinStorePreview";
 
-export type SkinStoreOperation = "install" | "update" | "purchase";
+export type SkinStoreOperation = "install" | "update";
 
 type SkinStoreActionProps = {
   skin: StoreSkin;
@@ -14,15 +13,15 @@ type SkinStoreActionProps = {
 export function SkinStoreAction({ skin, operation, disabled, onAction }: SkinStoreActionProps) {
   const upgrade = skin.state === "needsAppUpgrade";
   const incompatible = skin.state === "unsupportedPlatform";
-  const delisted = skin.availableForSale === false && skin.owned !== true && skin.state === "notInstalled";
+  const delisted = skin.availableForSale === false && skin.state === "notInstalled";
   const installed = skin.state === "installed";
   const busyLabels: Record<SkinStoreOperation, string> = {
-    install: "正在获取…", update: "正在更新…", purchase: "正在购买…",
+    install: "正在获取…", update: "正在更新…",
   };
   const label = operation ? busyLabels[operation] : incompatible ? "暂不支持当前系统" : delisted ? "已停止新购" : upgrade ? "需要升级知字"
     : skin.state === "updateAvailable" ? "更新"
     : installed ? "已安装"
-    : skin.tier === "paid" && skin.owned !== true ? `购买 ${formatSkinPrice(skin.priceCents, skin.currency)}` : "获取";
+    : "获取";
   return (
     <>
       <button className={`primary-button skin-store-action${installed ? " is-current" : ""}`}
@@ -56,7 +55,7 @@ export function SkinStoreCard({ previewEnabled, loadPreview, onOpen, ...action }
         </span>
       </button>
       <div className="skin-store-card-footer" onClick={(event) => event.stopPropagation()}>
-        <span className="skin-store-price">{formatSkinPrice(skin.priceCents, skin.currency)}</span>
+        <span className="skin-store-price">免费</span>
         <SkinStoreAction {...action} />
       </div>
     </article>

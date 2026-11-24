@@ -16,6 +16,8 @@ public final class EventMapper {
 
     public init() {}
 
+    func cancelPendingShiftTap() { shiftPressedAlone = false }
+
     public func map(_ event: NSEvent) -> MappedIMEEvent? {
         guard event.type == .keyDown || event.type == .flagsChanged else {
             if event.type != .keyUp {

@@ -10,6 +10,9 @@ use std::time::{Duration, Instant};
 #[path = "zhiju_cutoff.rs"]
 mod cutoff;
 
+#[path = "zhiju_lexical.rs"]
+pub(crate) mod lexical;
+
 #[derive(Debug, PartialEq)]
 pub(crate) enum SearchError {
     NotApplicable,

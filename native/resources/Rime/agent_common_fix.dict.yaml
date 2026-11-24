@@ -1,6 +1,5 @@
 # Project-authored INPUT-QUALITY Q1 correction table.
-# Rows come only from the frozen verifier-mined q1_dict bucket after current-
-# build replay, plus the two acceptance examples explicitly frozen in the task.
+# Rows come from frozen typing-quality and continuous-input replay cases.
 ---
 name: agent_common_fix
 version: "1.0.0"
@@ -12,3 +11,16 @@ sort: by_weight
 超级烦	chao ji fan	520
 改法	gai fa	520
 这种改法	zhe zhong gai fa	260
+指定专人	zhi ding zhuan ren	520
+指定代理人	zhi ding dai li ren	520
+先保留	xian bao liu	400
+先办理	xian ban li	400
+再次确认	zai ci que ren	260
+及时反馈	ji shi fan kui	260
+确认信息	que ren xin xi	260
+反馈意见	fan kui yi jian	260
+齐了	qi le	180
+再出发	zai chu fa	180
+熟品	shu pin	50
+去车库	qu che ku	80
+升级前	sheng ji qian	120

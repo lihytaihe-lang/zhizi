@@ -15,7 +15,7 @@
       "description": "少量常见排序修正",
       "group": "core",
       "defaultEnabled": true,
-      "rows": 5
+      "rows": 18
     },
     {
       "id": "agent_daily",
@@ -31,7 +31,7 @@
       "description": "常用词与短语",
       "group": "core",
       "defaultEnabled": true,
-      "rows": 26947
+      "rows": 26949
     },
     {
       "id": "agent_modern",

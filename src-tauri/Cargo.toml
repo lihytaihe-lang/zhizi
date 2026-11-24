@@ -1,6 +1,6 @@
 [package]
 name = "agent-input-layer"
-version = "0.3.52"
+version = "0.3.53"
 description = "A task input layer for AI agents"
 authors = ["Agent Input Layer contributors"]
 edition = "2021"
@@ -23,9 +23,7 @@ path = "src/bin/snapshot_fixture_ctl.rs"
 tauri-build = { version = "2", features = [] }
 
 [features]
-# Test builds for friends upload quality records to the project's ingest server
-# (src/test_upload.rs). The open-source release is built with
-# --no-default-features and carries no upload code.
+# Private test packaging must explicitly request these features.
 default = []
 # Private owner seed/evidence files are omitted from public exports.
 personal-seed = []

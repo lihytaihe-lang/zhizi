@@ -78,7 +78,11 @@ private final class CandidateSlotControl: NSControl {
     private var indexHidden = false
     private var displayText = ""
     private var measuredContentSize = NSSize.zero
-    private var measurementCache: [String: NSSize] = [:]
+    private struct MeasurementText: Hashable {
+        let index: String?
+        let candidate: String
+    }
+    private var measurementCache: [MeasurementText: NSSize] = [:]
     private var showsHighlight = false
     private var accessibilityText: String?
     // NSObject's accessibility-hidden default is false; mirror the actual
@@ -185,39 +189,29 @@ private final class CandidateSlotControl: NSControl {
     }
 
     private func updateMeasuredContentSize() {
-        let cacheKey = "\(theme.identifier.rawValue)\u{1f}\(displayIndex ?? "")\u{1f}\(displayText)"
-        if let cached = measurementCache[cacheKey] {
-            measuredContentSize = cached
-            return
-        }
-        let indexSize = displayIndex.map {
+        measuredContentSize = contentSize(index: displayIndex, text: displayText)
+    }
+
+    private func contentSize(index: String?, text: String) -> NSSize {
+        let key = MeasurementText(index: index, candidate: text)
+        if let cached = measurementCache[key] { return cached }
+        let indexSize = index.map {
             ($0 as NSString).size(withAttributes: [.font: theme.indexFont])
         } ?? .zero
-        let textSize = (displayText as NSString).size(withAttributes: [.font: theme.candidateFont])
-        measuredContentSize = NSSize(
-            width: indexSize.width
-                + (displayIndex == nil ? 0 : theme.indexCandidateSpacing)
-                + textSize.width,
+        let textSize = (text as NSString).size(withAttributes: [.font: theme.candidateFont])
+        let size = NSSize(
+            width: indexSize.width + (index == nil ? 0 : theme.indexCandidateSpacing) + textSize.width,
             height: max(indexSize.height, textSize.height) + theme.verticalPadding * 2
         )
         if measurementCache.count >= 128 {
             measurementCache.removeAll(keepingCapacity: true)
         }
-        measurementCache[cacheKey] = measuredContentSize
+        measurementCache[key] = size
+        return size
     }
 
-    static func measuredWidth(index: String?, text: String, theme: CandidateTheme) -> CGFloat {
-        let indexSize = index.map {
-            ($0 as NSString).size(withAttributes: [.font: theme.indexFont])
-        } ?? .zero
-        let textSize = (text as NSString).size(withAttributes: [.font: theme.candidateFont])
-        return max(
-            32,
-            ceil(indexSize.width
-                + (index == nil ? 0 : theme.indexCandidateSpacing)
-                + textSize.width)
-                + theme.horizontalPadding * 2
-        )
+    func measuredWidth(index: String, text: String) -> CGFloat {
+        max(32, ceil(contentSize(index: index, text: text).width) + theme.horizontalPadding * 2)
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -727,10 +721,14 @@ public final class CandidatePanelController: NSObject {
         secure: Bool,
         grid: CandidateGrid? = nil
     ) {
-        let visibleCandidates = Array(candidates.prefix(candidateButtons.count))
+        let visibleCandidates = candidates.prefix(candidateButtons.count)
         let grid = secure ? nil : grid
+        // Process expanded rows once when closing the grid, including when a
+        // secure event closes it. In the usual one-row case they are already hidden.
+        let updatesExpandedRows = grid != nil || gridShown
+        let rows = updatesExpandedRows ? [candidateButtons] + expandedButtons : [candidateButtons]
         liveRow = grid.map { min(max(0, $0.currentRow), expandedButtons.count) } ?? 0
-        for (row, buttons) in ([candidateButtons] + expandedButtons).enumerated() {
+        for (row, buttons) in rows.enumerated() {
             for (index, button) in buttons.enumerated() {
                 if row == liveRow, visibleCandidates.indices.contains(index) {
                     let candidate = visibleCandidates[index]
@@ -757,18 +755,19 @@ public final class CandidatePanelController: NSObject {
                 }
             }
         }
-        for (offset, stack) in expandedRows.enumerated() {
-            let shown = grid.map { $0.rows.indices.contains(offset + 1) } ?? false
-            if stack.isHidden == shown { stack.isHidden = !shown }
-            if expandedRowWidths.indices.contains(offset), expandedRowWidths[offset].isActive != shown {
-                expandedRowWidths[offset].isActive = shown
+        if updatesExpandedRows {
+            for (offset, stack) in expandedRows.enumerated() {
+                let shown = grid.map { $0.rows.indices.contains(offset + 1) } ?? false
+                if stack.isHidden == shown { stack.isHidden = !shown }
+                if expandedRowWidths.indices.contains(offset), expandedRowWidths[offset].isActive != shown {
+                    expandedRowWidths[offset].isActive = shown
+                }
             }
+            // The expanded grid aligns every slot to its widest cell.
+            let slots = candidateButtons + expandedButtons.joined()
+            let cellWidth = grid == nil ? nil : slots.map(\.naturalWidth).max()
+            slots.forEach { $0.fixedWidth = cellWidth }
         }
-        // Expanded: one width for every slot (the widest), columns aligned, and the panel
-        // sized to the grid rather than kept at an earlier width (owner 2026-10-11).
-        let slots = candidateButtons + expandedButtons.joined()
-        let cellWidth = grid == nil ? nil : slots.map(\.naturalWidth).max()
-        slots.forEach { $0.fixedWidth = cellWidth }
         if gridShown != (grid != nil) {
             gridShown = grid != nil
             compositionGeometry.reset()
@@ -795,10 +794,12 @@ public final class CandidatePanelController: NSObject {
                 accessibilityLabel: "扩展候选 \(digit)：\(candidate.text)"
             )
         }
-        secondaryRow.isHidden = visibleSecondary.isEmpty
+        if secondaryRow.isHidden != visibleSecondary.isEmpty { secondaryRow.isHidden = visibleSecondary.isEmpty }
         let showsPreedit = theme.preeditRow && !secure && !preedit.isEmpty && !visibleCandidates.isEmpty
-        let shownPreedit = Self.displayedPinyin(preedit, spaced: !keepsPinyinApostrophes)
-        if showsPreedit, preeditLabel.stringValue != shownPreedit { preeditLabel.stringValue = shownPreedit }
+        if showsPreedit {
+            let shownPreedit = Self.displayedPinyin(preedit, spaced: !keepsPinyinApostrophes)
+            if preeditLabel.stringValue != shownPreedit { preeditLabel.stringValue = shownPreedit }
+        }
         if preeditRow.isHidden == showsPreedit { preeditRow.isHidden = !showsPreedit }
         // Pinyin also stays in the client's marked-text surface. VoiceOver retains
         // one stable group label whether or not the skin shows the preedit row.
@@ -961,8 +962,8 @@ public final class CandidatePanelController: NSObject {
         var usedWidth: CGFloat = 0
         var visible: [IMECandidate] = []
         for (index, candidate) in candidates.prefix(secondaryButtons.count).enumerated() {
-            let width = CandidateSlotControl.measuredWidth(
-                index: Self.secondaryDigits[index] + theme.indexSuffix, text: candidate.text, theme: theme
+            let width = secondaryButtons[index].measuredWidth(
+                index: Self.secondaryDigits[index] + theme.indexSuffix, text: candidate.text
             )
             let proposed = usedWidth + (visible.isEmpty ? 0 : theme.candidateSpacing) + width
             if !visible.isEmpty && proposed > availableWidth { break }

@@ -11,7 +11,7 @@ const publicBuild = existsSync(path.join(root, "PUBLIC_BUILD"));
 const shellLayers = new Set(["aiTerms", "aiNames", "packPoetry", "packCad", "packIndustry", "packTerms"]);
 const isShellAsset = (name) => shellLayers.has(name.replace(/Provenance$/u, ""));
 const assets = Object.freeze({
-  commonFix: ["native/resources/Rime/agent_common_fix.dict.yaml", "7ddf8d91380944ade73f82aaf9301ed060f1552d665f4ea9aa9848c10cc2e9ef"],
+  commonFix: ["native/resources/Rime/agent_common_fix.dict.yaml", "ec1a7a53ea1d072cf44a139f8946e09b3a2d59f11e0f28e08aa8cd513437d0ff"],
   daily: ["native/resources/Rime/agent_daily.dict.yaml", "2c15d6e53b7911259b3a93e3d47d69874991ea6e02d1fedb2e77124789495b5e"],
   english: ["native/resources/Rime/agent_english.dict.yaml", "47b351cd46bf975d98a77e67d901210c39fd5ce4952f10e2c8a727b1bb3749de"],
   tech: ["native/resources/Rime/agent_tech_terms.dict.yaml", "3865bba99acdbc5b1ad535a266a79e3d15e0eb8b5f14ff08b4e8be86e830af20"],
@@ -19,12 +19,12 @@ const assets = Object.freeze({
   thuoclIt: ["native/resources/Rime/agent_thuocl_it.dict.yaml", "f2de2e7ef773e3951b9a1b444da81341ea6a1da80aceac3840683fd03d008187"],
   thuoclCaijing: ["native/resources/Rime/agent_thuocl_caijing.dict.yaml", "4497c28c3cb8e745c2d6408ad588a79e145efe2308682bbbbf9818dde6b2d157"],
   modern: ["native/resources/Rime/agent_modern.dict.yaml", "d1e6a40abca03593a85c38da0e5da9cf8d04404fa1ccb0039027268bd7b54682"],
-  general: ["native/resources/Rime/agent_general.dict.yaml", "acf8a03457802fd3add68334d0ff93eac1ebcef289407e205576113612728d98"],
-  generalProvenance: ["quality/corpus/agent-general-provenance.tsv", "1e1c0407d247ddd3ac3f30e076fc7beaff141978fb6bf5c0319ffb94814dd6ab"],
+  general: ["native/resources/Rime/agent_general.dict.yaml", "389c5d0e3fce71073411e0ccadb91c09e898699eb0aa2001987fdb665693a4ac"],
+  generalProvenance: ["quality/corpus/agent-general-provenance.tsv", "943b35f0795abf4995a0569f3e53e625b3fd858fc423d59abe75a6689bb1dc07"],
   newwords: ["native/resources/Rime/agent_newwords.dict.yaml", "1603e68d7b993e5e6ad742ec902f11dd8554a72c52bb71709737b4de25b489de"],
   newwordsProvenance: ["quality/corpus/agent-newwords-provenance.tsv", "dee2ff41d2b391977b51c95f732d1c672f4975fb1a2dc9b4af05e1f287e46fed"],
-  spoken: ["native/resources/Rime/agent_spoken.dict.yaml", "68fd7ae5a41d2eb8b6a1b60922a23580f698263bb41192c11de3041b6aaba898"],
-  spokenProvenance: ["quality/corpus/agent-spoken-provenance.tsv", "12dbf8b5be1447db7f5c0cbc9e4de2aa49a93ef0026f0f11aee31afae611f093"],
+  spoken: ["native/resources/Rime/agent_spoken.dict.yaml", "e43e507ab4a9af0a3fa7b60116426d52a0fce07a82f9e642565410c9a0ce3911"],
+  spokenProvenance: ["quality/corpus/agent-spoken-provenance.tsv", "9165f26aa0b4f5f73abd138c56efdf921200e1c9d481153c0bd9ae2bc5b07dee"],
   aiTerms: ["native/resources/Rime/agent_ai_terms.dict.yaml", "2e4e058bc42a1a83f4fedf1c9b2a31ed93d63f1c7558f63dcdef01caed2ec4b3"],
   aiTermsProvenance: ["quality/corpus/agent-ai-terms-provenance.tsv", "464574b1bcb3e16fd7cae28dd3ba4617dd837c6425cb4c40f0c56a2ed0cf1680"],
   aiNames: ["native/resources/Rime/agent_ai_names.dict.yaml", "c458a49954b7e2f9f1e53942f2ee5b9deb4601fb2c80b53e256a72e947af9a7f"],
@@ -39,7 +39,7 @@ const assets = Object.freeze({
   packTerms: ["native/resources/Rime/agent_pack_terms.dict.yaml", "996b22ce36ed3ddc4c97763d52bcd77d07bf57531d27b8177407b806c949a68d"],
   packTermsProvenance: ["quality/corpus/agent-pack-terms-provenance.tsv", "2385d7e53d6bfdfeb8e3651f04f17e20153641c81a5123e96e32cf92811e4077"],
   aggregate: ["native/resources/Rime/agent_pinyin.dict.yaml", "f2b5a8904ee6fb51c7eb243447b0f51e9a70f77953a6b1d5e311a0e1d97adbf5"],
-  commonFixProvenance: ["quality/corpus/agent-common-fix-provenance.tsv", "bcd925e889c8b2a76f50732d660f9c6dd613ef4e7e7bba5efe84f821457eac04"],
+  commonFixProvenance: ["quality/corpus/agent-common-fix-provenance.tsv", "cce7cf63596ff558c2b5042c588897d2fa7024b450462f217ca72922f87b9214"],
   provenance: ["quality/corpus/agent-daily-provenance.tsv", "1b32e5dde5d7b9912e3bcd7a99fb55a4d380de4f0c37e872c53b9ad051121d1f"],
   englishProvenance: ["quality/corpus/agent-english-provenance.tsv", "5072ef56b73f0d8273df92fc7b5db888747b3707ee84774620b65064f7517583"],
   techProvenance: ["quality/corpus/agent-tech-terms-provenance.tsv", "2e390be331a858974506a4b721dae18b311ff686eac7146925ed6049a3d1a79c"],
@@ -77,6 +77,19 @@ assert(JSON.stringify(commonFixRows) === JSON.stringify([
   ["超级烦", "chao ji fan", "520"],
   ["改法", "gai fa", "520"],
   ["这种改法", "zhe zhong gai fa", "260"],
+  ["指定专人", "zhi ding zhuan ren", "520"],
+  ["指定代理人", "zhi ding dai li ren", "520"],
+  ["先保留", "xian bao liu", "400"],
+  ["先办理", "xian ban li", "400"],
+  ["再次确认", "zai ci que ren", "260"],
+  ["及时反馈", "ji shi fan kui", "260"],
+  ["确认信息", "que ren xin xi", "260"],
+  ["反馈意见", "fan kui yi jian", "260"],
+  ["齐了", "qi le", "180"],
+  ["再出发", "zai chu fa", "180"],
+  ["熟品", "shu pin", "50"],
+  ["去车库", "qu che ku", "80"],
+  ["升级前", "sheng ji qian", "120"],
 ]), "agent_common_fix rows changed");
 assert(commonFixRows.length <= 300, "agent_common_fix exceeds the frozen 300-row ceiling");
 const commonFixProvenanceRows = loaded.commonFixProvenance.trimEnd().split(/\r?\n/u)
@@ -300,7 +313,7 @@ for (const [, reading, weight] of precedingRows) {
 }
 const syllables = new Set(upstreamRows.flatMap(([, reading]) => reading.toLowerCase().split(" ")));
 assert(syllables.size === 415, "pinned schema syllable inventory changed");
-for (const [name, expectedCount] of [["general", 26947], ["newwords", 25345], ["spoken", 10807]]) {
+for (const [name, expectedCount] of [["general", 26949], ["newwords", 25345], ["spoken", 10807]]) {
   const rows = parseDictionaryRows(loaded[name]);
   const provenance = loaded[`${name}Provenance`].trimEnd().split(/\r?\n/u).slice(1).map((line) => line.split("\t"));
   assert(rows.length === expectedCount && provenance.length === rows.length, `${name} row count changed`);
