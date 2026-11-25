@@ -8,7 +8,7 @@ use crate::zhixu::learning_session::LearningSession;
 use crate::zhixu::trie::HeavyTerminal;
 
 use crate::context_model::ContextModel;
-use crate::state::{BoundaryPurpose, Candidate, CompositionBoundary, Decoder, DecoderSnapshot, LearningIntent};
+use crate::state::{BoundaryPurpose, Candidate, CompositionBoundary, Decoder, DecoderSnapshot, LearningIntent, ModelCandidate};
 use serde::Deserialize;
 use std::borrow::Cow;
 use std::cmp::Ordering;
@@ -676,6 +676,7 @@ pub struct MixerDecoder {
     /// Keep a displayed candidate page and its selection mapping on one dictionary
     /// generation. A new edit resets this; background swaps cannot change a digit's target.
     dictionary_snapshot: Mutex<Option<Option<Arc<Index>>>>,
+    sentence_bigram_snapshot: std::cell::Cell<Option<(u64, bool)>>,
     /// One sequence per edit/dictionary/learning state, independent of the visible page.
     whole_cache: Mutex<Option<WholeCache>>,
     whole_lattice: Mutex<Option<WholeLattice>>,
@@ -698,8 +699,25 @@ pub const LEAD_OUTRANKED_OTHER: i32 = -12;
 /// A proven dictionary entry covering every key stays first when a model asks to lead.
 pub const LEAD_OUTRANKED_BY_DICTIONARY_WHOLE: i32 = -13;
 
+thread_local! {
+    static PINNED_SENTENCE_BIGRAM: std::cell::Cell<Option<(u64, bool)>> = const { std::cell::Cell::new(None) };
+}
+
+struct SentenceBigramGuard(Option<(u64, bool)>);
+
+impl Drop for SentenceBigramGuard {
+    fn drop(&mut self) {
+        PINNED_SENTENCE_BIGRAM.with(|slot| slot.set(self.0));
+    }
+}
+
+fn sentence_bigram_ready(index: &Index) -> bool {
+    PINNED_SENTENCE_BIGRAM.with(|slot| slot.get().filter(|(generation, _)| *generation == index.generation)
+        .map_or_else(|| index.sentence_bigram.get().is_some(), |(_, ready)| ready))
+}
+
 impl MixerDecoder {
-    fn pin_dictionary(&self) -> (zhixu::SnapshotGuard, zhixu::LearningSnapshotGuard) {
+    fn pin_dictionary(&self) -> (zhixu::SnapshotGuard, zhixu::LearningSnapshotGuard, SentenceBigramGuard) {
         #[cfg(test)]
         let _profile = span(Stage::Learning);
         #[cfg(test)]
@@ -707,6 +725,16 @@ impl MixerDecoder {
         let snapshot = self.dictionary_snapshot.lock().ok().map(|mut cached| {
             cached.get_or_insert_with(|| self.inner.dictionary_snapshot().or_else(zhixu::ready)).clone()
         }).unwrap_or_else(|| self.inner.dictionary_snapshot().or_else(zhixu::ready));
+        // The loader may attach the table to this very Arc without changing its
+        // generation. Keep the table state used by the visible page through digit selection.
+        let bigram = snapshot.as_ref().map(|index| {
+            self.sentence_bigram_snapshot.get().filter(|(generation, _)| *generation == index.generation)
+                .unwrap_or_else(|| {
+                    let captured = (index.generation, index.sentence_bigram.get().is_some());
+                    self.sentence_bigram_snapshot.set(Some(captured));
+                    captured
+                })
+        });
         if self.learning.mode == LearningMode::Zhixu {
             self.learning.seed_if_needed(&snapshot.clone().unwrap_or_else(zhixu::fallback));
             ranking::set_learning_style(if self.use_rime_order(&self.inner.snapshot().raw_input) {
@@ -717,7 +745,8 @@ impl MixerDecoder {
         }
         (zhixu::pin_snapshot(snapshot), zhixu::pin_learning(
             if self.whole_enabled() { self.learning.whole_overlay() }
-            else if self.use_rime_order(&self.inner.snapshot().raw_input) { None } else { self.learning.overlay() }))
+            else if self.use_rime_order(&self.inner.snapshot().raw_input) { None } else { self.learning.overlay() }),
+            SentenceBigramGuard(PINNED_SENTENCE_BIGRAM.with(|slot| slot.replace(bigram))))
     }
 
     fn has_preceding_context(&self) -> bool {
@@ -768,6 +797,7 @@ impl MixerDecoder {
             english_choices: Arc::new(Mutex::new(english_choices::Store::default())),
             composition_cache: Mutex::new(None),
             dictionary_snapshot: Mutex::new(None),
+            sentence_bigram_snapshot: std::cell::Cell::new(None),
             whole_cache: Mutex::new(None),
             whole_lattice: Mutex::new(None),
             carry: Mutex::new(CarryState::default()),
@@ -2337,17 +2367,26 @@ impl MixerDecoder {
         let preceding = self.context_before_remaining(confirmed);
         let Some(word) = crate::exact_context::exact_collocation(raw, &preceding) else { return; };
         let Some(first) = candidates.first() else { return; };
-        if first.candidate.text == word || first.tier != 2 || self.use_rime_order(raw)
-            || ranking::owner_keeps(&first.candidate.text, word)
+        if first.candidate.text == word || first.tier != 2 || self.use_rime_order(raw) { return; }
+        // A physical landmark in this clause can outrank a console preference
+        // carried from another app. Keep explicit same-app picks and pairwise preferences.
+        let architectural_context = word == "观礼台" && first.candidate.text == "管理台"
+            && crate::exact_context::architectural_viewing_platform(raw, &preceding);
+        let keeps_first = if architectural_context {
+            ranking::owner_style_keeps(&first.candidate.text, word)
+        } else {
+            ranking::owner_keeps(&first.candidate.text, word)
+        };
+        if keeps_first
             || self.learning.first_has_preference(&self.app_id, raw, &first.candidate.text, |entry|
-                entry.reading.split_whitespace().flat_map(str::bytes).eq(raw.bytes()))
+                !architectural_context && entry.reading.split_whitespace().flat_map(str::bytes).eq(raw.bytes()))
         {
             return;
         }
         let index = zhixu::current();
-        if !native_exact_word(raw, first, &index) { return; }
+        if !native_exact_collocation(raw, first, &index) { return; }
         if let Some(position) = candidates.iter().take(PAGE_SIZE)
-            .position(|item| item.candidate.text == word && native_exact_word(raw, item, &index))
+            .position(|item| item.candidate.text == word && native_exact_collocation(raw, item, &index))
         {
             candidates[..=position].rotate_right(1);
         }
@@ -2408,9 +2447,10 @@ impl MixerDecoder {
         let _dictionary = self.pin_dictionary();
         let index = zhixu::current();
         if first.tier != 2 || !matches!(first.selection, Selection::Base { index: 0, .. })
-            || !native_exact_word(raw, first, &index)
-            || !index.all_readings_for_text(word).any(|reading|
-                reading.split_whitespace().flat_map(str::bytes).eq(raw.bytes()))
+            || !native_exact_collocation(raw, first, &index)
+            || !crate::exact_context::accepts_composed_collocation(raw)
+                && !index.all_readings_for_text(word).any(|reading|
+                    reading.split_whitespace().flat_map(str::bytes).eq(raw.bytes()))
             || ranking::owner_keeps(&first.candidate.text, word)
             || self.learning.first_has_preference(&self.app_id, raw, &first.candidate.text, |entry|
                 entry.reading.split_whitespace().flat_map(str::bytes).eq(raw.bytes()))
@@ -2456,13 +2496,23 @@ impl MixerDecoder {
         {
             return !1;
         }
-        // Keep an exact collocation already at the top of the first page stable
-        // when the deferred model sorts the remaining slots.
-        if snapshot.page_no == 0 && self.inner.native_editing()
-            && let Some(first) = candidates.first()
-            && self.protected_exact_head(&snapshot.raw_input) == Some(first.candidate.text.as_str())
+        let Some(first) = candidates.first().filter(|_| snapshot.page_no == 0 && self.inner.native_editing()) else {
+            return u32::MAX;
+        };
+        let raw = &snapshot.raw_input;
+        let text = &first.candidate.text;
+        let exact_head = self.protected_exact_head(raw);
+        // A new factory reading can make two previously distinct ranking rows
+        // homophones. Keep a proved learned head unless an exact context cue
+        // already identifies a different word. Other slots may still be scored.
+        let protects_known_head = exact_head == Some(text.as_str());
+        let can_protect_learning = cfg!(all(target_os = "macos", feature = "mac-fast-typing"))
+            && exact_head.is_none() && text.chars().nth(1).is_some();
+        if (protects_known_head || can_protect_learning)
             && let Some(index) = self.inner.dictionary_snapshot()
-            && native_exact_word(&snapshot.raw_input, first, &index)
+            && native_exact_collocation(raw, first, &index)
+            && (protects_known_head || self.learning.first_has_preference(&self.app_id, raw, text,
+                |entry| entry.reading == first.candidate.reading_key))
         {
             return !1;
         }
@@ -2814,11 +2864,21 @@ fn decoder_candidate(item: &MixedCandidate) -> bool {
         || matches!(item.candidate.comment.as_str(), ZHIXU_WHOLE_COMMENT | ZHIXU_WHOLE_SENTENCE_COMMENT)
 }
 
-fn native_exact_word(raw: &str, item: &MixedCandidate, index: &Index) -> bool {
+fn native_exact_collocation(raw: &str, item: &MixedCandidate, index: &Index) -> bool {
     matches!(item.selection, Selection::Base { .. })
         && item.candidate.reading_key.split_whitespace().flat_map(str::bytes).eq(raw.bytes())
-        && index.all_readings_for_text(&item.candidate.text)
+        && (index.all_readings_for_text(&item.candidate.text)
             .any(|reading| reading == item.candidate.reading_key)
+            || native_composed_exact(raw, &item.candidate))
+}
+
+pub(crate) fn native_composed_exact(raw: &str, candidate: &Candidate) -> bool {
+    // The two native sentence labels carry a raw echo. Reconstruct a complete
+    // dictionary reading before moving a whole candidate across the page.
+    crate::exact_context::accepts_composed_collocation(raw)
+        && matches!(candidate.comment.as_str(), ZHIXU_WHOLE_SENTENCE_COMMENT | ZHIXU_WHOLE_TAIL_COMMENT)
+        && resolve_learning_reading(raw, &candidate.text).is_some_and(|(reading, consumed)|
+            consumed == raw.len() && reading.split_whitespace().flat_map(str::bytes).eq(raw.bytes()))
 }
 
 /// Model-first group (C2): every visible Han decoder candidate whose reading covers the
@@ -3212,6 +3272,68 @@ impl Decoder for MixerDecoder {
         self.zhiju_results = Some((snapshot.raw_input, snapshot.page_no, results));
     }
 
+    fn zhiju_native_candidates(&self, raw: &str) -> Vec<ModelCandidate> {
+        let _dictionary = self.pin_dictionary();
+        let (snapshot, page) = self.visible();
+        if snapshot.raw_input != raw || snapshot.page_no != 0 || snapshot.highlighted_index != 0 {
+            return Vec::new();
+        }
+        page.iter().take(PAGE_SIZE).enumerate().map(|(slot, row)| {
+            let candidate = &row.candidate;
+            let (source, edit_cost) = match candidate.comment.as_str() {
+                SLIP_COMMENT => ("correction", Some(1.0)),
+                HEAVY_GARBLE_COMMENT | "拼音纠错" => ("correction", None),
+                SENTENCE_LATTICE_COMMENT | COMPOSITION_COMMENT | ZHIXU_WHOLE_SENTENCE_COMMENT | ZHIXU_WHOLE_TAIL_COMMENT =>
+                    ("composition", Some(0.0)),
+                _ if decoder_candidate(row) => ("decoder", Some(0.0)),
+                _ => ("local", None),
+            };
+            let consumed = match row.selection {
+                Selection::Base { index, .. } => self.inner.native_candidate_consumed(index, false, candidate),
+                Selection::GlobalBase { index, .. } => self.inner.native_candidate_consumed(index, true, candidate),
+                Selection::Local { .. } => Some(raw.len()),
+            }.unwrap_or(0);
+            let reading_proved = consumed != 0 && zhixu::decoder::candidate_coverage(raw, candidate) == Some(consumed);
+            // A composed native row may carry a raw-input echo instead of a pronunciation.
+            // Recover only an unambiguous pronunciation and recheck the unchanged raw suffix.
+            let reconstructed = if !reading_proved && source == "composition" && consumed == raw.len()
+                && raw.len() <= 18 && candidate.text.chars().count() <= 10
+                && raw.bytes().all(|byte| byte.is_ascii_lowercase()) {
+                resolve_learning_reading(raw, &candidate.text).and_then(|(reading, covered)| {
+                    let proof = Candidate { reading_key: reading.clone(), ..candidate.clone() };
+                    (covered == consumed && zhixu::decoder::candidate_coverage(raw, &proof) == Some(consumed)).then_some(reading)
+                })
+            } else { None };
+            ModelCandidate {
+                text: candidate.text.clone(), reading: reconstructed.clone().unwrap_or_else(|| candidate.reading_key.clone()),
+                shown_reading: reconstructed.as_ref().map(|_| candidate.reading_key.clone()),
+                consumed, reading_proved: reading_proved || reconstructed.is_some(), source, edit_cost,
+                protected: self.zhiju_protects_row(raw, row), slot: Some(slot),
+            }
+        }).collect()
+    }
+
+    fn offer_zhiju_candidate(&mut self, text: &str, raw: &str) -> Result<(), i32> {
+        let (snapshot, page) = self.visible();
+        if snapshot.raw_input != raw || snapshot.page_no != 0 || snapshot.highlighted_index != 0
+            || page.iter().any(|row| row.candidate.text == text)
+            || page.get(PAGE_SIZE - 1).is_some_and(|row| self.zhiju_protects_row(raw, row))
+            || self.zhiju_result(raw, snapshot.page_no, text).is_none()
+        {
+            return Err(LEAD_OUTRANKED_OTHER);
+        }
+        self.offer_composition(text)
+    }
+
+    fn permits_zhiju_joint_lead(&self, text: &str, raw: &str) -> bool {
+        let _dictionary = self.pin_dictionary();
+        let (snapshot, page) = self.visible();
+        snapshot.raw_input == raw && snapshot.page_no == 0 && snapshot.highlighted_index == 0
+            && !page.is_empty() && !page.iter().any(|row| row.candidate.text == text)
+            && !page.first().is_some_and(|row| self.zhiju_protects_row(raw, row))
+            && !page.get(PAGE_SIZE - 1).is_some_and(|row| self.zhiju_protects_row(raw, row))
+    }
+
     fn apply_zhiju_results(&mut self, results: Vec<(String, usize, String)>) -> (Result<(), i32>, DecoderSnapshot) {
         self.zhiju_applying.set(true);
         self.zhiju_apply_page.borrow_mut().take();
@@ -3550,6 +3672,7 @@ impl Decoder for MixerDecoder {
                 base.cursor_utf8 == base.preedit.len()
             })
         } else { None };
+        self.sentence_bigram_snapshot.set(None);
         self.reset_layer();
         if text.len() == 1 && text.as_bytes()[0].is_ascii_digit() {
             let prefix = self
@@ -3571,6 +3694,7 @@ impl Decoder for MixerDecoder {
         result
     }
     fn backspace(&mut self) -> Result<String, i32> {
+        self.sentence_bigram_snapshot.set(None);
         self.reset_layer();
         if let Some(mut raw) = self.raw_override.take() {
             // Pop by char, not by byte slice: raw_override is ASCII today, but
@@ -3836,6 +3960,7 @@ impl Decoder for MixerDecoder {
                 Ok(format!("{confirmed}{text}"))
             }
         };
+        if result.is_ok() { self.sentence_bigram_snapshot.set(None); }
         if result.is_ok() && self.learning.mode == LearningMode::Zhixu {
             self.learning.stage(choice, delivery_id);
         } else if result.is_err() {
@@ -3957,6 +4082,7 @@ impl Decoder for MixerDecoder {
         self.clear_after_selection();
     }
     fn clear_after_selection(&mut self) {
+        self.sentence_bigram_snapshot.set(None);
         self.reset_layer();
         self.typed_ascii.clear();
         self.raw_override = None;
@@ -4467,6 +4593,18 @@ fn heavy_correction_readings(reading: &str) -> Vec<CorrectionReading> {
 type CompositionKey = ((u64, u64, bool), String, usize, Option<(String, String, bool)>, ranking::CorrectionSettings);
 
 impl MixerDecoder {
+    fn zhiju_protects_row(&self, raw: &str, row: &MixedCandidate) -> bool {
+        let text = &row.candidate.text;
+        text.chars().any(|ch| ch.is_ascii_alphanumeric())
+            || self.lead_refusal(raw, text) == LEAD_OUTRANKED_BY_LEARNED_WHOLE
+            || matches!(row.selection, Selection::Local { .. }) && !decoder_candidate(row)
+                && !matches!(row.candidate.comment.as_str(), HEAVY_GARBLE_COMMENT | SENTENCE_LATTICE_COMMENT | COMPOSITION_COMMENT)
+            || decoder_candidate(row)
+                && raw.bytes().filter(|byte| *byte != b'\'')
+                    .eq(row.candidate.reading_key.bytes().filter(|byte| *byte != b' '))
+                && zhixu::current().all_readings_for_text(text).any(|reading| reading == row.candidate.reading_key)
+    }
+
     /// The refusal code for a page whose first candidate is `first` instead of the sentence.
     fn lead_refusal(&self, raw: &str, first: &str) -> i32 {
         let learned = self.learning.entries().iter()
@@ -4482,7 +4620,7 @@ impl MixerDecoder {
         let index = zhixu::current();
         let key: CompositionKey = (
             (index.generation, zhixu::learning_index().map_or(0, |index| index.generation),
-                index.sentence_bigram.get().is_some()),
+                sentence_bigram_ready(&index)),
             snapshot.raw_input.clone(),
             snapshot.page_no,
             mixed.first().map(|first| {
@@ -5575,11 +5713,15 @@ impl LatticeSearchParams {
     }
 
     fn for_input(reading: &str, abbreviated: bool) -> Self {
+        Self::for_input_with_bigram(reading, abbreviated, None)
+    }
+
+    fn for_input_with_bigram(reading: &str, abbreviated: bool, bigram_ready: Option<bool>) -> Self {
         let baseline = Self::baseline(abbreviated);
         if abbreviated && sentence_abbreviation(reading) {
             // Selected on sent-abbrev/tune only; see the lattice-tune evidence report.
             let mut params = Self { single_initial_cost: 2000, word_cost: 26000, beam: 24, ..baseline };
-            if zhixu::current().sentence_bigram.get().is_some() {
+            if bigram_ready.unwrap_or_else(|| sentence_bigram_ready(&zhixu::current())) {
                 static BIGRAM: OnceLock<(f64, i64, usize)> = OnceLock::new();
                 let &(lambda, word_cost, beam) = BIGRAM.get_or_init(|| {
                     let lambda = std::env::var("ZHIZI_SENT_BIGRAM_LAMBDA").ok().and_then(|value| value.parse::<f64>().ok())
@@ -5649,21 +5791,22 @@ fn decode_lattice(reading: &str, limit: usize, abbreviated: bool) -> Vec<String>
 }
 
 /// Both the page mixer and C3 ask for the same n-best during one edit. Retain just
-/// that list on this thread; dictionary/learning generations and table arrival invalidate it.
+/// that list on this thread for the dictionary, learning and table state used by the page.
 fn decode_sentence_lattice(raw: &str, limit: usize) -> Vec<String> {
     type Key = ((u64, u64, bool), String, usize);
     thread_local! {
         static LAST: std::cell::RefCell<Option<(Key, Vec<String>)>> = const { std::cell::RefCell::new(None) };
     }
     let index = zhixu::current();
+    let bigram_ready = sentence_bigram_ready(&index);
     let key = ((index.generation, zhixu::learning_index().map_or(0, |index| index.generation),
-        index.sentence_bigram.get().is_some()), raw.to_string(), limit);
+        bigram_ready), raw.to_string(), limit);
     LAST.with(|last| {
         if let Some((cached, texts)) = last.borrow().as_ref() && *cached == key {
             return texts.clone();
         }
         let texts: Vec<_> = decode_lattice_configured(raw, limit, true,
-            LatticeSearchParams::for_input(raw, true)).into_iter().map(|(text, _)| text).collect();
+            LatticeSearchParams::for_input_with_bigram(raw, true, Some(bigram_ready))).into_iter().map(|(text, _)| text).collect();
         *last.borrow_mut() = Some((key, texts.clone()));
         texts
     })
@@ -8386,6 +8529,43 @@ mod tests {
     }
 
     #[test]
+    fn sentence_bigram_arrival_preserves_the_displayed_digit_until_an_edit() {
+        let raw = "qkzmy";
+        let index = Arc::new(Index::from_data(zhixu::loader::DictionaryData { entries: [
+            ("情况", "qing kuang", 100), ("请客", "qing ke", 10000),
+            ("晴矿", "qing kuang", 10000), ("怎么样", "zen me yang", 1000),
+        ].into_iter().map(|(text, reading, weight)| zhixu::loader::Entry {
+            text: text.into(), reading: reading.into(), weight, layer: "fixture".into(),
+        }).collect() }));
+        let model = Arc::new(zhixu::WordBigram::from_tsv(
+            "<s>\t-99\t0\n情况\t-2\t0\n请客\t-3\t0\n晴矿\t-5\t0\n怎么样\t-1\t0\n",
+            "<s>\t情况\t-0.1\n情况\t怎么样\t-0.1\n请客\t怎么样\t-5\n", 1e-6, 0.0).unwrap());
+        let new_mixer = || {
+            let mut source = ListDecoder::with(raw, &[("乱拼候选", raw)]);
+            source.candidates[0].comment = HEAVY_GARBLE_COMMENT.into();
+            MixerDecoder::new(Box::new(source), "sentence-bigram-arrival".into())
+        };
+        zhixu::with_index(index.clone(), || {
+            let mut confirming = new_mixer();
+            let mut editing = new_mixer();
+            let page = confirming.snapshot().candidates;
+            let slot = page.iter().position(|row| row.comment == SENTENCE_LATTICE_COMMENT).unwrap();
+            assert_ne!(page[slot].text, "情况怎么样");
+            assert_eq!(editing.snapshot().candidates, page);
+
+            index.attach_sentence_bigram(model);
+            assert_eq!(decode_sentence_lattice(raw, 24)[0], "情况怎么样");
+            assert_eq!(confirming.snapshot().candidates, page);
+            assert_eq!(confirming.select_candidate(slot, 1, LearningIntent::NoLearn).unwrap(), page[slot].text);
+            assert_eq!(editing.snapshot().candidates, page);
+
+            editing.backspace().unwrap();
+            editing.input("y").unwrap();
+            assert_eq!(editing.snapshot().candidates[slot].text, "情况怎么样");
+        });
+    }
+
+    #[test]
     fn sentence_lattice_parameters_leave_other_input_classes_unchanged() {
         for raw in ["woxianzaishiyongsougou", "nh", "wmx", "woxianzaishiysougou", "queshishunsh"] {
             for abbreviated in [false, true] {
@@ -9461,6 +9641,45 @@ mod tests {
     /// `Session::new_native` constructs it, over an empty in-memory user store.
     fn native_mixer(app: &str, dictionary: Arc<Index>) -> MixerDecoder {
         MixerDecoder::new_native(app.into(), Arc::new(Mutex::new(Store::default())), dictionary).unwrap()
+    }
+
+    #[cfg(all(target_os = "macos", feature = "mac-fast-typing"))]
+    #[test]
+    fn learned_exact_head_stays_visible_and_selectable_during_context_ranking() {
+        let dictionary = Arc::new(Index::from_data(zhixu::loader::DictionaryData { entries: [
+            ("新奇", "xin qi", 581), ("新起", "xin qi", 60),
+        ].into_iter().map(|(text, reading, weight)| zhixu::loader::Entry {
+            text: text.into(), reading: reading.into(), weight, layer: "fixture".into(),
+        }).collect() }));
+        let composing = |context: &str, learned: Option<&str>| {
+            let mut mixer = native_mixer("context-learned-exact", dictionary.clone());
+            if let Some(text) = learned {
+                mixer.learning.remember_for_test("xin qi", text, personal_picks::now_ms());
+            }
+            mixer.configure_preceding_text(Some(context.into()));
+            for key in ["x", "i", "n", "q", "i"] { mixer.input(key).unwrap(); }
+            mixer
+        };
+        let clean = composing("我会", None);
+        assert_eq!(clean.context_ranking_inputs().homophone_mask & 3, 3);
+
+        for intent in [LearningIntent::NoLearn, LearningIntent::DeliberateSelection] {
+            let mut learned = composing("我会", Some("新起"));
+            let page = learned.snapshot();
+            assert_eq!(page.candidates[0].text, "新起");
+            assert_eq!(page.candidates[1].text, "新奇");
+            let inputs = learned.context_ranking_inputs();
+            assert_eq!(inputs.homophone_mask & 3, 2);
+            assert_eq!(inputs.complete_mask & 3, 2);
+            let mut order = (0..page.candidates.len()).collect::<Vec<_>>();
+            order.swap(0, 1);
+            assert_eq!(learned.reorder_context_candidates(&order), Err(-10));
+            assert_eq!(learned.select_candidate(0, 1, intent).unwrap(), "新起");
+        }
+
+        let contrary = composing("原来的草稿不继续改了，我打算", Some("新奇"));
+        assert_eq!(contrary.snapshot().candidates[0].text, "新奇");
+        assert_eq!(contrary.context_ranking_inputs().homophone_mask & 3, 3);
     }
 
     fn native_mixer_with(app: &str, blacklist: Arc<Mutex<Store>>, dictionary: Arc<Index>) -> MixerDecoder {

@@ -85,7 +85,9 @@ final class ZhijuModel: @unchecked Sendable {
             throw CocoaError(.fileReadCorruptFile)
         }
         let configuration = MLModelConfiguration()
-        configuration.computeUnits = .all
+        // CPU prefill avoids the Metal assertion and the long ANE compile or
+        // fallback phase seen at readiness on the two supported test Macs.
+        configuration.computeUnits = .cpuOnly
         let splitTail = try ZhijuSplitAssets.load(directory: directory, vocabularyCount: itos.count)
         var fullModel: MLModel?
         var shortModel: MLModel?
@@ -153,7 +155,10 @@ final class ZhijuModel: @unchecked Sendable {
         }
         // Core ML may defer device preparation until prediction. The background
         // loader must not publish a model whose first call consumes the search budget.
-        do { try prepareForReadiness(); try attentionEngine?.prepareForReadiness() }
+        do {
+            if let attentionEngine { try attentionEngine.prepareForReadiness() }
+            else { try prepareForReadiness() }
+        }
         catch {
             throw CocoaError(.coderInvalidValue, userInfo: [NSDebugDescriptionErrorKey:
                 "Zhiju readiness (\(directory.lastPathComponent)): \(error)"])
@@ -462,15 +467,19 @@ final class ZhijuModelLoader: @unchecked Sendable {
 
     func failureDescription(directory: URL) -> String? { lock.withLock { failures[directory] } }
 
-    /// Only called by the background search lane after the core's applicability check.
     /// A loading key is never replayed when the model becomes ready.
     func prepare(directory: URL) {
-        guard ZhijuModel.assetsExist(directory: directory) else { return }
         lock.lock()
         let first = attempted.insert(directory).inserted
         lock.unlock()
         guard first else { return }
         queue.async { [self] in
+            guard ZhijuModel.assetsExist(directory: directory) else {
+                _ = lock.withLock { attempted.remove(directory) }
+                return
+            }
+            let started = DispatchTime.now().uptimeNanoseconds
+            defer { KeyPathContentionTrace.shared?.record("zhiju.model.prepare", DispatchTime.now().uptimeNanoseconds &- started) }
             do {
                 let model = try load(directory)
                 lock.lock()
@@ -625,7 +634,7 @@ final class ZhijuSearchTrace {
         guard ZhijuModel.assetsExist(directory: directory) else {
             return ZhijuSearchMeasurement(status: "skipped_model_missing", input: input,
                 contextCharacterCount: context.count,
-                computeUnits: "all", availableComputeDevices: [], loadMilliseconds: nil,
+                computeUnits: "cpuOnly", availableComputeDevices: [], loadMilliseconds: nil,
                 searchMilliseconds: [], p50Milliseconds: nil, p95Milliseconds: nil, outcomes: [:], samples: [])
         }
         guard repetitions > 0, !input.isEmpty, input.utf8.allSatisfy({ (97...122).contains($0) }), context.utf16.count <= 32 else {
@@ -670,7 +679,7 @@ final class ZhijuSearchTrace {
         }
         let sorted = samples.sorted()
         return ZhijuSearchMeasurement(status: "measured", input: input,
-            contextCharacterCount: context.count, computeUnits: "all",
+            contextCharacterCount: context.count, computeUnits: "cpuOnly",
             availableComputeDevices: MLModel.availableComputeDevices.map(\.description), loadMilliseconds: loadMilliseconds,
             searchMilliseconds: samples, p50Milliseconds: sorted[Int(Double(sorted.count - 1) * 0.50)],
             p95Milliseconds: sorted[Int(Double(sorted.count - 1) * 0.95)], outcomes: outcomes, samples: details)

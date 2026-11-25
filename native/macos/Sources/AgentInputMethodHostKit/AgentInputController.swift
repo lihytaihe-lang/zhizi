@@ -105,6 +105,10 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
                     grid: nil
                 )
             }
+            if let received = step.keyReceivedAt, let outcome = view.contextModel.zhijuOutcome,
+               outcome == .applied || outcome == .offered {
+                KeyPathContentionTrace.shared?.record("zhiju.key.to-visible", DispatchTime.now().uptimeNanoseconds &- received)
+            }
         }
     }
 
@@ -156,6 +160,15 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
         }
     }
 
+    func configureZhijuSearchForProbe(neuralEnabled: Bool, budgetMilliseconds: Int, beam: Int) {
+        callbackExecutor.sync {
+            core?.defersRanking = true
+            core?.configureZhijuSearchForProbe(neuralEnabled: neuralEnabled, budgetMilliseconds: budgetMilliseconds, beam: beam)
+        }
+    }
+
+    var jointReportForProbe: ZhijuJointReport? { callbackExecutor.sync { core?.jointReportForProbe } }
+
     func configureInputForProbe(fuzzyMask: UInt32, typoCorrectionEnabled: Bool) -> Bool {
         callbackExecutor.sync {
             guard !resourcesClosed, let core else { return false }
@@ -169,6 +182,10 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
 
     var candidateFunnelForTesting: (pool: [String], group: [String], compositions: [String], shortWords: [String])? {
         callbackExecutor.sync { core?.candidateFunnelForTesting() }
+    }
+
+    var scoringFunnelForProbe: (pool: [String], group: [String], compositions: [String], shortWords: [String])? {
+        callbackExecutor.sync { core?.candidateFunnelForTesting(includeFollowingPages: false) }
     }
 
     var contextAppIdentifierForTesting: String { appIdentifier }
@@ -332,11 +349,11 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
         let received = DispatchTime.now().uptimeNanoseconds
         return callbackExecutor.sync {
             KeyPathContentionTrace.shared?.record("controller.key.executor.wait", DispatchTime.now().uptimeNanoseconds &- received)
-            return handleSerialized(event, client: sender)
+            return handleSerialized(event, client: sender, received: received)
         }
     }
 
-    private func handleSerialized(_ event: NSEvent?, client sender: Any?) -> Bool {
+    private func handleSerialized(_ event: NSEvent?, client sender: Any?, received: UInt64) -> Bool {
         guard !resourcesClosed else { return false }
         guard let event else { return false }
         if event.type == .keyUp, event.keyCode == 51 {
@@ -402,7 +419,8 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
             text: mapped.text,
             modifiers: mapped.modifiers,
             security: security,
-            deliveryID: mapped.deliveryID
+            deliveryID: mapped.deliveryID,
+            keyReceivedAt: received
         )
         guard let result else { return false }
         let qualityStarted = DispatchTime.now().uptimeNanoseconds
@@ -446,6 +464,9 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
         let insertTextElapsed = apply(
             result, to: client, passthroughText: needsRepairedPassthrough ? mapped.text : ""
         )
+        if insertTextElapsed != nil {
+            KeyPathContentionTrace.shared?.record("controller.key.to-insert-return", DispatchTime.now().uptimeNanoseconds &- received)
+        }
         // The client owns an unhandled key and can edit text or move its caret.
         // A readable client will supply the new context at the next composition.
         if event.type == .keyDown, !result.consumed, !needsRepairedPassthrough {

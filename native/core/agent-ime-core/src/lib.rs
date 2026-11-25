@@ -787,6 +787,70 @@ pub unsafe extern "C" fn aim_session_apply_zhiju_snapshot_selected(
 }
 
 #[unsafe(no_mangle)]
+/// Reads the confirmed document and composition prefix used by both models.
+/// # Safety
+/// Session access is exclusive. The output is writable for the supplied capacity.
+pub unsafe extern "C" fn aim_session_ranking_context(
+    session: *const AimSession, out: *mut u8, out_len: *mut usize, has_confirmed: *mut u8,
+) -> i32 {
+    let context = unsafe { session.as_ref() }.and_then(|s| s.inner.ranking_context());
+    if let Some(output) = unsafe { has_confirmed.as_mut() } {
+        *output = u8::from(context.as_ref().is_some_and(|(_, confirmed)| *confirmed));
+    }
+    unsafe { write_model_bytes(context.as_ref().map(|(text, _)| text.as_bytes()), out, out_len) }
+}
+
+#[unsafe(no_mangle)]
+/// Copies the current page proof and completed neural results for one joint score.
+/// # Safety
+/// Session and snapshot are live and accessed exclusively. The output is
+/// writable for the supplied capacity, or null when querying its required size.
+pub unsafe extern "C" fn aim_session_zhiju_joint_inputs(
+    session: *const AimSession, snapshot: *const AimZhijuSnapshot, out: *mut u8, out_len: *mut usize,
+) -> i32 {
+    let Some((session, snapshot)) = (unsafe { session.as_ref().zip(snapshot.as_ref()) }) else {
+        return unsafe { write_model_bytes(None, out, out_len) };
+    };
+    let data = session.inner.zhiju_joint_inputs(&snapshot.inner).and_then(|(context, raw, native)| {
+        serde_json::to_vec(&serde_json::json!({
+            "context": context, "raw": raw, "native": native,
+            "generated": snapshot.inner.model_candidates(),
+        })).ok()
+    });
+    unsafe { write_model_bytes(data.as_deref(), out, out_len) }
+}
+
+unsafe fn write_model_bytes(data: Option<&[u8]>, out: *mut u8, out_len: *mut usize) -> i32 {
+    if out_len.is_null() { return -1; }
+    let capacity = unsafe { *out_len };
+    unsafe { *out_len = 0; }
+    if out.is_null() && capacity != 0 { return -1; }
+    let Some(bytes) = data else { return -8; };
+    unsafe { *out_len = bytes.len(); }
+    if bytes.len() > capacity { return -6; }
+    if !bytes.is_empty() { unsafe { ptr::copy_nonoverlapping(bytes.as_ptr(), out, bytes.len()); } }
+    0
+}
+
+#[unsafe(no_mangle)]
+/// Offers or leads with one of the positions in the snapshot's `generated` list.
+/// # Safety
+/// Session and snapshot access is exclusive; `out` is writable uninitialized
+/// AimResult storage. Free `out` using aim_result_free, including on error.
+pub unsafe extern "C" fn aim_session_apply_zhiju_joint(
+    session: *mut AimSession, snapshot: *const AimZhijuSnapshot, index: usize, lead: u8, out: *mut AimResult,
+) -> i32 {
+    if out.is_null() { return -1; }
+    unsafe { ptr::write(out, AimResult::default()); }
+    let Some((session, snapshot)) = (unsafe { session.as_mut().zip(snapshot.as_ref()) }) else { return -1; };
+    let (status, page) = match session.inner.apply_zhiju_joint(&snapshot.inner, index, lead != 0) {
+        Ok(result) => result, Err(status) => return status,
+    };
+    fill_result(unsafe { &mut *out }, page, 0);
+    status
+}
+
+#[unsafe(no_mangle)]
 /// Applies a proved lexical preview after its exact, following key was consumed.
 /// # Safety
 /// Same pointer and ownership rules as aim_session_apply_zhiju_snapshot_selected.
@@ -1891,6 +1955,57 @@ mod ffi_tests {
             assert_eq!(committed.commit_text, target);
             assert!(committed.marked_text.is_empty());
             assert!(committed.candidates.is_empty());
+        });
+    }
+
+    #[test]
+    fn ffi_zhiju_joint_offer_proves_reading_and_commits_the_visible_digit() {
+        use crate::zhixu::loader::{DictionaryData, Entry};
+        let dictionary = std::sync::Arc::new(crate::zhixu::Index::from_data(DictionaryData { entries: [
+            ("我们要求", "wo men yao qiu"), ("我们一起", "wo men yi qi"),
+            ("下班了", "xia ban le"), ("先保留", "xian bao liu"),
+        ].into_iter().map(|(text, reading)| Entry {
+            text: text.into(), reading: reading.into(), weight: 500, layer: "fixture".into(),
+        }).collect() }));
+        dictionary.warm_whole();
+        crate::zhixu::with_index(dictionary.clone(), || {
+            let app_id = "ffi.zhiju-joint".to_string();
+            let mut session = AimSession { inner: Session::new_native(app_id.clone(),
+                std::sync::Arc::new(std::sync::Mutex::new(crate::blacklist::Store::default())), dictionary).unwrap(), app_id };
+            session.inner.set_host_preceding_text("文档 GPT4，");
+            for ch in "wmyqxbl".chars() {
+                session.inner.process(KeyEvent { kind: KeyKind::Text, text: ch.to_string(), modifiers: 0,
+                    security: SecurityState::NonSecure, delivery_id: 0 });
+            }
+            let mut snapshot = ptr::null_mut();
+            assert_eq!(unsafe { aim_session_zhiju_snapshot(&session, &mut snapshot) }, 0);
+            unsafe { &mut *snapshot }.inner.results = Some(vec![
+                crate::zhixu::zhiju::Candidate { text: "我们一起下班了".into(), reading: "wo men yi qi xia ban le".into(),
+                    score: -1.0, consumed: 6 },
+                crate::zhixu::zhiju::Candidate { text: "我们要齐下班了".into(), reading: "wo men yao qi xia ban le".into(),
+                    score: -2.0, consumed: 7 },
+            ]);
+            let mut bytes = [0; 4096];
+            let mut length = bytes.len();
+            assert_eq!(unsafe { aim_session_zhiju_joint_inputs(&session, snapshot, bytes.as_mut_ptr(), &mut length) }, 0);
+            let inputs: serde_json::Value = serde_json::from_slice(&bytes[..length]).unwrap();
+            assert_eq!(inputs["context"], "文档 GPT4，");
+            assert_eq!(inputs["raw"], "wmyqxbl");
+            assert_eq!(inputs["generated"].as_array().unwrap().len(), 1);
+            assert_eq!(inputs["generated"][0]["reading"], "wo men yao qi xia ban le");
+            let first = session.inner.page_texts()[0].clone();
+            let mut result = AimResult::default();
+            assert_eq!(unsafe { aim_session_apply_zhiju_joint(&mut session, snapshot, 0, 0, &mut result) }, 0);
+            let page = session.inner.page_texts();
+            assert_eq!(page[0], first);
+            let offered = page.iter().position(|text| text == "我们要齐下班了").unwrap();
+            assert_eq!(offered, 4.min(page.len() - 1));
+            unsafe { aim_result_free(&mut result) };
+            let commit = session.inner.process(KeyEvent { kind: KeyKind::Text, text: (offered + 1).to_string(), modifiers: 0,
+                security: SecurityState::NonSecure, delivery_id: 1 });
+            assert_eq!(commit.commit_text, "我们要齐下班了");
+            assert_eq!(unsafe { aim_session_apply_zhiju_joint(&mut session, snapshot, 0, 0, &mut result) }, -8);
+            unsafe { aim_result_free(&mut result); aim_zhiju_snapshot_destroy(snapshot); }
         });
     }
 

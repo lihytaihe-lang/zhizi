@@ -197,6 +197,8 @@ const CUES: &[ContextCue] = &[
 // Beyond the first page, require precise context with evidence immediately
 // adjacent to the typed word. Avoid crossing a clause for generic cues.
 pub(crate) fn offpage_exact_collocation(preceding: &str) -> Option<(&'static str, &'static str)> {
+    #[cfg(all(target_os = "macos", feature = "mac-fast-typing"))]
+    if font_size_request(preceding) { return Some(("zaidaxie", "再大些")); }
     let clause = preceding.rsplit(['。', '！', '？', '；', '，', '、', '.', '!', '?', ';', ',', '\n'])
         .next().unwrap_or_default();
     if let Some(word) = short_phrase_after_context(clause) { return Some(word); }
@@ -235,6 +237,52 @@ fn short_phrase_after_context(clause: &str) -> Option<(&'static str, &'static st
         return Some(("zaichufa", "再出发"));
     }
     None
+}
+
+#[cfg(all(target_os = "macos", feature = "mac-fast-typing"))]
+fn font_size_request(preceding: &str) -> bool {
+    let clause = recent_clause(preceding).trim_end();
+    strip_any_suffix(clause, &["可以", "能不能", "能否"]).is_some()
+        && ["字体", "字号", "文字", "窗口的字", "屏幕上的字", "标题的字"]
+            .iter().any(|word| clause.contains(word))
+}
+
+#[cfg(all(target_os = "macos", feature = "mac-fast-typing"))]
+fn approval_context(preceding: &str) -> bool {
+    let clause = recent_clause(preceding.trim_end().trim_end_matches(['，', ',']));
+    ["方案", "提案", "审核", "审批", "报价", "议案", "评审"]
+        .iter().any(|word| clause.contains(word))
+        && (strip_any_suffix(clause, &["不用再改", "不需要修改", "已经一致", "没有异议", "没异议", "已通过", "已确认"]).is_some()
+            || clause.contains("确认了") && !["没确认", "未确认", "不确认", "无法确认", "没通过", "修改", "调整", "拒绝"]
+                .iter().any(|word| clause.contains(word)))
+}
+
+#[cfg(all(target_os = "macos", feature = "mac-fast-typing"))]
+fn replacing_draft(preceding: &str) -> bool {
+    let Some((before, current)) = preceding.rsplit_once(['，', ',']) else { return false; };
+    if current.contains(CLAUSE_BOUNDARIES) || current.contains(['不', '没'])
+        || strip_any_suffix(current.trim_end(), &["我打算", "我准备", "我会", "我们打算", "我们准备", "我们会"]).is_none()
+    {
+        return false;
+    }
+    let previous = before.rsplit(CLAUSE_BOUNDARIES).next().unwrap_or_default().trim_end();
+    ["草稿", "稿子", "文档", "旧文件", "旧版本", "记录"]
+        .iter().any(|word| previous.contains(word))
+        && strip_any_suffix(previous, &["不继续改了", "不用了", "作废", "废弃了", "先撤掉", "停用"]).is_some()
+}
+
+/// Only these contextual phrases can use a proved native composition as an
+/// exact collocation. The rest require a dictionary word as before.
+pub(crate) fn accepts_composed_collocation(raw: &str) -> bool {
+    cfg!(all(target_os = "macos", feature = "mac-fast-typing")) && matches!(raw, "zaidaxie" | "wozhijietongyi")
+}
+
+pub(crate) fn architectural_viewing_platform(raw: &str, preceding: &str) -> bool {
+    if !cfg!(all(target_os = "macos", feature = "mac-fast-typing")) || raw != "guanlitai" { return false; }
+    let clause = recent_clause(preceding).trim_end();
+    ["古建筑", "宫廷", "宫殿", "王宫", "城楼", "礼仪广场"].iter().any(|word| clause.contains(word))
+        && !["软件", "应用", "登录", "后台", "服务器"].iter().any(|word| clause.contains(word))
+        && strip_any_suffix(clause, &["宫廷的", "宫殿的", "建筑的", "修了一座", "修了一个", "建了一座", "留有一处"]).is_some()
 }
 
 // The short-word fast path uses complete phrases or typed left-context
@@ -470,6 +518,14 @@ pub(crate) fn context_sensitive_abbreviation(raw: &str, preceding: &str) -> Opti
 }
 
 pub(crate) fn exact_collocation(raw: &str, preceding: &str) -> Option<&'static str> {
+    #[cfg(all(target_os = "macos", feature = "mac-fast-typing"))]
+    match raw {
+        "zaidaxie" if font_size_request(preceding) => return Some("再大些"),
+        "wozhijietongyi" if approval_context(preceding) => return Some("我直接同意"),
+        "tongyi" if preceding.trim_end().strip_suffix("我直接").is_some_and(approval_context) => return Some("同意"),
+        "xinqi" if replacing_draft(preceding) => return Some("新起"),
+        _ => {}
+    }
     if let Some(word) = preferred_word(COLLOCATIONS, raw, preceding)
         .or_else(|| document_or_component(raw, preceding))
         .or_else(|| match raw {

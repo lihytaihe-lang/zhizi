@@ -570,13 +570,17 @@ pub(crate) fn set_confirmed_first(text: Option<String>) {
     }
 }
 
-pub fn owner_keeps(first: &str, challenger: &str) -> bool {
+pub(crate) fn owner_style_keeps(first: &str, challenger: &str) -> bool {
     let (seed_keeps, seed_reverse) = owner_style().read()
         .map(|style| (style.keeps(first, challenger), style.keeps(challenger, first)))
         .unwrap_or((false, false));
     seed_keeps
         || (!seed_reverse && LEARNING_STYLE.with(|slot| slot.borrow().as_ref()
             .is_some_and(|style| style.keeps(first, challenger))))
+}
+
+pub fn owner_keeps(first: &str, challenger: &str) -> bool {
+    owner_style_keeps(first, challenger)
         || confirmed_first().read().map(|text| text.as_deref() == Some(first)).unwrap_or(false)
 }
 

@@ -12,7 +12,7 @@ const shellLayers = new Set(["aiTerms", "aiNames", "packPoetry", "packCad", "pac
 const isShellAsset = (name) => shellLayers.has(name.replace(/Provenance$/u, ""));
 const assets = Object.freeze({
   commonFix: ["native/resources/Rime/agent_common_fix.dict.yaml", "ec1a7a53ea1d072cf44a139f8946e09b3a2d59f11e0f28e08aa8cd513437d0ff"],
-  daily: ["native/resources/Rime/agent_daily.dict.yaml", "2d2ab56d192860fc53b469e204504ce25dfaa272ad227386b8b72620051f327c"],
+  daily: ["native/resources/Rime/agent_daily.dict.yaml", "41bea8db66b77ab11bfbc41d7569dce6e2bc82e7dc87823f679e1add51d67264"],
   english: ["native/resources/Rime/agent_english.dict.yaml", "47b351cd46bf975d98a77e67d901210c39fd5ce4952f10e2c8a727b1bb3749de"],
   tech: ["native/resources/Rime/agent_tech_terms.dict.yaml", "3865bba99acdbc5b1ad535a266a79e3d15e0eb8b5f14ff08b4e8be86e830af20"],
   idioms: ["native/resources/Rime/agent_idioms.dict.yaml", "5723df93fd4b3ce1dfdb612ca2f496862b7b8c80ea380c4c338937956c9af34f"],
@@ -40,7 +40,7 @@ const assets = Object.freeze({
   packTermsProvenance: ["quality/corpus/agent-pack-terms-provenance.tsv", "2385d7e53d6bfdfeb8e3651f04f17e20153641c81a5123e96e32cf92811e4077"],
   aggregate: ["native/resources/Rime/agent_pinyin.dict.yaml", "f2b5a8904ee6fb51c7eb243447b0f51e9a70f77953a6b1d5e311a0e1d97adbf5"],
   commonFixProvenance: ["quality/corpus/agent-common-fix-provenance.tsv", "cce7cf63596ff558c2b5042c588897d2fa7024b450462f217ca72922f87b9214"],
-  provenance: ["quality/corpus/agent-daily-provenance.tsv", "8bc49fd53b714faa16771455cbfe28b8a9024cd6d39ce1d24c71f8a03b5fa4a9"],
+  provenance: ["quality/corpus/agent-daily-provenance.tsv", "54c9c85f6d73b659f73f99bcbffb68e157bec6ad592789229fe2837a034d1276"],
   englishProvenance: ["quality/corpus/agent-english-provenance.tsv", "5072ef56b73f0d8273df92fc7b5db888747b3707ee84774620b65064f7517583"],
   techProvenance: ["quality/corpus/agent-tech-terms-provenance.tsv", "2e390be331a858974506a4b721dae18b311ff686eac7146925ed6049a3d1a79c"],
   thuoclItProvenance: ["quality/corpus/thuocl-it-provenance.tsv", "a3efe498ed334276324756590b849805d45bfc695fca98c40275cf103350fcd1"],
@@ -134,6 +134,7 @@ assert(JSON.stringify(dictionaryRows) === JSON.stringify([
   ["交接单", "jiao jie dan", "80"],
   ["待确认项", "dai que ren xiang", "80"],
   ["充电盒", "chong dian he", "80"],
+  ["新起", "xin qi", "60"],
 ]), "agent_daily rows changed");
 
 const provenanceRows = loaded.provenance.trimEnd().split(/\r?\n/u).slice(1).map((line) => line.split("\t"));

@@ -136,14 +136,17 @@ public struct DeferredRankingStep: @unchecked Sendable {
     public let pageNumber: Int
     public let generation: UInt64
     public let stage: Int
+    let keyReceivedAt: UInt64?
     /// Changes the core's order and returns the page to show; nil when a later key made it stale.
     public let finish: () -> IMEViewModel?
 
-    public init(markedText: String, pageNumber: Int, generation: UInt64, stage: Int = 1, finish: @escaping () -> IMEViewModel?) {
+    public init(markedText: String, pageNumber: Int, generation: UInt64, stage: Int = 1,
+                keyReceivedAt: UInt64? = nil, finish: @escaping () -> IMEViewModel?) {
         self.markedText = markedText
         self.pageNumber = pageNumber
         self.generation = generation
         self.stage = stage
+        self.keyReceivedAt = keyReceivedAt
         self.finish = finish
     }
 }
@@ -166,6 +169,12 @@ public final class CoreSession: @unchecked Sendable {
     private var probeShortAbbreviationOffers = true
     private var probeFifthSlotSelection = true
     private var probeZhijuAlternatives: [String]?
+    private var probeZhijuSearch: (neuralEnabled: Bool, budgetNanoseconds: UInt64, beam: Int)?
+    private var probeJointReport: ZhijuJointReport?
+    var jointZhijuMode = ZhijuJointMode.current()
+    var jointReportForProbe: ZhijuJointReport? {
+        Self.runtimeLock.withLock { probeJointReport }
+    }
     /// Pages that disagreed with the core (diagnostic only; should stay 0; see `assertDrawnPageIsCorePage`).
     public private(set) var displayedPageMismatches = 0
     /// This key's composition offered in the last first-page slot when none leads.
@@ -210,7 +219,11 @@ public final class CoreSession: @unchecked Sendable {
         set {
             Self.runtimeLock.lock()
             defer { Self.runtimeLock.unlock() }
-            zhijuEnableLock.withLock { enabledZhiju = newValue }
+            let changed = zhijuEnableLock.withLock {
+                let changed = enabledZhiju != newValue
+                enabledZhiju = newValue
+                return changed
+            }
             if let handle {
                 _ = aim_session_set_zhiju_phrases(handle, Self.usesCommonPhrases && newValue ? 1 : 0)
             }
@@ -220,6 +233,8 @@ public final class CoreSession: @unchecked Sendable {
                 initialZhijuPrefix.clear()
                 pendingZhijuLead = nil
                 sentencePreviewLock.withLock { sentencePreview = nil }
+            } else if changed {
+                zhijuLoader.prepare(directory: zhijuModelDirectory)
             }
         }
     }
@@ -233,7 +248,9 @@ public final class CoreSession: @unchecked Sendable {
     // are stored. The slot's epoch rejects work cleared by focus/security changes.
     let initialZhijuPrefix = EpochPrefixSlot<ZhijuInitialPrefixValue>()
     private var pendingZhijuJob: ZhijuJob?
-    private var pendingZhijuOffer: (original: IMEViewModel, generation: UInt64, job: ZhijuJob, text: String, context: String)?
+    private var modelContextForKey: (text: String, hasConfirmed: Bool)?
+    private static let zhijuKeyBudget: UInt64 = 50_000_000
+    private var pendingZhijuOffer: (original: IMEViewModel, generation: UInt64, job: ZhijuJob, text: String, context: String, deadline: UInt64?)?
     private struct PendingZhijuLead {
         let original: IMEViewModel
         let generation: UInt64
@@ -243,6 +260,7 @@ public final class CoreSession: @unchecked Sendable {
         let snapshot: ZhijuSnapshot?
         let alternatives: [String]
         let context: String
+        let deadline: UInt64?
     }
     private struct ZhijuLeadVerification {
         let nativeFirst: String
@@ -261,6 +279,9 @@ public final class CoreSession: @unchecked Sendable {
     private static let usesEarlySentenceWords = fastTypingOption("AIM_EXPERIMENT_ZHIJU_EARLY_WORDS")
     private static let usesCommonPhrases = fastTypingOption("AIM_EXPERIMENT_ZHIJU_COMMON_PHRASES")
     private static let usesSentencePreview = fastTypingOption("AIM_EXPERIMENT_ZHIJU_PREVIEW")
+    static var zhijuLexicalProbeSettings: (earlyWords: Bool, commonPhrases: Bool, preview: Bool) {
+        (usesEarlySentenceWords, usesCommonPhrases, usesSentencePreview)
+    }
     private struct SentencePreview {
         let generation: UInt64
         let nextLetter: UInt8
@@ -364,6 +385,7 @@ public final class CoreSession: @unchecked Sendable {
            let modelHandle = model.handle {
             _ = aim_session_apply_context_model(handle, modelHandle)
         }
+        if enabledZhiju { zhijuLoader.prepare(directory: zhijuModelDirectory) }
     }
 
     deinit {
@@ -390,8 +412,10 @@ public final class CoreSession: @unchecked Sendable {
         text: String = "",
         modifiers: UInt32 = 0,
         security: IMESecurityState,
-        deliveryID: UInt64 = 0
+        deliveryID: UInt64 = 0,
+        keyReceivedAt: UInt64? = nil
     ) -> IMEViewModel? {
+        let keyStarted = keyReceivedAt ?? DispatchTime.now().uptimeNanoseconds
         Self.runtimeLock.lock("key")
         defer { Self.runtimeLock.unlock() }
         let previousLookahead = exactLookahead
@@ -408,14 +432,19 @@ public final class CoreSession: @unchecked Sendable {
         appliedRankingStage = 0
         pendingPrimaryGeneration = nil
         pendingZhijuLead = nil
+        modelContextForKey = nil
+        probeJointReport = nil
+        if probeZhijuSearch != nil { probeGroups = ([], [], []) }
         shouldSearchZhiju = false
         guard let view = processKey(kind: kind, text: text, modifiers: modifiers, security: security, deliveryID: deliveryID,
                                     previousLookahead: previousLookahead,
                                     previousSentencePreview: previousSentencePreview) else { return nil }
         let shown = zhijuView(view)
-        if zhijuEnabled && shouldSearchZhiju {
+        if zhijuEnabled && shouldSearchZhiju && sentenceClientMatchesSession {
             let letter = kind == .text && modifiers == 0 && text.utf8.count == 1 ? text.utf8.first : nil
-            scheduleDeferredZhiju(original: shown, generation: rankingGeneration, lastLetter: letter)
+            let deadline = (probeZhijuSearch?.budgetNanoseconds ?? 0) > 40_000_000
+                ? nil : keyStarted + Self.zhijuKeyBudget
+            scheduleDeferredZhiju(original: shown, generation: rankingGeneration, lastLetter: letter, deadline: deadline)
         }
         return shown
     }
@@ -454,7 +483,10 @@ public final class CoreSession: @unchecked Sendable {
         // Picking a segment (digit or Space) that leaves letters to convert shows a fresh page too.
         let canPickSegment = kind == .space
             || (kind == .text && text.unicodeScalars.allSatisfy { CharacterSet.decimalDigits.contains($0) })
-        let pickedSegment = canPickSegment && !Self.contextWithPickedText("", markedText: markedText).isEmpty
+        if security == .nonSecure && !markedText.isEmpty && canPickSegment {
+            modelContextForKey = Self.readRankingContext(handle)
+        }
+        let pickedSegment = canPickSegment && modelContextForKey?.hasConfirmed == true
         if pickedSegment { initialZhijuPrefix.clear() }
         let changesPage = kind == .backspace || kind == .pageUp || kind == .pageDown || pickedSegment
             || (kind == .text && text.unicodeScalars.allSatisfy { CharacterSet.letters.contains($0) || $0 == "'" })
@@ -503,7 +535,7 @@ public final class CoreSession: @unchecked Sendable {
         }
         // Selection/navigation-only callbacks retain the stored core order.
         // Input, backspace and paging invalidate it in the Mixer before here.
-        guard contextRanking.enabled, !contextRanking.suspended, security == .nonSecure, changesPage,
+        guard contextRanking.enabled, !contextRanking.suspended, security == .nonSecure, changesPage, sentenceClientMatchesSession,
               !original.markedText.isEmpty, original.commitText.isEmpty else { return original }
         let loader = ContextRankingModelLoader.shared
         let contextModelDirectory = contextRankingScoreForTesting == nil ? self.contextModelDirectory : baseContextModelDirectory
@@ -516,7 +548,7 @@ public final class CoreSession: @unchecked Sendable {
                         guard let deferredGeneration else { return true }
                         Self.runtimeLock.lock()
                         defer { Self.runtimeLock.unlock() }
-                        return rankingGeneration == deferredGeneration && handle != nil
+                        return rankingGeneration == deferredGeneration && self.handle != nil
                     }
                 }
             }
@@ -532,7 +564,8 @@ public final class CoreSession: @unchecked Sendable {
         }
         let compositionStarted = contextRanking.now()
         pendingOffer = nil
-        let rankingContextText = Self.contextWithPickedText(rankingContext, markedText: original.markedText)
+        if modelContextForKey == nil { modelContextForKey = Self.readRankingContext(handle) }
+        let rankingContextText = modelContextForKey?.text ?? rankingContext
         if defersRanking {
             let unmodifiedLetter = kind == .text && modifiers == 0 && text.utf8.count == 1
                 && text.utf8.allSatisfy { (97...122).contains($0) }
@@ -829,8 +862,8 @@ public final class CoreSession: @unchecked Sendable {
     }
 
     private static func stepZhiju(snapshot: ZhijuSnapshot, search: PreparedZhijuSearch, context: ZhijuScoringContext,
-                                  scores: [Float], budget: UInt64) -> (Int32, String) {
-        var buffer = [UInt8](repeating: 0, count: 8 * 256)
+                                  scores: [Float], budget: UInt64, beam: Int) -> (Int32, String) {
+        var buffer = [UInt8](repeating: 0, count: beam * 256)
         var length = buffer.count
         let started = DispatchTime.now().uptimeNanoseconds
         let firstCallback = context.trace?.callbacks.count ?? 0
@@ -838,7 +871,7 @@ public final class CoreSession: @unchecked Sendable {
         let status = scores.withUnsafeBufferPointer { scores in
             buffer.withUnsafeMutableBufferPointer {
                 aim_zhiju_snapshot_step(snapshot.handle, search.handle, ZhijuModel.request, Unmanaged.passUnretained(context).toOpaque(),
-                    8, budget, scores.baseAddress, scores.count, $0.baseAddress, &length)
+                    beam, budget, scores.baseAddress, scores.count, $0.baseAddress, &length)
             }
         }
         KeyPathContentionTrace.shared?.record("zhiju.step.work", DispatchTime.now().uptimeNanoseconds &- started)
@@ -846,13 +879,35 @@ public final class CoreSession: @unchecked Sendable {
         return (status, status == 0 ? String(decoding: buffer.prefix(length), as: UTF8.self) : "")
     }
 
-    private func scheduleDeferredZhiju(original: IMEViewModel, generation: UInt64, lastLetter: UInt8?) {
+    private static func readModelBytes(capacity: Int, _ read: (UnsafeMutablePointer<UInt8>?, inout Int) -> Int32) -> Data? {
+        var buffer = [UInt8](repeating: 0, count: capacity)
+        var length = capacity
+        var status = buffer.withUnsafeMutableBufferPointer { read($0.baseAddress, &length) }
+        if status == -6, length <= 16_384 {
+            buffer = [UInt8](repeating: 0, count: length)
+            status = buffer.withUnsafeMutableBufferPointer { read($0.baseAddress, &length) }
+        }
+        guard status == 0, length <= buffer.count else { return nil }
+        return Data(buffer.prefix(length))
+    }
+
+    private static func readRankingContext(_ handle: OpaquePointer) -> (text: String, hasConfirmed: Bool)? {
+        var confirmed: UInt8 = 0
+        guard let context = readModelBytes(capacity: 256, { buffer, length in
+            aim_session_ranking_context(handle, buffer, &length, &confirmed)
+        }) else { return nil }
+        return (String(decoding: context, as: UTF8.self), confirmed != 0)
+    }
+
+    private func scheduleDeferredZhiju(original: IMEViewModel, generation: UInt64, lastLetter: UInt8?, deadline: UInt64?) {
         let job = ZhijuJob()
         pendingZhijuJob = job
-        let rankingContextText = Self.contextWithPickedText(rankingContext, markedText: original.markedText)
+        if modelContextForKey == nil, let handle { modelContextForKey = Self.readRankingContext(handle) }
+        let rankingContextText = modelContextForKey?.text ?? rankingContext
         // Capture with the key's snapshot, before asynchronous preparation can
         // overlap a context/security clear. Never acquire a newer lease later.
         let initialEpoch = initialZhijuPrefix.epoch
+        let searchProbe = probeZhijuSearch
         let queued = DispatchTime.now().uptimeNanoseconds
         let canUseLexicalSentence = sentenceClientMatchesSession
         // The preceding text usually stays fixed until the next composition.
@@ -870,15 +925,16 @@ public final class CoreSession: @unchecked Sendable {
         zhijuQueue.async { [self] in
             KeyPathContentionTrace.shared?.record("zhiju.queue.wait", DispatchTime.now().uptimeNanoseconds &- queued)
             func current() -> Bool { !job.isCancelled && zhijuEnabled }
+            func remains() -> Bool { deadline.map { DispatchTime.now().uptimeNanoseconds < $0 } ?? true }
             guard current(), zhijuModelForTesting != nil || ZhijuModel.assetsExist(directory: zhijuModelDirectory) else { return }
             let intent = Self.usesEarlySentenceWords ? lexicalIntent : nil
             // Never enqueue a lock waiter ahead of a key. Only capture immutable state;
             // vocabulary IO, dictionary preparation, expansion and sorting stay on this lane.
             while !Self.runtimeLock.tryLock("zhiju.snapshot") {
-                guard current() else { return }
+                guard current(), remains() else { return }
                 Thread.sleep(forTimeInterval: 0.0001)
             }
-            guard current(), let handle else { Self.runtimeLock.unlock(); return }
+            guard current(), remains(), let handle else { Self.runtimeLock.unlock(); return }
             hasZhijuAssets = true
             var snapshotHandle: OpaquePointer?
             let applicability = aim_session_zhiju_snapshot(handle, &snapshotHandle)
@@ -899,13 +955,13 @@ public final class CoreSession: @unchecked Sendable {
             let earlyStarted = zhijuClock()
             if let intent, let earlySnapshot {
                 if let text = Self.lexicalZhijuChoice(earlySnapshot, intent: intent),
-                   current(), DispatchTime.now().uptimeNanoseconds &- queued < 25_000_000 {
+                   current(), remains(), DispatchTime.now().uptimeNanoseconds &- queued < 25_000_000 {
                     publishEarlyZhiju(original: original, generation: generation, job: job,
-                                      snapshot: earlySnapshot, text: text, queued: queued)
+                                      snapshot: earlySnapshot, text: text, queued: queued, deadline: deadline)
                 }
             }
             let earlyElapsed = earlySnapshot == nil ? 0 : zhijuClock() &- earlyStarted
-            guard current() else { return }
+            guard current(), remains(), searchProbe?.neuralEnabled != false else { return }
             guard let model = zhijuModelForTesting ?? zhijuLoader.ready(directory: zhijuModelDirectory) else {
                 zhijuLoader.prepare(directory: zhijuModelDirectory)
                 return
@@ -922,7 +978,14 @@ public final class CoreSession: @unchecked Sendable {
             guard current(), aim_zhiju_search_prepare(search.handle, snapshot.handle) == 0 else { return }
             KeyPathContentionTrace.shared?.record("zhiju.prepare.work", DispatchTime.now().uptimeNanoseconds &- preparationStarted)
             guard current() else { return }
-            let budget: UInt64 = 40_000_000 - min(earlyElapsed, 8_000_000)
+            let searchLimit = searchProbe?.budgetNanoseconds ?? 40_000_000
+            var budget = searchLimit - min(earlyElapsed, 8_000_000, searchLimit)
+            if let deadline {
+                let wallTime = DispatchTime.now().uptimeNanoseconds
+                let rankAndDisplayReserve: UInt64 = 8_000_000
+                guard deadline > wallTime + rankAndDisplayReserve else { return }
+                budget = min(budget, deadline - wallTime - rankAndDisplayReserve)
+            }
             let started = zhijuClock()
             let trace = model.trace
             trace?.beginSearch()
@@ -944,7 +1007,7 @@ public final class CoreSession: @unchecked Sendable {
                 zhijuCoreStepForTesting?()
                 guard current() else { return }
                 let (status, encoded) = Self.stepZhiju(snapshot: snapshot, search: search, context: context,
-                    scores: scores, budget: (budget - elapsed + 999_999) / 1_000_000)
+                    scores: scores, budget: (budget - elapsed + 999_999) / 1_000_000, beam: searchProbe?.beam ?? 8)
                 guard current() else { return }
                 if status == 1, let request = context.pending {
                     // Core expansion consumed time after the previous budget read.
@@ -978,7 +1041,7 @@ public final class CoreSession: @unchecked Sendable {
             guard current() else { return }
             deliverZhiju(original: original, generation: generation, job: job, outcome: outcome,
                          latencyMs: Double(elapsed) / 1_000_000, snapshot: snapshot, promote: promote,
-                         alternatives: alternatives, context: rankingContextText)
+                         alternatives: alternatives, context: rankingContextText, deadline: deadline)
         }
     }
 
@@ -1009,14 +1072,16 @@ public final class CoreSession: @unchecked Sendable {
     }
 
     private func publishEarlyZhiju(original: IMEViewModel, generation: UInt64, job: ZhijuJob,
-                                   snapshot: ZhijuSnapshot, text: String, queued: UInt64) {
+                                   snapshot: ZhijuSnapshot, text: String, queued: UInt64, deadline: UInt64?) {
         let finish: () -> IMEViewModel? = { [self] in
             Self.runtimeLock.lock("zhiju.early.apply")
             defer { Self.runtimeLock.unlock() }
             guard rankingGeneration == generation, zhijuEnabled, !job.isCancelled,
                   sentenceClientMatchesSession, appliedRankingStage < 2,
                   let handle, corePageTexts()?.first != text else { return nil }
-            let elapsed = DispatchTime.now().uptimeNanoseconds &- queued
+            let now = DispatchTime.now().uptimeNanoseconds
+            if let deadline, now >= deadline { return nil }
+            let elapsed = now &- queued
             guard elapsed < 25_000_000, let current = applyProvedSentence(
                 handle: handle, snapshot: snapshot, text: text, original: original, preview: false
             ) else { return nil }
@@ -1027,7 +1092,7 @@ public final class CoreSession: @unchecked Sendable {
         }
         if let deferredApplier {
             deferredApplier(DeferredRankingStep(markedText: original.markedText, pageNumber: original.pageNumber,
-                generation: generation, stage: 2, finish: finish))
+                generation: generation, stage: 2, keyReceivedAt: deadline.map { $0 - Self.zhijuKeyBudget }, finish: finish))
         } else if let view = finish() { onDeferredRanking?(view, generation) }
     }
 
@@ -1093,15 +1158,21 @@ public final class CoreSession: @unchecked Sendable {
     private func deliverZhiju(original: IMEViewModel, generation: UInt64, job: ZhijuJob,
                               outcome: ZhijuOutcome, latencyMs: Double, snapshot: ZhijuSnapshot?, promote: Bool,
                               alternatives: [String] = [], context: String = "",
-                              verification: ZhijuLeadVerification? = nil) {
+                              verification: ZhijuLeadVerification? = nil, deadline: UInt64? = nil) {
         let finish: () -> IMEViewModel? = { [self] in
             Self.runtimeLock.lock("zhiju.apply")
             defer { Self.runtimeLock.unlock() }
             guard rankingGeneration == generation, zhijuEnabled, !job.isCancelled,
                   appliedRankingStage < 2, let handle else { return nil }
+            if let deadline, DispatchTime.now().uptimeNanoseconds >= deadline { return nil }
+            if promote, jointZhijuMode != .legacy {
+                if probeZhijuAlternatives != nil { probeZhijuAlternatives = alternatives }
+                guard contextRanking.enabled, !contextRanking.suspended else { return nil }
+            }
             if promote, contextRanking.enabled, verification == nil {
                 let pending = PendingZhijuLead(original: original, generation: generation, job: job,
-                    outcome: outcome, latencyMs: latencyMs, snapshot: snapshot, alternatives: alternatives, context: context)
+                    outcome: outcome, latencyMs: latencyMs, snapshot: snapshot, alternatives: alternatives,
+                    context: context, deadline: deadline)
                 if pendingPrimaryGeneration == generation && appliedRankingStage == 0 {
                     pendingZhijuLead = pending
                 } else {
@@ -1150,9 +1221,10 @@ public final class CoreSession: @unchecked Sendable {
                 if status != 0, probeFifthSlotSelection, contextRanking.enabled,
                    let best = alternatives.first, !current.candidates.contains(where: { $0.text == best }) {
                     if defersRanking && appliedRankingStage == 0 {
-                        pendingZhijuOffer = (current, generation, job, best, context)
+                        pendingZhijuOffer = (current, generation, job, best, context, deadline)
                     } else {
-                        scheduleZhijuOffer(original: current, generation: generation, job: job, text: best, context: context)
+                        scheduleZhijuOffer(original: current, generation: generation, job: job, text: best,
+                                           context: context, deadline: deadline)
                     }
                 }
             }
@@ -1162,7 +1234,7 @@ public final class CoreSession: @unchecked Sendable {
         }
         if let deferredApplier {
             deferredApplier(DeferredRankingStep(markedText: original.markedText, pageNumber: original.pageNumber,
-                                              generation: generation, stage: 2, finish: finish))
+                generation: generation, stage: 2, keyReceivedAt: deadline.map { $0 - Self.zhijuKeyBudget }, finish: finish))
         } else if let view = finish() { onDeferredRanking?(view, generation) }
     }
 
@@ -1174,18 +1246,19 @@ public final class CoreSession: @unchecked Sendable {
         pendingZhijuOffer = nil
         guard pending.generation == rankingGeneration else { return }
         scheduleZhijuOffer(original: pending.original, generation: pending.generation,
-            job: pending.job, text: pending.text, context: pending.context)
+            job: pending.job, text: pending.text, context: pending.context, deadline: pending.deadline)
     }
 
     /// Search results already carry core-validated full-reading proofs. A result
     /// refused as the lead may still improve slot five, after an independent
     /// comparison with that slot. It never changes the first four candidates.
     private func scheduleZhijuOffer(original: IMEViewModel, generation: UInt64, job: ZhijuJob,
-                                    text: String, context: String) {
+                                    text: String, context: String, deadline: UInt64?) {
         guard probeFifthSlotSelection, contextRanking.enabled, !contextRanking.suspended,
               !text.isEmpty else { return }
         rankingQueue.async { [self] in
             Self.runtimeLock.lock()
+            if let deadline, DispatchTime.now().uptimeNanoseconds >= deadline { Self.runtimeLock.unlock(); return }
             guard rankingGeneration == generation, zhijuEnabled, !job.isCancelled,
                   (appliedRankingStage >= 1 || !defersRanking), handle != nil else { Self.runtimeLock.unlock(); return }
             let view = currentPage(preserving: original.withContextModel(displayedContextModel))
@@ -1208,6 +1281,7 @@ public final class CoreSession: @unchecked Sendable {
             let finish: () -> IMEViewModel? = { [self] in
                 Self.runtimeLock.lock()
                 defer { Self.runtimeLock.unlock() }
+                if let deadline, DispatchTime.now().uptimeNanoseconds >= deadline { return nil }
                 guard rankingGeneration == generation, zhijuEnabled, !job.isCancelled,
                       let handle, corePageTexts() == page else { return nil }
                 lastModelNanoseconds &+= elapsed
@@ -1226,7 +1300,7 @@ public final class CoreSession: @unchecked Sendable {
             }
             if let deferredApplier {
                 deferredApplier(DeferredRankingStep(markedText: view.markedText, pageNumber: view.pageNumber,
-                    generation: generation, stage: 2, finish: finish))
+                    generation: generation, stage: 2, keyReceivedAt: deadline.map { $0 - Self.zhijuKeyBudget }, finish: finish))
             } else if let result = finish() { onDeferredRanking?(result, generation) }
         }
     }
@@ -1242,8 +1316,13 @@ public final class CoreSession: @unchecked Sendable {
     /// the same context model and existing C3 rule to veto a clearly worse lead.
     /// No new GEN inference or score thresholds are introduced here.
     private func verifyZhijuLead(_ pending: PendingZhijuLead) {
+        if jointZhijuMode != .legacy {
+            verifyJointZhiju(pending, mode: jointZhijuMode)
+            return
+        }
         rankingQueue.async { [self] in
             Self.runtimeLock.lock()
+            if let deadline = pending.deadline, DispatchTime.now().uptimeNanoseconds >= deadline { Self.runtimeLock.unlock(); return }
             guard rankingGeneration == pending.generation, zhijuEnabled, !pending.job.isCancelled,
                   appliedRankingStage < 2, let handle,
                   let nativeFirst = corePageTexts()?.first, let generated = pending.alternatives.first else {
@@ -1266,7 +1345,83 @@ public final class CoreSession: @unchecked Sendable {
             deliverZhiju(original: pending.original, generation: pending.generation, job: pending.job,
                 outcome: pending.outcome, latencyMs: pending.latencyMs, snapshot: pending.snapshot, promote: true,
                 alternatives: pending.alternatives, context: pending.context,
-                verification: ZhijuLeadVerification(nativeFirst: nativeFirst, veto: veto, elapsed: elapsed))
+                verification: ZhijuLeadVerification(nativeFirst: nativeFirst, veto: veto, elapsed: elapsed), deadline: pending.deadline)
+        }
+    }
+
+    private func verifyJointZhiju(_ pending: PendingZhijuLead, mode: ZhijuJointMode) {
+        guard let snapshot = pending.snapshot else { return }
+        rankingQueue.async { [self] in
+            func beforeDeadline() -> Bool {
+                pending.deadline.map { DispatchTime.now().uptimeNanoseconds < $0 } ?? true
+            }
+            Self.runtimeLock.lock()
+            guard rankingGeneration == pending.generation, appliedRankingStage < 2, zhijuEnabled,
+                  !pending.job.isCancelled, beforeDeadline(), let handle else { Self.runtimeLock.unlock(); return }
+            let data = Self.readModelBytes(capacity: 4096) { buffer, length in
+                aim_session_zhiju_joint_inputs(handle, snapshot.handle, buffer, &length)
+            }
+            let model = ContextRankingModelLoader.shared.ready(directory: contextModelDirectory)
+            let testScorer = contextRankingScoreForTesting
+            Self.runtimeLock.unlock()
+            guard let data, let inputs = try? JSONDecoder().decode(ZhijuJointInputs.self, from: data) else { return }
+            let rows = inputs.batch()
+            let started = DispatchTime.now().uptimeNanoseconds
+            var scores: [Double] = []
+            if rows.count >= 2, rows.contains(where: { $0.generatedIndex != nil }), beforeDeadline(), !pending.job.isCancelled {
+                let texts = rows.map { $0.candidate.text }
+                if let testScorer {
+                    scores = (try? testScorer(inputs.context, texts)) ?? []
+                } else if let model {
+                    scores = (try? model.score(context: inputs.context, candidates: texts) {
+                        beforeDeadline() && !pending.job.isCancelled
+                    }) ?? []
+                }
+            }
+            let rankTime = DispatchTime.now().uptimeNanoseconds &- started
+            KeyPathContentionTrace.shared?.record("zhiju.joint.score", rankTime)
+            let decision = ZhijuJointDecision.evaluate(inputs, rows, scores, mode: mode)
+            let finish: () -> IMEViewModel? = { [self] in
+                Self.runtimeLock.lock("zhiju.joint.apply")
+                defer { Self.runtimeLock.unlock() }
+                guard rankingGeneration == pending.generation, appliedRankingStage < 2, zhijuEnabled,
+                      !pending.job.isCancelled, contextRanking.enabled, let handle = self.handle else { return nil }
+                let current = currentPage(preserving: pending.original.withContextModel(displayedContextModel))
+                guard current.markedText == pending.original.markedText, current.pageNumber == 0,
+                      inputs.matches(current.candidates) else { return nil }
+                var updated = current
+                var status: Int32?
+                let timely = beforeDeadline() && (pending.deadline == nil || rankTime <= 8_000_000)
+                displayedZhijuOutcome = timely ? .rejected : .timeout
+                displayedZhijuLatencyMs = pending.latencyMs + Double(rankTime) / 1_000_000
+                if timely, mode != .shadow, let index = decision.generatedIndex {
+                    var result = AimResult()
+                    defer { aim_result_free(&result) }
+                    let lead = decision.action == .lead
+                    let applied = aim_session_apply_zhiju_joint(handle, snapshot.handle, index, lead ? 1 : 0, &result)
+                    status = applied
+                    if applied == 0 {
+                        updated = Self.viewModel(from: result, preserving: current)
+                        displayedZhijuOutcome = lead ? .applied : .offered
+                        displayedZhijuText = lead ? updated.candidates.first?.text : nil
+                        displayedRankingCandidates = updated.candidates
+                        appliedRankingStage = 2
+                    }
+                }
+                if probeZhijuAlternatives != nil {
+                    probeJointReport = ZhijuJointReport(mode: mode.rawValue, native: inputs.native, generated: inputs.generated,
+                        batch: rows, scores: scores, decision: decision, rankMilliseconds: Double(rankTime) / 1_000_000,
+                        applicationStatus: status)
+                }
+                return zhijuView(updated)
+            }
+            if let deferredApplier {
+                deferredApplier(DeferredRankingStep(markedText: pending.original.markedText,
+                    pageNumber: pending.original.pageNumber, generation: pending.generation, stage: 2,
+                    keyReceivedAt: pending.deadline.map { $0 - Self.zhijuKeyBudget }, finish: finish))
+            } else if let result = finish() {
+                onDeferredRanking?(result, pending.generation)
+            }
         }
     }
 
@@ -1392,15 +1547,23 @@ public final class CoreSession: @unchecked Sendable {
         probeFifthSlotSelection = enabled
     }
 
+    func configureZhijuSearchForProbe(neuralEnabled: Bool, budgetMilliseconds: Int, beam: Int) {
+        Self.runtimeLock.lock()
+        defer { Self.runtimeLock.unlock() }
+        probeZhijuSearch = (neuralEnabled, UInt64(budgetMilliseconds) * 1_000_000, beam)
+    }
+
     var zhijuAlternativesForTesting: [String] {
         Self.runtimeLock.lock()
         defer { Self.runtimeLock.unlock() }
         return probeZhijuAlternatives ?? []
     }
 
-    func candidateFunnelForTesting() -> (pool: [String], group: [String], compositions: [String], shortWords: [String]) {
+    func candidateFunnelForTesting(includeFollowingPages: Bool = true) -> (pool: [String], group: [String], compositions: [String], shortWords: [String]) {
         Self.runtimeLock.lock()
         defer { Self.runtimeLock.unlock() }
+        let groups = probeGroups ?? ([], [], [])
+        guard includeFollowingPages else { return ([], groups.group, groups.compositions, groups.shortWords) }
         guard let handle else { return ([], [], [], []) }
         var buffer = [UInt8](repeating: 0, count: 65_536)
         let written = buffer.withUnsafeMutableBufferPointer {
@@ -1409,7 +1572,7 @@ public final class CoreSession: @unchecked Sendable {
         let following = written > 0 ? String(decoding: buffer.prefix(Int(written)), as: UTF8.self)
             .split(whereSeparator: { $0 == "\t" || $0 == "\n" }).map(String.init) : []
         let current = corePageTexts() ?? []
-        return (current + following, probeGroups?.group ?? [], probeGroups?.compositions ?? [], probeGroups?.shortWords ?? [])
+        return (current + following, groups.group, groups.compositions, groups.shortWords)
     }
 
     private func shortAbbreviationInputs(_ original: IMEViewModel) -> [String] {

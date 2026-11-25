@@ -218,6 +218,19 @@ pub struct CompositionBoundary {
     pub unconfirmed_raw: String,
 }
 
+#[derive(serde::Serialize)]
+pub(crate) struct ModelCandidate {
+    pub(crate) text: String,
+    pub(crate) reading: String,
+    pub(crate) shown_reading: Option<String>,
+    pub(crate) consumed: usize,
+    pub(crate) reading_proved: bool,
+    pub(crate) source: &'static str,
+    pub(crate) edit_cost: Option<f64>,
+    pub(crate) protected: bool,
+    pub(crate) slot: Option<usize>,
+}
+
 pub(crate) fn default_composition_boundary(snapshot: &DecoderSnapshot) -> Option<CompositionBoundary> {
     let confirmed = editing_confirmed_prefix(snapshot)?;
     let spelling = |text: &str| text.chars().filter_map(|ch| match ch {
@@ -393,6 +406,10 @@ pub trait Decoder: Send {
     }
     /// Successful sentence search results for this input/page only: text, consumed keys, full reading.
     fn remember_zhiju_results(&mut self, _results: Vec<(String, usize, String)>) {}
+    fn native_candidate_consumed(&self, _index: usize, _global: bool, _candidate: &Candidate) -> Option<usize> { None }
+    fn zhiju_native_candidates(&self, _raw: &str) -> Vec<ModelCandidate> { Vec::new() }
+    fn permits_zhiju_joint_lead(&self, _text: &str, _raw: &str) -> bool { false }
+    fn offer_zhiju_candidate(&mut self, _text: &str, _raw: &str) -> Result<(), i32> { Err(-10) }
     /// One application transaction; returns the same page that validated the lead.
     fn apply_zhiju_results(&mut self, results: Vec<(String, usize, String)>) -> (Result<(), i32>, DecoderSnapshot) {
         let text = results.first().map(|(text, _, _)| text.clone());
@@ -700,6 +717,19 @@ pub(crate) struct ZhijuSnapshot {
 }
 
 impl ZhijuSnapshot {
+    pub(crate) fn model_candidates(&self) -> Vec<ModelCandidate> {
+        self.results.iter().flatten().filter(|candidate| {
+            candidate.consumed == self.keys.len()
+                && crate::zhixu::decoder::candidate_coverage(&self.keys, &Candidate {
+                    text: candidate.text.clone(), reading_key: candidate.reading.clone(), ..Candidate::default()
+                }) == Some(candidate.consumed)
+        }).map(|candidate| ModelCandidate {
+            text: candidate.text.clone(), reading: candidate.reading.clone(), shown_reading: None,
+            consumed: candidate.consumed, reading_proved: true,
+            source: "zhiju", edit_cost: Some(0.0), protected: false, slot: None,
+        }).take(4).collect()
+    }
+
     pub(crate) fn prepare(&self, search: &mut crate::zhixu::zhiju::Search) {
         search.prepare(&self.dictionary);
     }
@@ -1041,14 +1071,25 @@ impl Session {
         self.zhiju_generation = self.zhiju_generation.wrapping_add(1).max(1);
     }
 
+    pub(crate) fn ranking_context(&self) -> Option<(String, bool)> {
+        if self.mode != InputMode::Chinese || self.secure_degraded || !self.inline_ascii.is_empty() { return None; }
+        let boundary = self.decoder.composition_boundary(BoundaryPurpose::Mixing)?;
+        Some((self.context_with_boundary(&boundary), !boundary.confirmed.is_empty()))
+    }
+
+    fn context_with_boundary(&self, boundary: &CompositionBoundary) -> String {
+        self.host_preceding_text.clone().unwrap_or_default() + &boundary.confirmed
+    }
+
     pub(crate) fn zhiju_snapshot(&self) -> Result<ZhijuSnapshot, i32> {
         if self.mode != InputMode::Chinese || self.secure_degraded || !self.inline_ascii.is_empty() { return Err(-3); }
         let boundary = self.decoder.composition_boundary(BoundaryPurpose::Mixing).ok_or(-3)?;
         if !crate::mixer::sentence_abbreviation(&boundary.unconfirmed_raw) { return Err(-3); }
+        let context = self.context_with_boundary(&boundary);
         Ok(ZhijuSnapshot {
             dictionary: self.decoder.dictionary_snapshot().ok_or(-7)?,
             keys: boundary.unconfirmed_raw,
-            context: self.host_preceding_text.clone().unwrap_or_default() + &boundary.confirmed,
+            context,
             identity: self.zhiju_identity.clone(), generation: self.zhiju_generation, preview_letter: None,
             progress: None, results: None, lexical: None,
         })
@@ -1078,6 +1119,27 @@ impl Session {
     fn matches_zhiju_dictionary(&self, snapshot: &ZhijuSnapshot) -> bool {
         Arc::ptr_eq(&self.zhiju_identity, &snapshot.identity)
             && self.decoder.dictionary_snapshot().is_some_and(|dictionary| Arc::ptr_eq(&dictionary, &snapshot.dictionary))
+    }
+
+    pub(crate) fn zhiju_joint_inputs<'a>(&self, snapshot: &'a ZhijuSnapshot)
+        -> Option<(&'a str, &'a str, Vec<ModelCandidate>)> {
+        if !self.matches_zhiju_snapshot(snapshot) { return None; }
+        Some((&snapshot.context, &snapshot.keys, self.decoder.zhiju_native_candidates(&snapshot.keys)))
+    }
+
+    pub(crate) fn apply_zhiju_joint(&mut self, snapshot: &ZhijuSnapshot, index: usize, lead: bool)
+        -> Result<(i32, ResultModel), i32> {
+        if !self.matches_zhiju_snapshot(snapshot) { return Err(-8); }
+        let candidate = snapshot.model_candidates().into_iter().nth(index).ok_or(-2)?;
+        if lead && !self.decoder.permits_zhiju_joint_lead(&candidate.text, &snapshot.keys) {
+            return Ok((crate::mixer::LEAD_OUTRANKED_OTHER, self.current_result()));
+        }
+        let text = candidate.text.clone();
+        let reading = vec![(candidate.text, candidate.consumed, candidate.reading)];
+        if lead { return Ok(self.apply_zhiju_proofs(reading)); }
+        self.decoder.remember_zhiju_results(reading);
+        let status = self.decoder.offer_zhiju_candidate(&text, &snapshot.keys).err().unwrap_or(0);
+        Ok((status, self.current_result()))
     }
 
     fn apply_zhiju_proofs(&mut self, readings: Vec<(String, usize, String)>) -> (i32, ResultModel) {

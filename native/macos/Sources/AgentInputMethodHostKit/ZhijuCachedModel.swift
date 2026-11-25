@@ -118,7 +118,7 @@ final class ZhijuCachedEngine {
             throw CocoaError(.fileReadCorruptFile)
         }
         let configuration = MLModelConfiguration()
-        configuration.computeUnits = spec.stepComputeUnits == "cpuOnly" ? .cpuOnly : .all
+        configuration.computeUnits = spec.stepComputeUnits == "cpuOnly" ? .cpuOnly : .cpuAndNeuralEngine
         let step = try MLModel(contentsOf: directory.appendingPathComponent(spec.stepModel), configuration: configuration)
         for model in [full, step] + (short.map { [$0] } ?? []) {
             let metadata = model.modelDescription.metadata[.creatorDefinedKey] as? [String: String]
@@ -151,15 +151,24 @@ final class ZhijuCachedEngine {
     func prepareForReadiness() throws {
         let prefixes = Array(repeating: [Int32]([1] + Array(repeating: 2, count: 7)), count: 8)
         let first: (scores: [Float], cache: ZhijuAttentionCache)
-        do { first = try score(prefixes: prefixes, parents: nil, previous: nil, trace: nil, shouldContinue: { true }) }
+        do {
+            first = try score(prefixes: prefixes, parents: nil, previous: nil, trace: nil, shouldContinue: { true })
+            guard first.scores.allSatisfy(\.isFinite) else { throw CocoaError(.fileReadCorruptFile) }
+            if short != nil {
+                // Prime the long prefill shape as well as the short one.
+                let long = prefixes.map { $0 + Array(repeating: Int32(2), count: 9) }
+                let result = try score(prefixes: long, parents: nil, previous: nil, trace: nil, shouldContinue: { true })
+                guard result.scores.allSatisfy(\.isFinite) else { throw CocoaError(.fileReadCorruptFile) }
+            }
+        }
         catch { throw CocoaError(.coderInvalidValue, userInfo: [NSDebugDescriptionErrorKey: "K/V readiness prefill: \(error)"]) }
-        for _ in 0..<3 {
+        do {
             let result: (scores: [Float], cache: ZhijuAttentionCache)
-            do { result = try score(prefixes: prefixes.map { $0 + [2] }, parents: Array(0..<8),
-                                    previous: first.cache, trace: nil, shouldContinue: { true }) }
-            catch { throw CocoaError(.coderInvalidValue, userInfo: [NSDebugDescriptionErrorKey: "K/V readiness step: \(error)"]) }
+            result = try score(prefixes: prefixes.map { $0 + [2] }, parents: Array(0..<8),
+                               previous: first.cache, trace: nil, shouldContinue: { true })
             guard result.scores.allSatisfy(\.isFinite) else { throw CocoaError(.fileReadCorruptFile) }
         }
+        catch { throw CocoaError(.coderInvalidValue, userInfo: [NSDebugDescriptionErrorKey: "K/V readiness step: \(error)"]) }
     }
 
     func score(prefixes: [[Int32]], parents: [Int]?, previous: ZhijuAttentionCache?, trace: ZhijuSearchTrace?,

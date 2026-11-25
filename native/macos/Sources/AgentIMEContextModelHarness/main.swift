@@ -17,6 +17,42 @@ if CommandLine.arguments.count == 5, CommandLine.arguments[1] == "--zhiju-distri
     exit(0)
 }
 
+if CommandLine.arguments.count >= 2, CommandLine.arguments[1] == "--model-attribution" {
+    let arguments = CommandLine.arguments
+    guard [6, 8, 10, 12].contains(arguments.count), let mode = ZhijuAttributionMode(rawValue: arguments[5]) else {
+        fatalError("usage: AgentIMEContextModelHarness --model-attribution <Resources/Rime-dir> <cases.json> <report.json> <neither|ranking-only|zhiju-only|both|lexical-only> [--learning-fixture <file>] [--search-budget-ms <40–1000>] [--search-beam <4|8|16>]")
+    }
+    var learningFixture: URL?
+    var searchBudgetMilliseconds: Int?
+    var searchBeam: Int?
+    for index in stride(from: 6, to: arguments.count, by: 2) {
+        switch arguments[index] {
+        case "--learning-fixture" where learningFixture == nil:
+            learningFixture = URL(fileURLWithPath: arguments[index + 1])
+        case "--search-budget-ms" where searchBudgetMilliseconds == nil:
+            guard let value = Int(arguments[index + 1]), (40...1_000).contains(value) else {
+                fatalError("search budget must be between 40 and 1000 ms")
+            }
+            searchBudgetMilliseconds = value
+        case "--search-beam" where searchBeam == nil:
+            guard let value = Int(arguments[index + 1]), [4, 8, 16].contains(value) else {
+                fatalError("search beam must be 4, 8 or 16")
+            }
+            searchBeam = value
+        default:
+            fatalError("unexpected or repeated option: \(arguments[index])")
+        }
+    }
+    let cases = try JSONDecoder().decode([ZhijuDeliveryCase].self, from: Data(contentsOf: URL(fileURLWithPath: arguments[3])))
+    let report = try ZhijuDeliveryProbe.run(sharedDirectory: URL(fileURLWithPath: arguments[2]), cases: cases,
+        enabled: mode.zhijuEnabled, requireZhijuApplication: false, learningFixture: learningFixture,
+        attributionMode: mode, searchBudgetMilliseconds: searchBudgetMilliseconds ?? 40, searchBeam: searchBeam ?? 8)
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+    try encoder.encode(report).write(to: URL(fileURLWithPath: arguments[4]), options: .atomic)
+    exit(report.passed ? 0 : 1)
+}
+
 if [6, 8].contains(CommandLine.arguments.count), ["--zhiju-delivery", "--zhiju-fifth-delivery", "--context-delivery", "--context-delivery-trace"].contains(CommandLine.arguments[1]) {
     guard ["on", "off"].contains(CommandLine.arguments[5]) else { fatalError("expected on or off") }
     if CommandLine.arguments.count == 8, CommandLine.arguments[6] != "--learning-fixture" {

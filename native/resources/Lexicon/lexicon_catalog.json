@@ -23,7 +23,7 @@
       "description": "少量日常用词修正",
       "group": "core",
       "defaultEnabled": true,
-      "rows": 23
+      "rows": 24
     },
     {
       "id": "agent_general",

@@ -228,6 +228,18 @@ int32_t aim_session_apply_zhiju_snapshot(AimSession *session, const AimZhijuSnap
  * Lead statuses and AimResult ownership match aim_session_apply_zhiju_snapshot. */
 int32_t aim_session_apply_zhiju_snapshot_selected(AimSession *session, const AimZhijuSnapshot *snapshot,
                                                const uint8_t *text, size_t text_length, AimResult *out);
+/* Model context as UTF-8 or joint inputs as UTF-8 JSON. The joint snapshot
+ * supplies the context, raw unconfirmed keys, current native slots, and up to
+ * four complete generated candidates (including their proved spaced reading).
+ * 0=success, -6=buffer too small (returns size), -8=no live composition/proof. */
+int32_t aim_session_ranking_context(const AimSession *session, uint8_t *out, size_t *out_len, uint8_t *has_confirmed);
+int32_t aim_session_zhiju_joint_inputs(const AimSession *session, const AimZhijuSnapshot *snapshot,
+                                      uint8_t *out, size_t *out_len);
+/* Applies the selected generated-list position to the last slot or to slot
+ * one. Lead and offer protection stay in the core. Empty result when stale
+ * or unproved; free each result as with the original apply functions. */
+int32_t aim_session_apply_zhiju_joint(AimSession *session, const AimZhijuSnapshot *snapshot,
+                                    size_t index, uint8_t lead, AimResult *out);
 /* After processing exactly the previewed following unmodified lower-case key,
  * apply a lexical proof from the preview. Key generation, input, context, security,
  * session, dictionary, and end caret must still agree. -2=unproved; -8=stale,

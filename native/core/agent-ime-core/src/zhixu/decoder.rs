@@ -1935,6 +1935,17 @@ impl Decoder for ZhixuDecoder {
         self.snapshot_range(self.selected / PAGE_SIZE * PAGE_SIZE, PAGE_SIZE, false)
     }
 
+    fn native_candidate_consumed(&self, index: usize, global: bool, candidate: &Candidate) -> Option<usize> {
+        if self.caret != self.raw.len() { return None; }
+        let index = if global || self.fuzzy_mask != 0 { index }
+            else { self.selected / PAGE_SIZE * PAGE_SIZE + index };
+        let item = self.candidates.get(index)?;
+        if item.candidate.text != candidate.text || item.candidate.reading_key != candidate.reading_key { return None; }
+        let end = self.confirmed_end() + item.consumed;
+        let separators = self.raw.get(end..)?.bytes().take_while(|byte| *byte == b'\'').count();
+        Some(item.consumed + separators)
+    }
+
     fn snapshot_all_candidates(&self) -> Option<DecoderSnapshot> {
         (!self.candidates.is_empty()).then(|| self.snapshot_range(0, usize::MAX, true))
     }
@@ -1949,12 +1960,16 @@ impl Decoder for ZhixuDecoder {
         {
             return false;
         }
+        let allows_composed = crate::exact_context::accepts_composed_collocation(raw);
         let exact = |item: &GeneratedCandidate| item.consumed == raw.len()
-            && item.candidate.reading_key.split_whitespace().flat_map(str::bytes).eq(raw.bytes());
+            && item.candidate.reading_key.split_whitespace().flat_map(str::bytes).eq(raw.bytes())
+            && (!allows_composed || !matches!(item.candidate.comment.as_str(), "整句 · 顺手·知序" | "备选 · 顺手·知序")
+                || crate::mixer::native_composed_exact(raw, &item.candidate));
         if !self.candidates.first().is_some_and(|item| item.candidate.text == first && exact(item)) {
             return false;
         }
-        let Some(position) = self.candidates.iter().take(4 * PAGE_SIZE)
+        let page_limit = if allows_composed { 5 } else { 4 };
+        let Some(position) = self.candidates.iter().take(page_limit * PAGE_SIZE)
             .position(|item| item.candidate.text == word && exact(item))
             .filter(|position| *position >= PAGE_SIZE)
         else { return false; };

@@ -61,7 +61,7 @@ public final class InputControllerPerformanceSession {
     var latestCandidateTextsForTesting: [String]? { controller?.latestCandidateTextsForTesting }
 
     public func processText(_ text: String) -> InputControllerPerformanceSample? {
-        process(characters: text, keyCode: 0)
+        process(characters: text, keyCode: text == " " ? UInt16(kVK_Space) : 0)
     }
 
     public func processEnter() -> InputControllerPerformanceSample? {
