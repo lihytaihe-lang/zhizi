@@ -5,7 +5,7 @@ use super::learning::{Choice, Entry, LearningMode, LearningStore};
 use crate::personal_picks;
 use crate::ranking::OwnerStyle;
 use crate::secure_directory::physical_runtime_path;
-use crate::state::{KeyEvent, KeyKind, SecurityState};
+use crate::state::{KeyEvent, KeyKind, MOD_COMMAND, MOD_CONTROL, MOD_OPTION, MOD_SHIFT, SecurityState};
 use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -489,9 +489,11 @@ impl LearningSession {
             self.pending.clear();
             return;
         }
-        // Without a replacement-range signal, deleting any idle text can refer
-        // to any waiting commit. Dropping all of them is the conservative choice.
-        if event.kind == KeyKind::Backspace && !composing {
+        let command = event.modifiers & (MOD_COMMAND | MOD_CONTROL | MOD_OPTION | MOD_SHIFT);
+        let undo_or_cut = event.kind == KeyKind::Text && command == MOD_COMMAND
+            && (event.text.eq_ignore_ascii_case("z") || event.text.eq_ignore_ascii_case("x"));
+        // A host deletion, undo or cut can remove one or more waiting commits.
+        if !composing && (event.kind == KeyKind::Backspace || undo_or_cut) {
             self.pending.clear();
             self.clear_segments();
             return;
@@ -937,6 +939,24 @@ mod tests {
         session.commit("裁我", 0, 100);
         session.key(&key(KeyKind::Text), false, 5100);
         assert!(session.entries().is_empty());
+    }
+
+    #[test]
+    fn undo_and_cut_cancel_pending_learning_before_deactivation() {
+        for (text, modifiers, retained) in [
+            ("z", MOD_COMMAND, false), ("X", MOD_COMMAND, false),
+            ("z", MOD_COMMAND | MOD_SHIFT, true), ("z", 0, true),
+        ] {
+            let mut session = session();
+            session.stage(Some(choice("cai wo", "裁我")), 1);
+            session.commit("裁我", 1, 100);
+            let mut event = key(KeyKind::Text);
+            event.text = text.into();
+            event.modifiers = modifiers;
+            session.key(&event, false, 200);
+            session.key(&key(KeyKind::Deactivate), false, 300);
+            assert_eq!(!session.entries().is_empty(), retained, "{text} {modifiers}");
+        }
     }
 
     #[test]

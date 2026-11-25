@@ -1674,12 +1674,20 @@ public final class CoreSession: @unchecked Sendable {
     /// IMK may defer rebuilding a session until an older composition ends.
     /// Keep a preview from that client ineligible in the newly focused client.
     func resetSentenceContextForActivation(matchingSession: Bool) {
-        guard Self.usesEarlySentenceWords || Self.usesSentencePreview else { return }
         Self.runtimeLock.lock()
         defer { Self.runtimeLock.unlock() }
+        invalidateExactLookahead()
+        rankingGeneration &+= 1
         sentenceClientMatchesSession = matchingSession
         pendingZhijuJob?.cancel()
+        pendingZhijuJob = nil
+        pendingZhijuLead = nil
+        initialZhijuPrefix.clear()
         sentencePreviewLock.withLock { sentencePreview = nil }
+        if !isComposing, let handle {
+            rankingContext = ""
+            _ = aim_session_set_preceding_text(handle, nil, 0)
+        }
     }
 
     public func setPrecedingText(_ text: String) -> Bool {

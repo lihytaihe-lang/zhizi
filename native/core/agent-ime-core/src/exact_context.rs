@@ -343,7 +343,9 @@ fn short_shiwu_context(clause: &str) -> Option<&'static str> {
 #[cfg(all(target_os = "macos", feature = "mac-fast-typing"))]
 fn everyday_exact_collocation(raw: &str, preceding: &str) -> Option<&'static str> {
     if !matches!(raw, "qian" | "daochu" | "yaoshi" | "guomin" | "gaifa" | "baoyou" | "yibian"
-        | "shizhuangbao" | "kuaichuan" | "goujianhao") {
+        | "shizhuangbao" | "kuaichuan" | "goujianhao" | "guanlitai" | "yangli" | "dabiao"
+        | "shencha" | "cuoci" | "changshiban" | "najige" | "yiban" | "chushen" | "tichu"
+        | "shiyong" | "queshi" | "mingming") {
         return None;
     }
     let clause = recent_clause(preceding).trim_end();
@@ -369,9 +371,40 @@ fn everyday_exact_collocation(raw: &str, preceding: &str) -> Option<&'static str
         "kuaichuan" if contains(&["文件", "照片", "文档", "视频", "图片"])
             && ends_with(&["用局域网", "通过局域网", "走局域网", "经局域网", "用蓝牙", "用隔空投送"])
             => Some("快传"),
+        "kuaichuan" if contains(&["救援", "巡逻", "渔船", "航道", "码头"])
+            && ends_with(&["一艘", "两艘", "几艘"]) => Some("快船"),
         "goujianhao" if contains(&["查看", "核对", "查询", "显示", "记录", "读取", "确认"])
             && ends_with(&["软件的", "系统的", "应用的", "版本的", "安装包的", "更新包的"])
             => Some("构建号"),
+        "guanlitai" if contains(&["打开", "进入", "登录", "访问", "切回"])
+            && ends_with(&["知字", "知字的", "软件的", "后台的", "应用的", "服务端的", "服务器的"])
+            => Some("管理台"),
+        "guanlitai" => Some("观礼台"),
+        "yangli" if ends_with(&["测试", "验收", "基准", "回归", "输入", "输出", "代码"])
+            && contains(&["参考", "新增", "记录", "增加", "构造", "提供"]) => Some("样例"),
+        "dabiao" if contains(&["图片", "样本", "文本", "语料", "数据集"])
+            && ends_with(&["逐条", "逐张", "逐项", "人工", "分批"]) => Some("打标"),
+        "shencha" if contains(&["原始数据", "原始日志", "来源", "证据"])
+            && ends_with(&["继续", "进一步", "逐项", "再"]) => Some("深查"),
+        "cuoci" if contains(&["输入法", "首选", "候选"])
+            && ends_with(&["出了", "出现", "弹出", "写成了"]) => Some("错词"),
+        "changshiban" if ends_with(&["可安装这个", "安装这个", "下载这个", "安装最新的", "下载最新的"])
+            => Some("尝试版"),
+        "changshiban" => Some("唱诗班"),
+        "najige" if ends_with(&["没通过的是", "未通过的是", "不合格的是", "待处理的是"])
+            => Some("哪几个"),
+        "yiban" if ends_with(&["先改", "先修订", "先起草", "先迭代", "先更新"])
+            => Some("一版"),
+        "chushen" if contains(&["申请", "文件", "稿件", "材料", "资料"])
+            && ends_with(&["提交", "送交", "送去", "进入", "通过", "待"]) => Some("初审"),
+        "tichu" if contains(&["不合格", "不符合条件", "不符合要求", "重复项", "无效样本"])
+            && ends_with(&["全部", "逐一", "一并", "统一"]) => Some("剔除"),
+        "shiyong" if contains(&["付款前", "订阅前", "购买前"])
+            && ends_with(&["免费", "先", "先行"]) => Some("试用"),
+        "queshi" if contains(&["档案", "文件", "资料", "字段", "页面", "记录"])
+            && ends_with(&["严重", "大量", "成批"]) => Some("缺失"),
+        "mingming" if contains(&["给目录", "给文件", "给图层", "给文档", "给变量", "给项目"])
+            && ends_with(&["重新", "统一", "自动", "批量"]) => Some("命名"),
         _ => None,
     }
 }
@@ -591,11 +624,43 @@ mod tests {
             ("kuaichuan", "把文件用局域网", Some("快传")),
             ("kuaichuan", "这些图片通过局域网", Some("快传")),
             ("kuaichuan", "照片刚发完。这部小说的题材是", None),
-            ("kuaichuan", "救援队出动一艘", None),
+            ("kuaichuan", "救援队出动一艘", Some("快船")),
             ("goujianhao", "查看当前软件的", Some("构建号")),
             ("goujianhao", "请核对更新包的", Some("构建号")),
             ("goujianhao", "请把安装包重新", None),
             ("goujianhao", "查看文档后。请看应用的", None),
+            ("guanlitai", "打开知字的", Some("管理台")),
+            ("guanlitai", "打开知字", Some("管理台")),
+            ("guanlitai", "请登录服务端的", Some("管理台")),
+            ("guanlitai", "", Some("观礼台")),
+            ("guanlitai", "所建仿古建筑还原了宫廷的", Some("观礼台")),
+            ("guanlitai", "打开门后。能看到宫廷的", Some("观礼台")),
+            ("guanlitai", "打开仿古建筑里的", Some("观礼台")),
+            ("yangli", "参考上次的测试", Some("样例")),
+            ("yangli", "这个生日要按", None),
+            ("dabiao", "请对这批图片逐张", Some("打标")),
+            ("dabiao", "工厂排放已全部", None),
+            ("shencha", "对原始数据继续", Some("深查")),
+            ("shencha", "材料提交给部门", None),
+            ("cuoci", "输入法首选出了", Some("错词")),
+            ("cuoci", "投诉信里采用的", None),
+            ("changshiban", "可以安装这个", Some("尝试版")),
+            ("changshiban", "今天教堂的", Some("唱诗班")),
+            ("changshiban", "", Some("唱诗班")),
+            ("najige", "没通过的是", Some("哪几个")),
+            ("najige", "刚从门口进来的", None),
+            ("yiban", "我们先修订", Some("一版")),
+            ("yiban", "先把表格填写", None),
+            ("chushen", "材料已提交", Some("初审")),
+            ("chushen", "他是一个农村", None),
+            ("tichu", "所有不符合条件的样本全部", Some("剔除")),
+            ("tichu", "各项建议已经书面", None),
+            ("shiyong", "正式付款前可以免费", Some("试用")),
+            ("shiyong", "厂商授予我们永久", None),
+            ("queshi", "这份资料严重", Some("缺失")),
+            ("queshi", "几份证据可以证明确实", None),
+            ("mingming", "按新规则给目录重新", Some("命名")),
+            ("mingming", "你昨天", None),
         ] {
             assert_eq!(exact_collocation(raw, context), expected, "{raw} {context}");
         }

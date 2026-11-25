@@ -138,6 +138,21 @@ pub struct DecoderSnapshot {
     pub is_last_page: bool,
 }
 
+#[cfg(all(target_os = "macos", feature = "mac-fast-typing"))]
+pub(crate) fn displays_exact_homophones(snapshot: &DecoderSnapshot) -> bool {
+    let Some((first, rest)) = snapshot.candidates.split_first() else { return false; };
+    let han = |text: &str| {
+        !text.is_empty() && text.chars().all(|ch| ('\u{3400}'..='\u{9fff}').contains(&ch))
+    };
+    let syllables = first.reading_key.split_whitespace().count();
+    han(&first.text)
+        && first.text.chars().count() == syllables
+        && first.reading_key.split_whitespace().flat_map(str::bytes).eq(snapshot.raw_input.bytes())
+        && rest.iter().any(|candidate| candidate.reading_key == first.reading_key
+            && candidate.text != first.text && han(&candidate.text)
+            && candidate.text.chars().count() == syllables)
+}
+
 // The shim exposes no confirmed-segment boundary. Match whole trailing pinyin
 // tokens against a suffix of the raw input instead of classifying confirmed text
 // as non-ASCII. Rime inserts syllable spaces and displays raw v as ü. Never split
@@ -1783,6 +1798,13 @@ impl Session {
         if single_character && first.is_ascii_digit() && self.composing() {
             let index = first.to_digit(10).unwrap_or(0) as usize;
             let snapshot = self.decoder.snapshot();
+            #[cfg(feature = "mac-fast-typing")]
+            if self.decoder.native_editing() && snapshot.raw_input == "v" && snapshot.preedit == "v" {
+                self.take_raw_composition();
+                self.inline_ascii.push('v');
+                self.inline_ascii.push(first);
+                return self.finish(true, String::new(), 0, security);
+            }
             // The visible page is the sole owner check for digits. ASCII
             // conveniences may extend only when neither numbered layer has a
             // Chinese candidate; repository vocabulary is deliberately not
@@ -1792,7 +1814,14 @@ impl Session {
                 return self.apply_decoder_result(result, security);
             }
             if (1..=CANDIDATE_PAGE_SIZE).contains(&index) && index <= snapshot.candidates.len() {
-                let learning_intent = if snapshot.page_no > 0 || index > 1 {
+                #[cfg(all(target_os = "macos", feature = "mac-fast-typing"))]
+                let explicit_homophone = index == 1 && self.decoder.native_editing()
+                    && displays_exact_homophones(&snapshot)
+                    && self.decoder.composition_boundary(BoundaryPurpose::Editing)
+                        .is_some_and(|boundary| boundary.confirmed.is_empty());
+                #[cfg(not(all(target_os = "macos", feature = "mac-fast-typing")))]
+                let explicit_homophone = false;
+                let learning_intent = if snapshot.page_no > 0 || index > 1 || explicit_homophone {
                     LearningIntent::DeliberateSelection
                 } else {
                     LearningIntent::NoLearn
@@ -2684,6 +2713,23 @@ mod tests {
             ),
             "base64"
         );
+    }
+
+    #[cfg(feature = "mac-fast-typing")]
+    #[test]
+    fn inline_lowercase_version_preserves_its_digits_delimiters_and_chinese_mode() {
+        let mut value = Session::new_native("version.literal".into(),
+            Arc::new(Mutex::new(Store::default())), crate::zhixu::fallback()).unwrap();
+        type_text(&mut value, "nihao");
+        assert_eq!(value.process(event(KeyKind::Space, "")).commit_text, "你好");
+        let version = type_text(&mut value, "v0.3.55");
+        assert_eq!(version.marked_text, "v0.3.55");
+        assert!(version.candidates.is_empty());
+        let committed = value.process(event(KeyKind::Space, ""));
+        assert_eq!(committed.commit_text, "v0.3.55");
+        assert_eq!(committed.mode, InputMode::Chinese);
+        type_text(&mut value, "shijie");
+        assert_eq!(value.process(event(KeyKind::Text, "!")).commit_text, "世界！");
     }
 
     #[test]

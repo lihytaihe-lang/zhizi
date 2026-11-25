@@ -717,6 +717,7 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
                 precedingText: activePrecedingText
             )
             hasActiveComposition = !result.markedText.isEmpty
+            latestView = hasActiveComposition ? result : nil
             if result.markedText.isEmpty { activePrecedingText = nil }
             updateModeIfNeeded(from: result)
             _ = apply(result, to: client)
@@ -752,6 +753,7 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
                 precedingText: activePrecedingText
             )
             hasActiveComposition = !result.markedText.isEmpty
+            latestView = hasActiveComposition ? result : nil
             if result.markedText.isEmpty { activePrecedingText = nil }
             updateModeIfNeeded(from: result)
             _ = apply(result, to: client)

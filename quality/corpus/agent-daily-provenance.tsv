@@ -7,3 +7,18 @@ text	pinyin	weight	source	selection_reason
 快传	kuai chuan	120	project-authored	Owner build 26354 selected the term outside the first five. Public 0.3.53 surfaced the composed term on page 11.
 构建好	gou jian hao	80	project-authored	Preserves the public 0.3.53 default composition for goujianhao when the earlier clause provides no request for an identifier.
 构建号	gou jian hao	60	project-authored	Owner build 26369 selected the term at position 2. Give contextual ranking a whole reading for the software identifier.
+管理台	guan li tai	40	project-authored	Owner explicitly selected the term. Public 0.3.54 only composed it on a deep page. Keep its weight below the attested 观礼台.
+快打	kuai da	80	project-authored	Owner explicitly selected the typing term. Give the complete term a verified reading in place of the default 快大 composition.
+越跑越偏	yue pao yue pian	80	project-authored	Owner explicitly selected this ordinary phrase. Public 0.3.54 preferred the unrelated 约跑月片 composition.
+不治本	bu zhi ben	80	project-authored	Owner explicitly selected this phrase and had to page. Provide a full reading for the common contrast with 治标.
+样例	yang li	1	project-authored	Owner explicitly selected this term after paging. Keep its lexical weight below 阳历 and use context for the technical sense.
+审完了	shen wan le	80	project-authored	Owner explicitly selected this phrase after paging. Supply the complete reading for finishing a review.
+标完	biao wan	80	project-authored	Owner explicitly selected the annotation phrase, which lacked a full reading.
+依次往下做	yi ci wang xia zuo	80	project-authored	Owner explicitly selected this workflow phrase without editing the correct pinyin.
+深查	shen cha	1	project-authored	Owner explicitly selected this investigation term. Keep its lexical weight below 审查 and require specific context to promote it.
+错词	cuo ci	1	project-authored	Owner explicitly selected the typing error term. Keep its lexical weight below 措辞 and constrain promotion to input contexts.
+尝试版	chang shi ban	50	project-authored	Owner explicitly selected this trial version term. Keep its lexical weight below 唱诗班, with separate installation context.
+校验值	jiao yan zhi	80	project-authored	Reconstructed independent file checksum case reproduced a missing or deep complete candidate with correct pinyin.
+交接单	jiao jie dan	80	project-authored	Independent handover-form replay preferred the incomplete 交接但 composition. Add the complete reading.
+待确认项	dai que ren xiang	80	project-authored	Independent spreadsheet workflow replay lacked the complete term in 0.3.54.
+充电盒	chong dian he	80	project-authored	Independent earbud case replay lacked the complete term in 0.3.54.

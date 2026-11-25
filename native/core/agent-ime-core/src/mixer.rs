@@ -1025,6 +1025,26 @@ impl MixerDecoder {
             .filter(|boundary| !boundary.confirmed.is_empty())
     }
 
+    fn context_before_remaining(&self, confirmed: &str) -> Cow<'_, str> {
+        // Confirmed segments are still marked in the host, but they are
+        // immediately before the remaining letters inside the decoder.
+        let preceding = self.preceding_text.as_deref().unwrap_or_default();
+        if confirmed.is_empty() {
+            Cow::Borrowed(preceding)
+        } else {
+            Cow::Owned(preceding.to_owned() + confirmed)
+        }
+    }
+
+    fn current_suffix_context(&self) -> Cow<'_, str> {
+        let confirmed = if self.raw_override.is_none() {
+            self.confirmed_boundary().map(|boundary| boundary.confirmed).unwrap_or_default()
+        } else {
+            String::new()
+        };
+        self.context_before_remaining(&confirmed)
+    }
+
     /// The letters of the input still to be converted: the decoder's own boundary,
     /// or the whole raw input when it reports none.
     fn letters_left(&self) -> String {
@@ -1346,6 +1366,58 @@ impl MixerDecoder {
                 selection: Selection::Local { text }, tier: 1, score: 0 }
         };
         candidates.insert(at, candidate);
+    }
+
+    #[cfg(feature = "mac-fast-typing")]
+    fn offer_single_edit_word(&self, raw: &str, output: &mut Vec<MixedCandidate>, allowed_text: impl Fn(&str) -> bool) {
+        if !self.inner.native_editing()
+            || self.fuzzy_mask != 0
+            || !(6..=24).contains(&raw.len())
+            || !raw.bytes().all(|byte| byte.is_ascii_lowercase())
+            || self.confirmed_boundary().is_some()
+            || valid_pinyin_spelling(raw)
+            || ends_with_bare_initial(raw)
+            || has_registered_ascii_exact(raw, self.code_ascii_bias)
+            || !tech_terms_for_reading_prefix(raw).is_empty()
+            || english_word_ranks().contains_key(raw)
+        {
+            return;
+        }
+        let Some(dictionary) = self.inner.dictionary_snapshot() else { return; };
+        let mut repairs = spelling_repairs(raw);
+        repairs.extend(adjacent_row_substitutions(raw));
+        let blacklist = self.blacklist.lock().ok();
+        let best = repairs.iter().filter(|spelling| !spelling.starts_with(raw)).flat_map(|spelling| {
+            dictionary.all_words_for_compact_reading(spelling).take(3)
+        }).filter(|(text, _, weight)| {
+            *weight >= 250 && text.chars().count() >= 2 && text.chars().all(|c| ('\u{3400}'..='\u{9fff}').contains(&c)) && allowed_text(text)
+                && blacklist.as_ref().is_some_and(|store| !store.contains(raw, text))
+        }).max_by_key(|(_, _, weight)| *weight);
+        let Some((text, _, _)) = best else { return; };
+        let existing = output.iter().position(|item| item.candidate.text == text);
+        if sentence_abbreviation(raw) && existing != Some(0) {
+            // Leave abbreviation candidates in place. An already displayed
+            // lead with an exact one-edit reading can confirm as shown.
+            return;
+        }
+        let slot = existing.filter(|&index| index < PAGE_SIZE)
+            .unwrap_or_else(|| if output.first().is_some_and(|item| !item.candidate.text.is_ascii()) { 2 } else { 0 });
+        if let Some(index) = existing {
+            output.remove(index);
+        }
+        output.insert(slot.min(output.len()), MixedCandidate {
+            candidate: Candidate {
+                text: text.into(),
+                reading_key: raw.into(),
+                comment: SLIP_COMMENT.into(),
+                source_index: None,
+            },
+            // A decoder row with the same text can consume a shorter prefix.
+            // The repaired reading accounts for the full raw composition.
+            selection: Selection::Local { text: text.into() },
+            tier: 2,
+            score: 0,
+        });
     }
 
     fn first_layer_with_whole(&self, base: &DecoderSnapshot, whole: bool) -> Vec<MixedCandidate> {
@@ -1767,6 +1839,10 @@ impl MixerDecoder {
             place_short_english(&base.raw_input, &reading, &mut output);
             lead_with_owner_letter(&base.raw_input, &mut output);
             self.prioritize_sentence_lattice(&base.raw_input, &mut output);
+            #[cfg(feature = "mac-fast-typing")]
+            if !english_leads {
+                self.offer_single_edit_word(&base.raw_input, &mut output, allowed_text);
+            }
         }
         if english_leads {
             lead_with_english_word(&base.raw_input, &reading, &mut output);
@@ -2051,11 +2127,14 @@ impl MixerDecoder {
             return (base, mixed);
         }
         let mut base = self.inner.snapshot();
-        if self.raw_override.is_none()
+        let confirmed = if self.raw_override.is_none()
             && let Some(boundary) = self.confirmed_boundary()
         {
             base.raw_input = boundary.unconfirmed_raw;
-        }
+            boundary.confirmed
+        } else {
+            String::new()
+        };
         if let Some(raw) = &self.raw_override {
             base.raw_input = raw.clone();
             base.preedit = raw.clone();
@@ -2104,7 +2183,7 @@ impl MixerDecoder {
             self.prioritize_first_syllable_single_characters(&base.raw_input, &mut ranked);
         }
         if self.inner.native_editing() && base.page_no == 0 && self.fuzzy_page_no == 0 {
-            self.prefer_exact_collocation(&base.raw_input, &mut ranked);
+            self.prefer_exact_collocation(&base.raw_input, &confirmed, &mut ranked);
             #[cfg(feature = "mac-fast-typing")]
             {
                 self.place_typed_zhiju(&base, &mut ranked);
@@ -2254,9 +2333,9 @@ impl MixerDecoder {
         });
     }
 
-    fn prefer_exact_collocation(&self, raw: &str, candidates: &mut [MixedCandidate]) {
-        let Some(preceding) = self.preceding_text.as_deref() else { return; };
-        let Some(word) = crate::exact_context::exact_collocation(raw, preceding) else { return; };
+    fn prefer_exact_collocation(&self, raw: &str, confirmed: &str, candidates: &mut [MixedCandidate]) {
+        let preceding = self.context_before_remaining(confirmed);
+        let Some(word) = crate::exact_context::exact_collocation(raw, &preceding) else { return; };
         let Some(first) = candidates.first() else { return; };
         if first.candidate.text == word || first.tier != 2 || self.use_rime_order(raw)
             || ranking::owner_keeps(&first.candidate.text, word)
@@ -2358,6 +2437,16 @@ impl MixerDecoder {
                     && first.candidate.reading_key == entry.reading)
     }
 
+    fn protected_exact_head(&self, raw: &str) -> Option<&'static str> {
+        let preceding = self.current_suffix_context();
+        crate::exact_context::exact_collocation(raw, &preceding)
+            .or_else(|| {
+                let (reading, word) = crate::exact_context::offpage_exact_collocation(&preceding)?;
+                (self.inner.native_exact_priority_active() && reading == raw).then_some(word)
+            })
+            .or_else(|| crate::exact_context::protects_drafted_head(raw, &preceding).then_some("制定"))
+    }
+
     fn context_ranking_slots(&self, snapshot: &DecoderSnapshot, candidates: &[MixedCandidate]) -> u32 {
         #[cfg(feature = "mac-fast-typing")]
         if snapshot.page_no == 0 && self.inner.native_editing()
@@ -2370,15 +2459,8 @@ impl MixerDecoder {
         // Keep an exact collocation already at the top of the first page stable
         // when the deferred model sorts the remaining slots.
         if snapshot.page_no == 0 && self.inner.native_editing()
-            && let Some(preceding) = self.preceding_text.as_deref()
-            && let Some(word) = crate::exact_context::exact_collocation(&snapshot.raw_input, preceding)
-                .or_else(|| {
-                    let (raw, word) = crate::exact_context::offpage_exact_collocation(preceding)?;
-                    (self.inner.native_exact_priority_active() && raw == snapshot.raw_input).then_some(word)
-                })
-                .or_else(|| crate::exact_context::protects_drafted_head(&snapshot.raw_input, preceding).then_some("制定"))
             && let Some(first) = candidates.first()
-            && first.candidate.text == word
+            && self.protected_exact_head(&snapshot.raw_input) == Some(first.candidate.text.as_str())
             && let Some(index) = self.inner.dictionary_snapshot()
             && native_exact_word(&snapshot.raw_input, first, &index)
         {
@@ -3680,10 +3762,14 @@ impl Decoder for MixerDecoder {
         let selected = mixed.get(index).cloned().ok_or(-10)?;
         // A default confirmation of these ambiguous spellings supplies no
         // preference across contexts. Keep deliberate picks and stored evidence.
+        #[cfg(all(target_os = "macos", feature = "mac-fast-typing"))]
+        let exact_homophones = crate::state::displays_exact_homophones(&snapshot);
+        #[cfg(all(not(target_os = "macos"), feature = "mac-fast-typing"))]
+        let exact_homophones = false;
         #[cfg(feature = "mac-fast-typing")]
         let automatic_ambiguous_choice = learning_intent == LearningIntent::NoLearn
             && self.inner.native_editing()
-            && (crate::exact_context::has_context_sensitive_abbreviation(&snapshot.raw_input)
+            && (exact_homophones || crate::exact_context::has_context_sensitive_abbreviation(&snapshot.raw_input)
                 || matches!(snapshot.raw_input.as_str(), "yuanjian" | "dengji" | "zhiding")
                     && selected.candidate.reading_key.split_whitespace().flat_map(str::bytes)
                         .eq(snapshot.raw_input.bytes()))
@@ -3696,8 +3782,8 @@ impl Decoder for MixerDecoder {
                 Selection::Base { index: 0, .. } => self.inner.native_exact_priority_active(),
                 Selection::Base { .. } => self.inner.native_editing()
                     && {
-                        let exact = self.preceding_text.as_deref().and_then(|context|
-                            crate::exact_context::exact_collocation(&snapshot.raw_input, context));
+                        let exact = crate::exact_context::exact_collocation(
+                            &snapshot.raw_input, &self.current_suffix_context());
                         #[cfg(feature = "mac-fast-typing")]
                         let exact = exact.or_else(|| self.preferred_abbreviated_phrase(&snapshot.raw_input));
                         exact == Some(selected.candidate.text.as_str())
@@ -3960,6 +4046,11 @@ fn daily_abbreviations() -> &'static HashMap<String, (String, String, i64)> {
                 let text = columns.next()?.trim();
                 let raw_reading = columns.next()?.trim();
                 let weight = columns.next()?.trim().parse::<i64>().ok()?;
+                // Reserve local initials for the existing curated choices.
+                // Whole-reading additions stay in the ordinary dictionary.
+                if !matches!(text, "热爱" | "时装包" | "试装包" | "快传" | "构建好" | "构建号") {
+                    return None;
+                }
                 let syllables = raw_reading.split_whitespace().collect::<Vec<_>>();
                 (syllables.len() > 1).then(|| {
                     let abbreviation = syllables
@@ -5056,6 +5147,30 @@ fn spelling_repairs(reading: &str) -> Vec<String> {
         }
     }
     add(neighbours, NEIGHBOUR_KEYS, &mut repairs);
+    repairs
+}
+
+#[cfg(feature = "mac-fast-typing")]
+fn adjacent_row_substitutions(reading: &str) -> Vec<String> {
+    // Staggered rows: each top/bottom key has up to two neighbours on the next row.
+    const PAIRS: [&str; 2] = ["qawsedrftgyhujikolp", "azsxdcfvgbhnjmk"];
+    let mut repairs = Vec::new();
+    for (position, from) in reading.char_indices() {
+        for neighbours in PAIRS {
+            for pair in neighbours.as_bytes().windows(2) {
+                let to = match pair {
+                    [a, b] if *a == from as u8 => *b,
+                    [a, b] if *b == from as u8 => *a,
+                    _ => continue,
+                };
+                let mut spelling = reading.to_owned();
+                spelling.replace_range(position..position + 1, &char::from(to).to_string());
+                if valid_pinyin_spelling(&spelling) && !repairs.contains(&spelling) {
+                    repairs.push(spelling);
+                }
+            }
+        }
+    }
     repairs
 }
 
@@ -9424,6 +9539,39 @@ mod tests {
             let blocked = mixer.snapshot().candidates;
             assert_eq!(blocked[0].text, "食物");
             assert!(blocked.iter().all(|candidate| candidate.text != "失误"));
+        });
+    }
+
+    #[cfg(all(target_os = "macos", feature = "mac-fast-typing"))]
+    #[test]
+    fn confirmed_segment_supplies_the_exact_context_until_undone() {
+        use crate::zhixu::loader::{DictionaryData, Entry};
+        let dictionary = Arc::new(Index::from_data(DictionaryData { entries: [
+            ("核对", "he dui", 30_000), ("放到", "fang dao", 30_000),
+            ("一边", "yi bian", 30_000), ("一遍", "yi bian", 20_000),
+        ].into_iter().map(|(text, reading, weight)| Entry {
+            text: text.into(), reading: reading.into(), weight, layer: "fixture".into(),
+        }).collect() }));
+        zhixu::with_index(dictionary.clone(), || {
+            let mut mixer = native_mixer("confirmed-exact-context", dictionary.clone());
+            mixer.input("heduiyibian").unwrap();
+            assert_eq!(select_displayed_text(&mut mixer, "核对", 90421), "");
+            assert_eq!(mixer.current_suffix_context(), "核对");
+            assert_eq!(mixer.snapshot().candidates[0].text, "一遍");
+            assert_eq!(mixer.context_complete_mask() & 1, 0);
+            mixer.backspace().unwrap();
+            assert!(mixer.confirmed_boundary().is_none());
+            assert!(mixer.current_suffix_context().is_empty());
+            assert_eq!(select_displayed_text(&mut mixer, "核对", 90422), "");
+            assert_eq!(mixer.select_candidate(0, 90423, LearningIntent::NoLearn).unwrap(), "核对一遍");
+
+            let mut contrasting = native_mixer("confirmed-exact-contrast", dictionary);
+            contrasting.configure_preceding_text(Some("请再核对".into()));
+            contrasting.input("fangdaoyibian").unwrap();
+            assert_eq!(select_displayed_text(&mut contrasting, "放到", 90424), "");
+            assert_eq!(contrasting.current_suffix_context(), "请再核对放到");
+            assert_eq!(contrasting.snapshot().candidates[0].text, "一边");
+            assert_eq!(contrasting.select_candidate(0, 90425, LearningIntent::NoLearn).unwrap(), "放到一边");
         });
     }
 
