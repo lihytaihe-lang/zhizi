@@ -1,4 +1,4 @@
-# Generated from pinned pinyin_simp (weight >= 500) and the agent everyday layers; sources_sha256=53942600c396dda9089661ac3aed0c7b32b786cc282d78f3a434beb422fd6e90
+# Generated from pinned pinyin_simp (weight >= 500) and the agent everyday layers; sources_sha256=e80750d1a186f826348bf161c86a23d9643d1d671413b5a5ba629f00c657b9c1
 # maximum_characters=7
 扒	ba	523
 坝	ba	701
@@ -80007,6 +80007,11 @@
 举例子	ju li zi	520
 熟读	shu du	520
 甄维斯	zhen wei si	520
+时装包	shi zhuang bao	80
+试装包	shi zhuang bao	60
+快传	kuai chuan	120
+构建好	gou jian hao	80
+构建号	gou jian hao	60
 完成了	wan cheng le	520
 难用	nan yong	520
 超级烦	chao ji fan	520

@@ -342,7 +342,8 @@ fn short_shiwu_context(clause: &str) -> Option<&'static str> {
 
 #[cfg(all(target_os = "macos", feature = "mac-fast-typing"))]
 fn everyday_exact_collocation(raw: &str, preceding: &str) -> Option<&'static str> {
-    if !matches!(raw, "qian" | "daochu" | "yaoshi" | "guomin" | "gaifa" | "baoyou" | "yibian") {
+    if !matches!(raw, "qian" | "daochu" | "yaoshi" | "guomin" | "gaifa" | "baoyou" | "yibian"
+        | "shizhuangbao" | "kuaichuan" | "goujianhao") {
         return None;
     }
     let clause = recent_clause(preceding).trim_end();
@@ -362,6 +363,15 @@ fn everyday_exact_collocation(raw: &str, preceding: &str) -> Option<&'static str
         "baoyou" if ends_with(&["想法", "措施", "政策", "安排", "情况", "食品", "食物", "事物", "前景"])
             && contains(&["对于", "对这", "对那", "对某"]) => Some("抱有"),
         "yibian" if ends_with(&["核对", "复核", "校对", "通读", "重读"]) => Some("一遍"),
+        "shizhuangbao" if contains(&["测试机", "试用", "试跑", "验证升级", "预发布"])
+            && ends_with(&["发一个", "传一个", "出一个", "打一个", "做一个", "装一个", "先装"])
+            => Some("试装包"),
+        "kuaichuan" if contains(&["文件", "照片", "文档", "视频", "图片"])
+            && ends_with(&["用局域网", "通过局域网", "走局域网", "经局域网", "用蓝牙", "用隔空投送"])
+            => Some("快传"),
+        "goujianhao" if contains(&["查看", "核对", "查询", "显示", "记录", "读取", "确认"])
+            && ends_with(&["软件的", "系统的", "应用的", "版本的", "安装包的", "更新包的"])
+            => Some("构建号"),
         _ => None,
     }
 }
@@ -574,6 +584,18 @@ mod tests {
             ("yibian", "请把清单从头通读", Some("一遍")),
             ("yibian", "请把它放在", None),
             ("yibian", "请先核对。两份材料各放", None),
+            ("shizhuangbao", "先在测试机发一个", Some("试装包")),
+            ("shizhuangbao", "预发布版本先出一个", Some("试装包")),
+            ("shizhuangbao", "测试机刚关。她买了一个新款", None),
+            ("shizhuangbao", "她想买包试用一下", None),
+            ("kuaichuan", "把文件用局域网", Some("快传")),
+            ("kuaichuan", "这些图片通过局域网", Some("快传")),
+            ("kuaichuan", "照片刚发完。这部小说的题材是", None),
+            ("kuaichuan", "救援队出动一艘", None),
+            ("goujianhao", "查看当前软件的", Some("构建号")),
+            ("goujianhao", "请核对更新包的", Some("构建号")),
+            ("goujianhao", "请把安装包重新", None),
+            ("goujianhao", "查看文档后。请看应用的", None),
         ] {
             assert_eq!(exact_collocation(raw, context), expected, "{raw} {context}");
         }

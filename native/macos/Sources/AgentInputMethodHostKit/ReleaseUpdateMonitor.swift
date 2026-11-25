@@ -7,6 +7,7 @@ final class ReleaseUpdateMonitor {
 
     private(set) var available: StableRelease?
     private var worker: Task<Void, Never>?
+    private var notificationsInFlight: Set<String> = []
 
     func start() {
         #if arch(arm64)
@@ -56,18 +57,26 @@ final class ReleaseUpdateMonitor {
             authorization = await center.notificationSettings().authorizationStatus
         }
         guard !Task.isCancelled, authorization == .authorized || authorization == .provisional else { return }
+        await notifyIfNew(release, defaults: .standard) { request in
+            try await center.add(request)
+        }
+    }
+
+    func notifyIfNew(_ release: StableRelease, defaults: UserDefaults,
+                     schedule: (UNNotificationRequest) async throws -> Void) async {
         let key = "lastNotifiedStableBuild"
-        let defaults = UserDefaults.standard
-        let build = "\(release.version)-\(release.build)"
-        guard defaults.string(forKey: key) != build else { return }
+        let identity = "\(release.version)-\(release.build)"
+        guard defaults.string(forKey: key) != identity,
+              notificationsInFlight.insert(identity).inserted else { return }
+        defer { notificationsInFlight.remove(identity) }
 
         let content = UNMutableNotificationContent()
         content.title = "知字有新版本"
-        content.body = "知字 \(release.version) · 构建 \(release.build) 已发布。可在知字输入法菜单查看更新说明。"
+        content.body = "知字 \(release.version) 已发布。可在知字输入法菜单查看更新说明。"
         do {
-            try await center.add(UNNotificationRequest(identifier: "zhizi-release-\(build)",
-                                                       content: content, trigger: nil))
-            defaults.set(build, forKey: key)
+            try await schedule(UNNotificationRequest(identifier: "zhizi-release-\(identity)",
+                                                     content: content, trigger: nil))
+            defaults.set(identity, forKey: key)
         } catch {
             // The menu remains available if macOS declines delivery.
         }

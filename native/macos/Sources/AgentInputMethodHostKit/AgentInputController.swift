@@ -879,13 +879,13 @@ public final class AgentInputController: IMKInputController, @unchecked Sendable
         menu.addItem(detailed)
         if let identity = ReleaseIdentity.running() {
             menu.addItem(.separator())
-            let title = "知字 \(identity.version) · 构建 \(identity.build)"
+            let title = "知字 \(identity.version)"
             let version = NSMenuItem(title: title, action: nil, keyEquivalent: "")
             version.isEnabled = false
             menu.addItem(version)
         }
         if !performanceMode, let release = MainActor.assumeIsolated({ ReleaseUpdateMonitor.shared.available }) {
-            let item = NSMenuItem(title: "有新版本 \(release.version) · 构建 \(release.build)…", action: #selector(openReleaseNotes(_:)), keyEquivalent: "")
+            let item = NSMenuItem(title: "有新版本 \(release.version)…", action: #selector(openReleaseNotes(_:)), keyEquivalent: "")
             item.target = self
             menu.addItem(item)
         }

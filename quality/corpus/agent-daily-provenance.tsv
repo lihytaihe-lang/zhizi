@@ -2,3 +2,8 @@ text	pinyin	weight	source	selection_reason
 大	da	114000	project-authored	Common primary character; the frozen independent must-pass fixture selected it over upstream 打 weight 107925; correction is ceil(107925 * 1.05 / 1000) * 1000.
 关	guan	16000	project-authored	Common primary character; the frozen independent must-pass fixture selected it over upstream 管 weight 15029; correction is ceil(15029 * 1.05 / 1000) * 1000.
 热爱	re ai	3000	project-authored	Chunk 11 restores the common ra abbreviation after ASCII project tables are isolated; correction is ceil(2244 * 1.05 / 1000) * 1000.
+时装包	shi zhuang bao	80	project-authored	Preserves the public 0.3.53 default composition for shizhuangbao when the earlier clause provides no software-testing cue.
+试装包	shi zhuang bao	60	project-authored	Owner build 26367 selected the term after paging. Public 0.3.53 did not surface the whole term on any scanned page.
+快传	kuai chuan	120	project-authored	Owner build 26354 selected the term outside the first five. Public 0.3.53 surfaced the composed term on page 11.
+构建好	gou jian hao	80	project-authored	Preserves the public 0.3.53 default composition for goujianhao when the earlier clause provides no request for an identifier.
+构建号	gou jian hao	60	project-authored	Owner build 26369 selected the term at position 2. Give contextual ranking a whole reading for the software identifier.
