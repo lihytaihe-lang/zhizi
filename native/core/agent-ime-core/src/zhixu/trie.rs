@@ -92,7 +92,19 @@ impl CompactReadingTrie {
         start..start + node.words_len as usize
     }
 
-    fn child(&self, node: usize, letter: u8) -> Option<usize> {
+    #[cfg(feature = "experimental-typing-repair")]
+    pub(super) fn children(&self, node: usize) -> impl Iterator<Item = (u8, usize)> + '_ {
+        let node = &self.nodes[node];
+        let mut letters = node.letters;
+        let start = node.children_start as usize;
+        self.children[start..start + letters.count_ones() as usize].iter().map(move |&child| {
+            let letter = b'a' + letters.trailing_zeros() as u8;
+            letters &= letters - 1;
+            (letter, child as usize)
+        })
+    }
+
+    pub(super) fn child(&self, node: usize, letter: u8) -> Option<usize> {
         if !letter.is_ascii_lowercase() { return None; }
         let node = &self.nodes[node];
         let bit = 1 << (letter - b'a');

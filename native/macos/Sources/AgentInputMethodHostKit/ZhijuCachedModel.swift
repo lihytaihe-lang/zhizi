@@ -105,6 +105,9 @@ final class ZhijuCachedEngine {
     private let vocabularyCount: Int
     private let shape = [8, 8, 8, 40, 64]
     private let strides = [163840, 20480, 2560, 64, 1]
+    // Initialized before the loader publishes the engine. The shared tensors
+    // contain only BOS and are read-only during later predictions.
+    private(set) var emptyPrefix: (scores: [Float], cache: ZhijuAttentionCache)?
 
     static func load(directory: URL, full: MLModel, short: MLModel?, vocabularyCount: Int, lock: KeyPathLock) throws -> ZhijuCachedEngine? {
         let descriptor = directory.appendingPathComponent("cache.json")
@@ -149,24 +152,27 @@ final class ZhijuCachedEngine {
     }
 
     func prepareForReadiness() throws {
-        let prefixes = Array(repeating: [Int32]([1] + Array(repeating: 2, count: 7)), count: 8)
         let first: (scores: [Float], cache: ZhijuAttentionCache)
         do {
-            first = try score(prefixes: prefixes, parents: nil, previous: nil, trace: nil, shouldContinue: { true })
+            let started = DispatchTime.now().uptimeNanoseconds
+            first = try score(prefixes: [[1]], parents: nil, previous: nil, trace: nil, shouldContinue: { true })
             guard first.scores.allSatisfy(\.isFinite) else { throw CocoaError(.fileReadCorruptFile) }
+            emptyPrefix = (first.scores, try first.cache.ownedCopy())
             if short != nil {
                 // Prime the long prefill shape as well as the short one.
-                let long = prefixes.map { $0 + Array(repeating: Int32(2), count: 9) }
+                let long = Array(repeating: [Int32(1)] + Array(repeating: Int32(2), count: 16), count: 8)
                 let result = try score(prefixes: long, parents: nil, previous: nil, trace: nil, shouldContinue: { true })
                 guard result.scores.allSatisfy(\.isFinite) else { throw CocoaError(.fileReadCorruptFile) }
             }
+            KeyPathContentionTrace.shared?.record("zhiju.model.warm-prefill", DispatchTime.now().uptimeNanoseconds &- started)
         }
         catch { throw CocoaError(.coderInvalidValue, userInfo: [NSDebugDescriptionErrorKey: "K/V readiness prefill: \(error)"]) }
         do {
-            let result: (scores: [Float], cache: ZhijuAttentionCache)
-            result = try score(prefixes: prefixes.map { $0 + [2] }, parents: Array(0..<8),
-                               previous: first.cache, trace: nil, shouldContinue: { true })
+            let started = DispatchTime.now().uptimeNanoseconds
+            let result = try score(prefixes: Array(repeating: [1, 2], count: 8), parents: Array(repeating: 0, count: 8),
+                                   previous: emptyPrefix?.cache ?? first.cache, trace: nil, shouldContinue: { true })
             guard result.scores.allSatisfy(\.isFinite) else { throw CocoaError(.fileReadCorruptFile) }
+            KeyPathContentionTrace.shared?.record("zhiju.model.warm-step", DispatchTime.now().uptimeNanoseconds &- started)
         }
         catch { throw CocoaError(.coderInvalidValue, userInfo: [NSDebugDescriptionErrorKey: "K/V readiness step: \(error)"]) }
     }
@@ -299,6 +305,13 @@ final class ZhijuScoringSession {
            saved.scores.count == root.vocabularyCount {
             owner = engine; prefixes = current; cache = saved.cache
             memo = saved; prefillLength = current[0].count
+            root.trace?.initialPrefixCacheHits += 1
+            return saved.scores
+        }
+        if initial, current == [[1]], let initialPrefix, let saved = engine.emptyPrefix {
+            owner = engine; prefixes = current; cache = saved.cache; prefillLength = 1
+            let value = ZhijuInitialPrefixValue(scores: saved.scores, cache: saved.cache)
+            if mayStore(), initialPrefix.insert(value, owner: engine, key: current[0], epoch: initialEpoch) { memo = value }
             root.trace?.initialPrefixCacheHits += 1
             return saved.scores
         }

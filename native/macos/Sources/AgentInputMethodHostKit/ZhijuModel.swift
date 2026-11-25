@@ -43,6 +43,12 @@ final class ZhijuSnapshot: @unchecked Sendable {
     deinit { aim_zhiju_snapshot_destroy(handle) }
 }
 
+final class ZhijuDictionarySnapshot: @unchecked Sendable {
+    let handle: OpaquePointer
+    init(handle: OpaquePointer) { self.handle = handle }
+    deinit { aim_zhiju_dictionary_destroy(handle) }
+}
+
 /// Owns copied requests for a search. Borrowed C buffers never escape a callback.
 final class ZhijuScoringContext {
     let vocabularyCount: Int
@@ -80,6 +86,7 @@ final class ZhijuModel: @unchecked Sendable {
     }
 
     convenience init(directory: URL) throws {
+        let loadStarted = DispatchTime.now().uptimeNanoseconds
         let itos = try JSONDecoder().decode([String].self, from: Data(contentsOf: directory.appendingPathComponent("itos.json")))
         guard Array(itos.prefix(3)) == ["<pad>", "<bos>", "<unk>"], Set(itos).count == itos.count else {
             throw CocoaError(.fileReadCorruptFile)
@@ -153,6 +160,7 @@ final class ZhijuModel: @unchecked Sendable {
             attentionEngine = try ZhijuCachedEngine.load(directory: directory, full: fullModel, short: shortModel,
                 vocabularyCount: itos.count, lock: predictionLock)
         }
+        KeyPathContentionTrace.shared?.record("zhiju.model.load-assets", DispatchTime.now().uptimeNanoseconds &- loadStarted)
         // Core ML may defer device preparation until prediction. The background
         // loader must not publish a model whose first call consumes the search budget.
         do {

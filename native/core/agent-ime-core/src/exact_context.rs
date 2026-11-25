@@ -280,9 +280,21 @@ pub(crate) fn accepts_composed_collocation(raw: &str) -> bool {
 pub(crate) fn architectural_viewing_platform(raw: &str, preceding: &str) -> bool {
     if !cfg!(all(target_os = "macos", feature = "mac-fast-typing")) || raw != "guanlitai" { return false; }
     let clause = recent_clause(preceding).trim_end();
-    ["古建筑", "宫廷", "宫殿", "王宫", "城楼", "礼仪广场"].iter().any(|word| clause.contains(word))
+    ["古建筑", "礼仪建筑", "宫廷", "宫殿", "王宫", "城楼", "礼仪广场"].iter().any(|word| clause.contains(word))
         && !["软件", "应用", "登录", "后台", "服务器"].iter().any(|word| clause.contains(word))
-        && strip_any_suffix(clause, &["宫廷的", "宫殿的", "建筑的", "修了一座", "修了一个", "建了一座", "留有一处"]).is_some()
+        && strip_any_suffix(clause, &["宫廷的", "宫殿的", "建筑的", "建筑里的", "修了一座", "修了一个", "建了一座",
+            "留有一处", "前设有", "旁设有"]).is_some()
+}
+
+pub(crate) fn overrides_cross_app_learning(raw: &str, preceding: &str, first: &str, preferred: &str) -> bool {
+    if (first, preferred) == ("管理台", "观礼台") && architectural_viewing_platform(raw, preceding) {
+        return true;
+    }
+    #[cfg(all(target_os = "macos", feature = "mac-fast-typing"))]
+    if raw == "xinqi" && (first, preferred) == ("新奇", "新起") {
+        return replacing_draft(preceding);
+    }
+    false
 }
 
 // The short-word fast path uses complete phrases or typed left-context

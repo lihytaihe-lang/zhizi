@@ -16,6 +16,7 @@ typedef struct AimSession AimSession;
 typedef struct AimLexiconSnapshot AimLexiconSnapshot;
 typedef struct AimContextModelSnapshot AimContextModelSnapshot;
 typedef struct AimZhijuSearch AimZhijuSearch;
+typedef struct AimZhijuDictionary AimZhijuDictionary;
 typedef struct AimZhijuSnapshot AimZhijuSnapshot;
 
 typedef enum {
@@ -186,6 +187,11 @@ typedef void (*AimZhijuRowsReady)(void *user_data, const int32_t *tokens,
  * dictionary caches. Neither call takes or accesses a session. Null on load error. */
 AimZhijuSearch *aim_zhiju_search_create(const uint8_t *path, size_t path_len);
 void aim_zhiju_search_destroy(AimZhijuSearch *search);
+/* Capture only the immutable dictionary under exclusive session access, even
+ * before typing. Prepare on a worker; the capture never contains client text. */
+AimZhijuDictionary *aim_session_zhiju_dictionary_snapshot(const AimSession *session);
+void aim_zhiju_dictionary_destroy(AimZhijuDictionary *dictionary);
+int32_t aim_zhiju_search_prepare_dictionary(AimZhijuSearch *search, const AimZhijuDictionary *dictionary);
 /* Capture under exclusive session access; only copies input/context and retains
  * an immutable dictionary Arc. No vocabulary loading, expansion or sorting.
  * 0=success; -1=null; -3=not applicable; -7=no dictionary. Clears *out on error.
@@ -215,6 +221,11 @@ int32_t aim_zhiju_snapshot_step(AimZhijuSnapshot *snapshot, AimZhijuSearch *sear
  * -9 means the warmed lexical index or time budget was unavailable. */
 int32_t aim_zhiju_snapshot_lexical(AimZhijuSnapshot *snapshot, uint64_t budget_ms,
                                  uint8_t *out, size_t *out_len);
+/* Adds at most two full-reading lexical proofs corroborated by C3's ordered,
+ * tab-separated proposals for the unchanged key. Worker-owned, offer-only,
+ * with the same lexical budget and no originating session access. */
+int32_t aim_zhiju_snapshot_prepare_joint_lexical(AimZhijuSnapshot *snapshot,
+                                               const uint8_t *proposals, size_t length, uint64_t budget_ms);
 /* One exclusive session call: validate originating session, key/dictionary
  * generation, optionally remember/promote the best completed result, then read
  * the current page. promote=0 only reads the page (including timeout fallback).
@@ -300,13 +311,14 @@ int32_t aim_session_lead_with_composition(AimSession *session, const uint8_t *te
  * result in slot five. Raw/full-reading blacklists and learned-word protection
  * still apply; key/page edits expire generated proofs. Never changes slots 1–4. */
 int32_t aim_session_offer_composition(AimSession *session, const uint8_t *text, size_t length);
-/* Read-only, bounded off-page dictionary matches for 2–3 initials. UTF-8 TSV;
+/* Read-only, bounded off-page dictionary matches for short initials or contextual
+ * mixed/full pinyin on supported builds. UTF-8 TSV;
  * returns bytes written or negated required size. Same buffer contract as page_texts. */
 intptr_t aim_session_abbreviation_alternatives(AimSession *session, uint8_t *buffer, size_t capacity);
 /* Read-only lexical forecast for one final letter. At most eight raw/text pairs,
  * separated by TAB and newline. Same buffer contract as page_texts. */
 intptr_t aim_session_exact_lookahead(AimSession *session, uint8_t *buffer, size_t capacity);
-/* Offer a current short dictionary alternative in slot five; never changes slots 1–4. */
+/* Offer a current off-page dictionary alternative in slot five; never changes slots 1–4. */
 int32_t aim_session_offer_abbreviation(AimSession *session, const uint8_t *text, size_t length);
 int32_t aim_session_composition_guessed(AimSession *session);
 int32_t aim_ranking_composition_lead(const uint8_t *texts, size_t length, const double *scores, const double *edits, size_t count, int32_t guessed);

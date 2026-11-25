@@ -714,20 +714,41 @@ pub(crate) struct ZhijuSnapshot {
     progress: Option<crate::zhixu::zhiju::Progress>,
     pub(crate) results: Option<Vec<crate::zhixu::zhiju::Candidate>>,
     lexical: Option<Vec<crate::zhixu::zhiju::lexical::LexicalCandidate>>,
+    joint_lexical: Vec<crate::zhixu::zhiju::lexical::LexicalCandidate>,
 }
 
 impl ZhijuSnapshot {
     pub(crate) fn model_candidates(&self) -> Vec<ModelCandidate> {
-        self.results.iter().flatten().filter(|candidate| {
-            candidate.consumed == self.keys.len()
-                && crate::zhixu::decoder::candidate_coverage(&self.keys, &Candidate {
-                    text: candidate.text.clone(), reading_key: candidate.reading.clone(), ..Candidate::default()
-                }) == Some(candidate.consumed)
-        }).map(|candidate| ModelCandidate {
-            text: candidate.text.clone(), reading: candidate.reading.clone(), shown_reading: None,
-            consumed: candidate.consumed, reading_proved: true,
-            source: "zhiju", edit_cost: Some(0.0), protected: false, slot: None,
-        }).take(4).collect()
+        let prove = |text: &str, reading: &str, consumed, source| {
+            let proof = Candidate { text: text.into(), reading_key: reading.into(), ..Candidate::default() };
+            (consumed == self.keys.len()
+                && crate::zhixu::decoder::candidate_coverage(&self.keys, &proof) == Some(consumed)).then(|| {
+                ModelCandidate { text: proof.text, reading: proof.reading_key, shown_reading: None,
+                    consumed, reading_proved: true, source, edit_cost: Some(0.0), protected: false, slot: None }
+            })
+        };
+        let mut generated: Vec<_> = self.results.iter().flatten().filter_map(|candidate|
+            prove(&candidate.text, &candidate.reading, candidate.consumed, "zhiju")).take(4).collect();
+        let lexical: Vec<_> = self.joint_lexical.iter().filter(|candidate|
+            !generated.iter().any(|row| row.text == candidate.text))
+            .filter_map(|candidate| prove(&candidate.text, &candidate.reading, candidate.consumed, "zhiju-lexical"))
+            .collect();
+        // Keep the leading two neural proofs and reserve up to two remaining
+        // rows for corroborated lexical paths.
+        generated.truncate(4 - lexical.len());
+        generated.extend(lexical);
+        generated
+    }
+
+    pub(crate) fn prepare_joint_lexical(&mut self, proposals: &str, budget: std::time::Duration) -> Result<(), i32> {
+        if self.preview_letter.is_some() { return Err(-3); }
+        let lexical = self.lexical_candidates(budget)?;
+        let mut seen = std::collections::HashSet::new();
+        self.joint_lexical = proposals.split('\t').take(36)
+            .filter(|text| seen.insert(*text))
+            .filter_map(|text| lexical.iter().find(|candidate| candidate.text == text).cloned())
+            .take(2).collect();
+        Ok(())
     }
 
     pub(crate) fn prepare(&self, search: &mut crate::zhixu::zhiju::Search) {
@@ -1081,6 +1102,10 @@ impl Session {
         self.host_preceding_text.clone().unwrap_or_default() + &boundary.confirmed
     }
 
+    pub(crate) fn zhiju_dictionary_snapshot(&self) -> Option<Arc<crate::zhixu::Index>> {
+        self.decoder.dictionary_snapshot()
+    }
+
     pub(crate) fn zhiju_snapshot(&self) -> Result<ZhijuSnapshot, i32> {
         if self.mode != InputMode::Chinese || self.secure_degraded || !self.inline_ascii.is_empty() { return Err(-3); }
         let boundary = self.decoder.composition_boundary(BoundaryPurpose::Mixing).ok_or(-3)?;
@@ -1091,7 +1116,7 @@ impl Session {
             keys: boundary.unconfirmed_raw,
             context,
             identity: self.zhiju_identity.clone(), generation: self.zhiju_generation, preview_letter: None,
-            progress: None, results: None, lexical: None,
+            progress: None, results: None, lexical: None, joint_lexical: Vec::new(),
         })
     }
 
@@ -1107,7 +1132,7 @@ impl Session {
             dictionary: self.decoder.dictionary_snapshot().ok_or(-7)?,
             keys, context: self.host_preceding_text.clone().unwrap_or_default(),
             identity: self.zhiju_identity.clone(), generation: self.zhiju_generation, preview_letter: Some(letter),
-            progress: None, results: None, lexical: None,
+            progress: None, results: None, lexical: None, joint_lexical: Vec::new(),
         })
     }
 
@@ -1131,7 +1156,7 @@ impl Session {
         -> Result<(i32, ResultModel), i32> {
         if !self.matches_zhiju_snapshot(snapshot) { return Err(-8); }
         let candidate = snapshot.model_candidates().into_iter().nth(index).ok_or(-2)?;
-        if lead && !self.decoder.permits_zhiju_joint_lead(&candidate.text, &snapshot.keys) {
+        if lead && (candidate.source != "zhiju" || !self.decoder.permits_zhiju_joint_lead(&candidate.text, &snapshot.keys)) {
             return Ok((crate::mixer::LEAD_OUTRANKED_OTHER, self.current_result()));
         }
         let text = candidate.text.clone();
@@ -2719,6 +2744,58 @@ mod tests {
         let mut english = session();
         english.process(event(KeyKind::ShiftTap, ""));
         assert_eq!(type_visible_text(&mut english, "<tag>"), "<tag>");
+    }
+
+    #[cfg(feature = "experimental-typing-repair")]
+    #[test]
+    fn stray_initial_i_preserves_reinstall_phrase() {
+        let mut session = Session::new_native("stray.initial.i".into(),
+            Arc::new(Mutex::new(Store::default())), crate::zhixu::fallback()).unwrap();
+        for raw in ["xiezaichongzhuang", "ixiezaichongzhuang"] {
+            let page = type_text(&mut session, raw);
+            assert_eq!(page.candidates.first().map(|c| c.text.as_str()), Some("卸载重装"), "{raw}");
+            let committed = session.process(event(KeyKind::Space, ""));
+            assert_eq!(committed.commit_text, "卸载重装");
+            assert!(committed.marked_text.is_empty());
+        }
+        type_text(&mut session, "ixiezaichongzhuang");
+        let cancelled = session.process(event(KeyKind::Escape, ""));
+        assert!(cancelled.consumed && cancelled.commit_text.is_empty() && cancelled.marked_text.is_empty());
+        type_text(&mut session, "ixiezaichongzhuang");
+        assert_eq!(session.process(event(KeyKind::Enter, "")).commit_text, "ixiezaichongzhuang");
+    }
+
+    #[cfg(feature = "experimental-typing-repair")]
+    #[test]
+    fn fast_typing_word_and_sentence_repairs_commit_the_selected_text() {
+        let mut session = Session::new_native("typing.repair.matrix".into(),
+            Arc::new(Mutex::new(Store::default())), crate::zhixu::fallback()).unwrap();
+        let mut missing = Vec::new();
+        for (raw, expected) in [
+            ("xxiezaichongzhuang", "卸载重装"),
+            ("xiezaichonzhuang", "卸载重装"),
+            ("xieziachongzhuang", "卸载重装"),
+            ("xiezaichongzhuanf", "卸载重装"),
+            ("iezaichongzhuanf", "卸载重装"),
+            ("shujukuu", "数据库"),
+            ("shurufa", "输入法"),
+            ("shurufq", "输入法"),
+            ("chongxinqidogn", "重新启动"),
+            ("meicidoushixiezaichongzhuanf", "每次都是卸载重装"),
+            ("meicidoushixiezaicohngzhuang", "每次都是卸载重装"),
+            ("meicidousgixiezaichongzhuanf", "每次都是卸载重装"),
+        ] {
+            let page = type_text(&mut session, raw);
+            if let Some(i) = page.candidates.iter().take(5).position(|c| c.text == expected) {
+                let selected = session.process(event(KeyKind::Text, &(i + 1).to_string()));
+                assert_eq!(selected.commit_text, expected, "{raw}");
+                assert!(selected.marked_text.is_empty(), "{raw}");
+            } else {
+                missing.push((raw, page.candidates.iter().map(|c| c.text.clone()).collect::<Vec<_>>()));
+                session.process(event(KeyKind::Escape, ""));
+            }
+        }
+        assert!(missing.is_empty(), "{missing:?}");
     }
 
     #[test]

@@ -5,6 +5,8 @@
 pub(crate) mod index_cache;
 pub(crate) mod loader;
 pub(crate) mod trie;
+#[cfg(feature = "experimental-typing-repair")]
+pub(crate) mod typing_repair;
 pub mod learning;
 pub(crate) mod learning_session;
 pub mod decoder;

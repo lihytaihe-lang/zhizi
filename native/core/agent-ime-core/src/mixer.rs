@@ -632,6 +632,8 @@ pub struct MixerDecoder {
     rime_order_evaluations: std::cell::Cell<usize>,
     lexicon: Arc<MixerLexicon>,
     app_id: String,
+    #[cfg(feature = "experimental-typing-repair")]
+    typing_repairs: zhixu::typing_repair::Cache,
     typo_enabled: bool,
     active_project: Option<String>,
     active_packs: HashSet<String>,
@@ -764,6 +766,8 @@ impl MixerDecoder {
             rime_order_evaluations: std::cell::Cell::new(0),
             lexicon: Arc::new(MixerLexicon::default()),
             app_id,
+            #[cfg(feature = "experimental-typing-repair")]
+            typing_repairs: Default::default(),
             typo_enabled: false,
             active_project: None,
             active_packs: HashSet::new(),
@@ -1398,6 +1402,56 @@ impl MixerDecoder {
         candidates.insert(at, candidate);
     }
 
+    #[cfg(feature = "experimental-typing-repair")]
+    fn offer_typing_repairs(&self, reading: &str, output: &mut Vec<MixedCandidate>, allowed_text: impl Fn(&str) -> bool) {
+        if !self.inner.native_editing() || !(3..=64).contains(&reading.len())
+            || !reading.bytes().all(|byte| byte.is_ascii_lowercase()) || self.confirmed_boundary().is_some()
+            || has_registered_ascii_exact(reading, self.code_ascii_bias)
+            || english_word_ranks().contains_key(reading) {
+            return;
+        }
+        let index = zhixu::current();
+        let exact = index.all_words_for_compact_reading(reading).any(|(text, _, _)| !text.is_ascii());
+        if exact && output.len() >= PAGE_SIZE { return; }
+        let mut added = 0;
+        for repair in self.typing_repairs.matches(&index, reading) {
+            if !allowed_text(&repair.text) || self.blacklist.lock().ok()
+                .is_none_or(|store| store.contains(reading, &repair.text)) {
+                continue;
+            }
+            let existing = output.iter().position(|row| row.candidate.text == repair.text);
+            if let Some(pos) = existing.filter(|&pos| pos < PAGE_SIZE) {
+                let item = &output[pos];
+                let spaced = &item.candidate.reading_key;
+                let key = spaced.replace(' ', "");
+                let last_len = spaced.split_whitespace().last().map_or(0, str::len);
+                let common = reading.bytes().zip(key.bytes()).take_while(|(a, b)| a == b).count();
+                let near_end = common >= key.len().saturating_sub(last_len) + 2 && key.len() >= 6 && reading.len() >= 6
+                    && common
+                        >= key.len().max(reading.len()).saturating_sub(2);
+                // A still-valid native prefix has its own selection semantics.
+                // Only reinterpret a near-complete spelling, keeping its rank.
+                if exact || !near_end || self.fuzzy_mask != 0 || !repair.whole_word
+                    || !matches!(item.selection, Selection::Base { .. })
+                    || key == reading || (reading.starts_with(&key) && !key.ends_with(reading.as_bytes()[reading.len()-1] as char))
+                    || (key.len() < reading.len() && ends_with_bare_initial(&reading)) {
+                    continue;
+                }
+            }
+            let native_lead = output.first().is_some_and(|first| !first.candidate.text.is_ascii());
+            let slot = if exact { output.len() } else if repair.whole_word && !native_lead { 0 } else { 2 };
+            let pos = existing.filter(|&pos| pos < PAGE_SIZE).unwrap_or(slot + added);
+            if let Some(i) = existing { output.remove(i); }
+            output.insert(pos.min(output.len()), MixedCandidate {
+                candidate: Candidate { text: repair.text.clone(), reading_key: reading.to_owned(),
+                    comment: zhixu::typing_repair::COMMENT.into(), source_index: None },
+                selection: Selection::Local { text: repair.text }, tier: 2, score: 0,
+            });
+            added += 1;
+            if added == 3 || (exact && output.len() >= PAGE_SIZE) { break; }
+        }
+    }
+
     #[cfg(feature = "mac-fast-typing")]
     fn offer_single_edit_word(&self, raw: &str, output: &mut Vec<MixedCandidate>, allowed_text: impl Fn(&str) -> bool) {
         if !self.inner.native_editing()
@@ -1448,6 +1502,45 @@ impl MixerDecoder {
             tier: 2,
             score: 0,
         });
+    }
+
+    #[cfg(feature = "mac-fast-typing")]
+    fn offer_transposed_completion(&self, raw: &str, output: &mut Vec<MixedCandidate>, allowed_text: impl Fn(&str) -> bool) {
+        if !self.typo_enabled || !self.inner.native_editing() || self.fuzzy_mask != 0
+            || !(8..=24).contains(&raw.len()) || !raw.bytes().all(|byte| byte.is_ascii_lowercase())
+            || self.confirmed_boundary().is_some() || valid_pinyin_spelling(raw)
+            || ends_with_bare_initial(raw) || has_registered_ascii_exact(raw, self.code_ascii_bias)
+            || !tech_terms_for_reading_prefix(raw).is_empty() || english_word_ranks().contains_key(raw)
+        {
+            return;
+        }
+        let Some(slot) = output.iter().take(PAGE_SIZE).enumerate().skip(3).find_map(|(index, item)| {
+            let covered = zhixu::decoder::candidate_coverage(raw, &item.candidate)?;
+            (matches!(item.selection, Selection::Base { .. }) && covered < raw.len()).then_some(index)
+        }) else { return; };
+        let Some(spelling) = unique_full_transposition(raw) else { return; };
+        let completions = decode_compositions(&spelling, 2);
+        // Require corroboration from the original page before reserving a slot
+        // for a second homophone. A repaired first choice needs no fallback.
+        if completions.iter().any(|text| output[0].candidate.text == *text)
+            || !completions.iter().any(|text| output[1..slot].iter().any(|row| row.candidate.text == *text)) {
+            return;
+        }
+        let blacklist = self.blacklist.lock().ok();
+        let Some(text) = completions.into_iter().find(|text| {
+            allowed_text(text) && !output.iter().any(|row| row.candidate.text == *text)
+                && blacklist.as_ref().is_some_and(|store| !store.contains(raw, text) && !store.contains(&spelling, text))
+        }) else { return; };
+        let words = decoder_sentence_words(&spelling, &text, &self.learning.entries(), self.learning.rime_tick());
+        if words.len() < 2 || words.iter().any(|(word, _)| word.text.chars().count() < 2) { return; }
+        let reading = words.iter().map(|(word, _)| word.reading_key.as_str()).collect::<Vec<_>>().join(" ");
+        if !reading.split_whitespace().flat_map(str::bytes).eq(spelling.bytes()) { return; }
+        let preserve_ascii = slot < PAGE_SIZE - 1 && output.get(PAGE_SIZE - 1).is_some_and(|row| row.candidate.text.is_ascii());
+        output.insert(slot, MixedCandidate {
+            candidate: Candidate { text: text.clone(), reading_key: reading, comment: SLIP_COMMENT.into(), source_index: None },
+            selection: Selection::Local { text }, tier: 2, score: 0,
+        });
+        if preserve_ascii { output.swap(PAGE_SIZE - 1, PAGE_SIZE); }
     }
 
     fn first_layer_with_whole(&self, base: &DecoderSnapshot, whole: bool) -> Vec<MixedCandidate> {
@@ -1872,6 +1965,11 @@ impl MixerDecoder {
             #[cfg(feature = "mac-fast-typing")]
             if !english_leads {
                 self.offer_single_edit_word(&base.raw_input, &mut output, allowed_text);
+                self.offer_transposed_completion(&base.raw_input, &mut output, allowed_text);
+            }
+            #[cfg(feature = "experimental-typing-repair")]
+            if !english_leads {
+                self.offer_typing_repairs(&base.raw_input, &mut output, allowed_text);
             }
         }
         if english_leads {
@@ -2368,18 +2466,17 @@ impl MixerDecoder {
         let Some(word) = crate::exact_context::exact_collocation(raw, &preceding) else { return; };
         let Some(first) = candidates.first() else { return; };
         if first.candidate.text == word || first.tier != 2 || self.use_rime_order(raw) { return; }
-        // A physical landmark in this clause can outrank a console preference
-        // carried from another app. Keep explicit same-app picks and pairwise preferences.
-        let architectural_context = word == "观礼台" && first.candidate.text == "管理台"
-            && crate::exact_context::architectural_viewing_platform(raw, &preceding);
-        let keeps_first = if architectural_context {
-            ranking::owner_style_keeps(&first.candidate.text, word)
+        // An explicit clause can outweigh cross-app usage. A declared preference
+        // or a deliberate first choice in this app still takes precedence.
+        let overrides_cross_app = crate::exact_context::overrides_cross_app_learning(raw, &preceding, &first.candidate.text, word);
+        let keeps_first = if overrides_cross_app {
+            ranking::declared_owner_style_keeps(&first.candidate.text, word)
         } else {
             ranking::owner_keeps(&first.candidate.text, word)
         };
         if keeps_first
             || self.learning.first_has_preference(&self.app_id, raw, &first.candidate.text, |entry|
-                !architectural_context && entry.reading.split_whitespace().flat_map(str::bytes).eq(raw.bytes()))
+                !overrides_cross_app && entry.reading.split_whitespace().flat_map(str::bytes).eq(raw.bytes()))
         {
             return;
         }
@@ -2506,13 +2603,15 @@ impl MixerDecoder {
         // homophones. Keep a proved learned head unless an exact context cue
         // already identifies a different word. Other slots may still be scored.
         let protects_known_head = exact_head == Some(text.as_str());
+        let explicit_conflict = exact_head.is_some_and(|word|
+            crate::exact_context::overrides_cross_app_learning(raw, &self.current_suffix_context(), text, word));
         let can_protect_learning = cfg!(all(target_os = "macos", feature = "mac-fast-typing"))
-            && exact_head.is_none() && text.chars().nth(1).is_some();
+            && (exact_head.is_none() || explicit_conflict) && text.chars().nth(1).is_some();
         if (protects_known_head || can_protect_learning)
             && let Some(index) = self.inner.dictionary_snapshot()
             && native_exact_collocation(raw, first, &index)
             && (protects_known_head || self.learning.first_has_preference(&self.app_id, raw, text,
-                |entry| entry.reading == first.candidate.reading_key))
+                |entry| !explicit_conflict && entry.reading == first.candidate.reading_key))
         {
             return !1;
         }
@@ -2562,6 +2661,8 @@ impl MixerDecoder {
     fn reset_layer(&mut self) {
         self.invalidate_whole();
         self.invalidate_zhiju();
+        #[cfg(feature = "experimental-typing-repair")]
+        { self.typing_repairs = Default::default(); }
         if let Ok(mut dictionary) = self.dictionary_snapshot.lock() {
             *dictionary = None;
         }
@@ -2911,7 +3012,8 @@ fn context_complete_slots(snapshot: &DecoderSnapshot, mixed: &[MixedCandidate]) 
         let c = &item.candidate;
         (decoder_candidate(item)
             || c.comment == HEAVY_GARBLE_COMMENT
-            || c.comment == SLIP_COMMENT)
+            || c.comment == SLIP_COMMENT
+            || (cfg!(feature = "experimental-typing-repair") && c.comment == "拼音纠错"))
             && han(&c.text)
             && (canonical_reading(&c.reading_key).as_deref() == Some(raw.as_str())
                 || syllable_prefix_abbreviation(&raw, &c.reading_key))
@@ -3458,6 +3560,10 @@ impl Decoder for MixerDecoder {
         let Ok(blacklist) = self.blacklist.lock() else { return crate::OffpageCandidates::default() };
         let index = zhixu::current();
         let mut words = self.short_abbreviation_words(&snapshot, &mixed);
+        #[cfg(feature = "mac-fast-typing")]
+        if words.is_empty() {
+            words = self.mixed_pinyin_offpage_words(&snapshot, &mixed, &index);
+        }
         let mut preferred = None;
         if words.is_empty() {
             preferred = self.preceding_text.as_deref()
@@ -4730,21 +4836,66 @@ impl MixerDecoder {
     /// learned-first protection and atomic selection mapping still apply.
     fn short_abbreviation_words(&self, snapshot: &DecoderSnapshot, mixed: &[MixedCandidate]) -> Vec<(String, f64)> {
         let raw = snapshot.raw_input.as_str();
-        if snapshot.page_no != 0 || !(2..=3).contains(&raw.len()) || !all_initials(raw)
-            || context_complete_group(snapshot, mixed, self.has_preceding_context()) & 1 == 0
-        {
+        if snapshot.page_no != 0 || !(2..=6).contains(&raw.len()) {
+            return Vec::new();
+        }
+        let single_letters = (2..=3).contains(&raw.len()) && all_initials(raw);
+        let digraphs = (cfg!(feature = "mac-fast-typing") && self.inner.native_editing()
+            && mixed.get(PAGE_SIZE - 1).is_some_and(|row| !row.candidate.text.is_ascii()))
+            .then(|| initial_tokens(raw)).flatten().filter(|tokens|
+                (2..=3).contains(&tokens.len()) && tokens.iter().any(|token| token.len() == 2));
+        if !single_letters && digraphs.is_none()
+            || context_complete_group(snapshot, mixed, self.has_preceding_context()) & 1 == 0 {
             return Vec::new();
         }
         let Some(prefix) = self.inner.snapshot_candidate_prefix(4 * PAGE_SIZE) else { return Vec::new() };
         let index = zhixu::current();
         let mut seen: HashSet<&str> = mixed.iter().map(|item| item.candidate.text.as_str()).collect();
         prefix.candidates.iter().filter(|candidate| {
-            candidate.text.chars().count() == raw.len() && common_simplified(&candidate.text)
+            let count = candidate.text.chars().count();
+            common_simplified(&candidate.text)
                 && !self.lexicon.blocked_texts.contains(&normalize_text(&candidate.text))
                 && index.all_readings_for_text(&candidate.text).any(|reading| {
-                    reading == candidate.reading_key
-                        && reading.split_whitespace().filter_map(|s| s.chars().next()).eq(raw.chars())
+                    if reading != candidate.reading_key { return false; }
+                    let syllables = reading.split_whitespace();
+                    single_letters && count == raw.len() && syllables.clone().filter_map(|s| s.chars().next()).eq(raw.chars())
+                        || digraphs.as_ref().is_some_and(|tokens| count == tokens.len()
+                            && syllables.clone().count() == tokens.len()
+                            && syllables.zip(tokens).all(|(syllable, token)| syllable.starts_with(token)))
                 })
+                && seen.insert(candidate.text.as_str())
+        }).take(7).map(|candidate| (candidate.text.clone(), 0.0)).collect()
+    }
+
+    /// Mixed pinyin can fill the optional fifth slot with a native word whose
+    /// reading covers every key. Full pinyin uses the exact-reading search.
+    #[cfg(feature = "mac-fast-typing")]
+    fn mixed_pinyin_offpage_words(&self, snapshot: &DecoderSnapshot, mixed: &[MixedCandidate], index: &Index)
+        -> Vec<(String, f64)>
+    {
+        let raw = snapshot.raw_input.as_str();
+        if !self.inner.native_editing() || snapshot.page_no != 0 || snapshot.highlighted_index != 0
+            || self.fuzzy_mask != 0 || !(4..=24).contains(&raw.len())
+            || !raw.bytes().all(|byte| byte.is_ascii_lowercase())
+            || valid_pinyin_spelling(raw) || all_initials(raw)
+            || has_registered_ascii_exact(raw, self.code_ascii_bias)
+            || mixed.get(PAGE_SIZE - 1).is_none_or(|row| row.candidate.text.is_ascii())
+            || !self.preceding_text.as_deref().is_some_and(|text|
+                text.chars().any(|c| ('\u{3400}'..='\u{9fff}').contains(&c)))
+            || context_complete_group(snapshot, mixed, true) & 1 == 0
+        {
+            return Vec::new();
+        }
+        let Some((initials, syllables)) = abbreviation_syllables(raw) else { return Vec::new() };
+        if initials == 0 || initials == syllables { return Vec::new(); }
+        let Some(prefix) = self.inner.snapshot_candidate_prefix(4 * PAGE_SIZE) else { return Vec::new() };
+        let mut seen: HashSet<&str> = mixed.iter().map(|item| item.candidate.text.as_str()).collect();
+        prefix.candidates.iter().filter(|candidate| {
+            candidate.text.chars().count() == syllables
+                && common_simplified(&candidate.text)
+                && !self.lexicon.blocked_texts.contains(&normalize_text(&candidate.text))
+                && index.all_readings_for_text(&candidate.text).any(|reading| reading == candidate.reading_key)
+                && zhixu::decoder::candidate_coverage(raw, candidate) == Some(raw.len())
                 && seen.insert(candidate.text.as_str())
         }).take(7).map(|candidate| (candidate.text.clone(), 0.0)).collect()
     }
@@ -5286,6 +5437,24 @@ fn spelling_repairs(reading: &str) -> Vec<String> {
     }
     add(neighbours, NEIGHBOUR_KEYS, &mut repairs);
     repairs
+}
+
+#[cfg(feature = "mac-fast-typing")]
+fn unique_full_transposition(raw: &str) -> Option<String> {
+    let mut found = None;
+    let mut swapped = raw.as_bytes().to_vec();
+    for end in 1..swapped.len() {
+        if swapped[end - 1] == swapped[end] { continue; }
+        swapped.swap(end - 1, end);
+        // The caller has already restricted the composition to ASCII letters.
+        let spelling = std::str::from_utf8(&swapped).ok()?;
+        if valid_pinyin_spelling(spelling) {
+            if found.is_some() { return None; }
+            found = Some(spelling.to_owned());
+        }
+        swapped.swap(end - 1, end);
+    }
+    found
 }
 
 #[cfg(feature = "mac-fast-typing")]
@@ -9678,8 +9847,45 @@ mod tests {
         }
 
         let contrary = composing("原来的草稿不继续改了，我打算", Some("新奇"));
-        assert_eq!(contrary.snapshot().candidates[0].text, "新奇");
-        assert_eq!(contrary.context_ranking_inputs().homophone_mask & 3, 3);
+        assert_eq!(contrary.snapshot().candidates[0].text, "新起");
+        assert_eq!(contrary.context_ranking_inputs().homophone_mask & 1, 0);
+    }
+
+    #[cfg(all(target_os = "macos", feature = "mac-fast-typing"))]
+    #[test]
+    fn explicit_context_can_outweigh_cross_app_learning_without_rewriting_it() {
+        let dictionary = Arc::new(Index::from_data(zhixu::loader::DictionaryData { entries: [
+            ("管理台", "guan li tai", 900), ("观礼台", "guan li tai", 500),
+        ].into_iter().map(|(text, reading, weight)| zhixu::loader::Entry {
+            text: text.into(), reading: reading.into(), weight, layer: "fixture".into(),
+        }).collect() }));
+        for (app, context, expected) in [
+            ("fixture.editor", "礼仪建筑前设有", "观礼台"),
+            ("fixture.editor", "请打开应用的", "管理台"),
+            ("fixture.console", "礼仪建筑前设有", "管理台"),
+        ] {
+            let mut mixer = native_mixer(app, dictionary.clone());
+            let now = personal_picks::now_ms();
+            for _ in 0..10 { mixer.learning.remember_for_test("guan li tai", "管理台", now); }
+            mixer.learning.import_choices(vec![Choice {
+                app: "fixture.console".into(), raw: "guanlitai".into(), reading: "guan li tai".into(),
+                text: "管理台".into(), target: 0, count: 10, last_ms: now, alternatives: vec!["观礼台".into()],
+            }]);
+            let entries = mixer.learning.entries();
+            let choices = mixer.learning.choices();
+            mixer.configure_preceding_text(Some(context.into()));
+            for letter in "guanlitai".as_bytes() {
+                mixer.input(std::str::from_utf8(std::slice::from_ref(letter)).unwrap()).unwrap();
+            }
+            assert_eq!(mixer.snapshot().candidates[0].text, expected, "{app} {context}");
+            assert_eq!(mixer.context_ranking_inputs().complete_mask & 1, 0);
+            mixer.backspace().unwrap();
+            mixer.input("i").unwrap();
+            assert_eq!(mixer.snapshot().candidates[0].text, expected, "{app} {context} retype");
+            assert_eq!(mixer.select_candidate(0, 1, LearningIntent::NoLearn).unwrap(), expected);
+            assert_eq!(mixer.learning.entries(), entries);
+            assert_eq!(mixer.learning.choices(), choices);
+        }
     }
 
     fn native_mixer_with(app: &str, blacklist: Arc<Mutex<Store>>, dictionary: Arc<Index>) -> MixerDecoder {
@@ -10150,6 +10356,22 @@ mod tests {
         });
     }
 
+    #[cfg(feature = "mac-fast-typing")]
+    #[test]
+    fn digraph_initials_admit_words_with_one_syllable_for_the_digraph() {
+        let dictionary = short_abbreviation_fixture();
+        zhixu::with_index(dictionary.clone(), || {
+            let mut mixer = native_mixer("digraph-admission", dictionary);
+            mixer.configure_preceding_text(Some("检查这次".into()));
+            mixer.input("shj").unwrap();
+            let before = mixer.snapshot();
+            let alternatives = mixer.abbreviation_alternatives();
+            assert!(alternatives.contains(&"事件".into()), "{:?}: {alternatives:?}", before.candidates);
+            assert!(!alternatives.iter().any(|word| matches!(word.as_str(), "司机" | "随机")));
+            assert_eq!(mixer.snapshot().candidates, before.candidates);
+        });
+    }
+
     #[test]
     fn short_abbreviation_offpage_offer_commits_the_shown_word_and_consumes_all_keys() {
         let dictionary = short_abbreviation_fixture();
@@ -10183,6 +10405,39 @@ mod tests {
             let stale = mixer.abbreviation_alternatives()[0].clone();
             mixer.input("a").unwrap();
             assert_eq!(mixer.offer_abbreviation(&stale), Err(-10));
+        });
+    }
+
+    #[cfg(feature = "mac-fast-typing")]
+    #[test]
+    fn mixed_pinyin_offpage_words_require_full_coverage_and_commit_the_shown_slot() {
+        use crate::zhixu::loader::{DictionaryData, Entry};
+        let dictionary = Arc::new(Index::from_data(DictionaryData { entries: [
+            ("时间", "shi jian"), ("实际", "shi ji"), ("世界", "shi jie"), ("事件", "shi jian"),
+            ("时机", "shi ji"), ("视角", "shi jiao"), ("诗句", "shi ju"), ("史记", "shi ji"),
+            ("市价", "shi jia"), ("世家", "shi jia"), ("试试", "shi shi"), ("时", "shi"),
+        ].into_iter().enumerate().map(|(rank, (text, reading))| Entry {
+            text: text.into(), reading: reading.into(), weight: 20000 - rank as u32 * 1000,
+            layer: "fixture".into(),
+        }).collect() }));
+        zhixu::with_index(dictionary.clone(), || {
+            let mut mixer = native_mixer("mixed-offpage", dictionary);
+            mixer.input("shij").unwrap();
+            let original = mixer.snapshot();
+            assert!(mixer.abbreviation_alternatives().is_empty());
+            mixer.configure_preceding_text(Some("git only".into()));
+            assert!(mixer.abbreviation_alternatives().is_empty());
+            mixer.configure_preceding_text(Some("对比不同的".into()));
+            let alternatives = mixer.abbreviation_alternatives();
+            assert!(alternatives.contains(&"视角".into()), "{:?}: {alternatives:?}", original.candidates);
+            assert!(!alternatives.iter().any(|word| matches!(word.as_str(), "时" | "试试")));
+            assert_eq!(mixer.snapshot().candidates, original.candidates);
+            mixer.offer_abbreviation("视角").unwrap();
+            let shown = mixer.snapshot();
+            assert_eq!(&shown.candidates[..PAGE_SIZE - 1], &original.candidates[..PAGE_SIZE - 1]);
+            assert_eq!(shown.candidates[PAGE_SIZE - 1].text, "视角");
+            assert_eq!(mixer.select_candidate(PAGE_SIZE - 1, 90335, LearningIntent::NoLearn).unwrap(), "视角");
+            assert!(mixer.snapshot().raw_input.is_empty());
         });
     }
 

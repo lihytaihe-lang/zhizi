@@ -579,6 +579,10 @@ pub(crate) fn owner_style_keeps(first: &str, challenger: &str) -> bool {
             .is_some_and(|style| style.keeps(first, challenger))))
 }
 
+pub(crate) fn declared_owner_style_keeps(first: &str, challenger: &str) -> bool {
+    owner_style().read().is_ok_and(|style| style.keeps(first, challenger))
+}
+
 pub fn owner_keeps(first: &str, challenger: &str) -> bool {
     owner_style_keeps(first, challenger)
         || confirmed_first().read().map(|text| text.as_deref() == Some(first)).unwrap_or(false)

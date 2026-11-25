@@ -66,6 +66,56 @@ struct ZhijuJointInputs: Decodable {
     }
 }
 
+enum ZhijuLeadProtection: Equatable {
+    case existing
+    case comparableComposition
+    case corroboratedHomophone
+
+    static func canCompare(native: String, proposed: String, context: String) -> Bool {
+        let count = native.unicodeScalars.count
+        return native != proposed && count >= 4 && proposed.unicodeScalars.count == count
+            && native.unicodeScalars.allSatisfy(isHan) && proposed.unicodeScalars.allSatisfy(isHan)
+            && context.unicodeScalars.contains(where: isHan)
+    }
+
+    private static func isHan(_ scalar: Unicode.Scalar) -> Bool {
+        scalar.value == 0x3007 || (0x3400...0x9fff).contains(scalar.value)
+    }
+
+    static func classify(native: String, proposed: String, proofs: ZhijuJointInputs?) -> Self {
+        guard let proofs, let incumbent = proofs.native.first, incumbent.text == native,
+              incumbent.slot == 0, incumbent.source == "composition",
+              let challenger = proofs.generated.first, challenger.text == proposed, challenger.source == "zhiju",
+              incumbent.consumed == proofs.raw.utf8.count, challenger.consumed == incumbent.consumed,
+              incumbent.readingProved, challenger.readingProved, incumbent.editCost == 0, challenger.editCost == 0
+        else { return .existing }
+
+        let oneChangedCharacter = zip(native.unicodeScalars, proposed.unicodeScalars).filter { $0.0 != $0.1 }.count == 1
+        // Keep a close same-reading incumbent only when neural search also found it.
+        let corroborated = proofs.generated.dropFirst().contains {
+            $0.text == native && $0.source == "zhiju" && $0.readingProved && $0.reading == incumbent.reading
+        }
+        return oneChangedCharacter && incumbent.reading == challenger.reading && corroborated
+            ? .corroboratedHomophone : .comparableComposition
+    }
+
+    func veto(native: String, proposed: String, scores: [Double]?, elapsed: UInt64, guessed: Bool) -> Bool {
+        guard native != proposed else { return false }
+        guard elapsed <= 8_000_000, let scores, scores.count == 2, scores.allSatisfy(\.isFinite) else {
+            return self != .existing
+        }
+        switch self {
+        case .existing:
+            return CoreSession.compositionLead(texts: [proposed, native], scores: scores, edits: [0, 0], guessed: guessed) == 1
+        case .comparableComposition:
+            return scores[0] <= scores[1]
+        case .corroboratedHomophone:
+            return CoreSession.compositionLead(texts: [native, proposed], scores: [scores[1], scores[0]],
+                                               edits: [0, 0], guessed: guessed) != 1
+        }
+    }
+}
+
 struct ZhijuJointDecision: Codable, Sendable {
     enum Action: String, Codable, Sendable {
         case keep, offer, lead
@@ -82,24 +132,27 @@ struct ZhijuJointDecision: Codable, Sendable {
         let scored = Array(zip(rows, scores))
         let native = scored.filter { $0.0.generatedIndex == nil && $0.0.candidate.editCost == 0 }
         guard !native.isEmpty else { return keep("no-complete-native-reference") }
-        let comparisons = scored.compactMap { row, score -> (index: Int, length: Int, score: Double, margin: Double)? in
+        let comparisons = scored.compactMap { row, score -> (index: Int, length: Int, score: Double, margin: Double, neural: Bool)? in
             guard let index = row.generatedIndex,
                   let reference = native.filter({ $0.0.candidate.length == row.candidate.length }).map(\.1).max() else { return nil }
-            return (index, row.candidate.length, score, score - reference)
+            let neural = row.candidate.source == "zhiju"
+            let fifth = native.first { $0.0.candidate.slot == 4 && $0.0.candidate.length == row.candidate.length }?.1
+            return (index, row.candidate.length, score, score - (neural ? reference : fifth ?? reference), neural)
         }
         guard let best = comparisons.max(by: { $0.margin < $1.margin }) else { return keep("no-same-length-reference") }
         let first = inputs.native.first
         let contextHasHan = inputs.context.unicodeScalars.contains { (0x3400...0x9fff).contains($0.value) }
         let competing = comparisons.contains { $0.index != best.index && $0.length == best.length && $0.score > best.score - 2 }
         let protectsLastSlot = inputs.native.contains { $0.slot == 4 && $0.protected }
-        if mode != .offer, best.margin > 4, !competing, contextHasHan,
+        if mode != .offer, best.neural, best.margin > 4, !competing, contextHasHan,
            let first, !first.protected, !protectsLastSlot, first.length == best.length,
            first.readingProved, first.consumed == inputs.raw.utf8.count, first.editCost == 0 {
             return Self(action: .lead, generatedIndex: best.index, reason: "clear-same-length-lead")
         }
         guard !protectsLastSlot else { return keep("protected-last-slot") }
         guard best.margin > 2 else { return keep("insufficient-margin") }
-        return Self(action: .offer, generatedIndex: best.index, reason: "same-length-offer")
+        return Self(action: .offer, generatedIndex: best.index,
+                    reason: best.neural ? "same-length-offer" : "lexical-fifth-slot-offer")
     }
 }
 
@@ -111,5 +164,7 @@ struct ZhijuJointReport: Codable, Sendable {
     let scores: [Double]
     let decision: ZhijuJointDecision
     let rankMilliseconds: Double
+    let lexicalMilliseconds: Double
+    let deadlineMet: Bool
     let applicationStatus: Int32?
 }

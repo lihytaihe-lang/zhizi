@@ -146,6 +146,11 @@ import Foundation
         guard !cases.isEmpty, cases.allSatisfy({ !$0.input.isEmpty && $0.input.utf8.allSatisfy { (97...122).contains($0) } }) else {
             throw CocoaError(.coderInvalidValue)
         }
+        let pageOnly = attributionMode != nil && ProcessInfo.processInfo.environment["AIM_BENCH_PAGE_ONLY"] == "1"
+        if pageOnly, learningFixture != nil || cases.contains(where: { $0.prefixWords != nil || $0.prefixInput != nil }) {
+            throw CocoaError(.coderInvalidValue, userInfo: [NSDebugDescriptionErrorKey:
+                "Page replay requires independent compositions and a blank learning profile."])
+        }
         let attribution = attributionMode.map { mode in
             let lexical = CoreSession.zhijuLexicalProbeSettings
             return ZhijuAttributionSettings(mode: mode, rankingEnabled: mode.rankingEnabled,
@@ -222,7 +227,10 @@ import Foundation
                 throw CocoaError(.coderInvalidValue)
             }
             let hasPrefixFixture = item.prefixInput != nil || item.prefixWords != nil
-            let caseUser = hasPrefixFixture || attribution != nil ? user.appendingPathComponent(UUID().uuidString) : user
+            // Page replay never confirms or learns. It can reuse the blank directory within
+            // a process while rebuilding the controller and synthetic document per case.
+            let caseUser = (hasPrefixFixture || attribution != nil) && !pageOnly
+                ? user.appendingPathComponent(UUID().uuidString) : user
             defer { if caseUser != user { try? FileManager.default.removeItem(at: caseUser) } }
             if caseUser != user {
                 try FileManager.default.createDirectory(at: caseUser, withIntermediateDirectories: true)
@@ -306,6 +314,30 @@ import Foundation
             } else {
                 drain(for: 0.3)
             }
+            if pageOnly {
+                let shown = controller.latestViewForTesting
+                let observedAt = ProcessInfo.processInfo.systemUptime
+                rows.append(ZhijuDeliveryRow(id: item.id, benchmarkGroup: item.benchmarkGroup,
+                    input: item.input, expected: item.expected, immediatePage: immediate,
+                    displayedPage: shown?.candidates.map(\.text) ?? [], comments: shown?.candidates.map(\.comment) ?? [],
+                    recalledCandidates: [], groupScoredCandidates: [], compositionScoredCandidates: [],
+                    shortWordScoredCandidates: [], contextOutcome: shown?.contextModel.outcome.rawValue ?? "no_view",
+                    shortAbbreviationsEnabled: item.shortAbbreviations ?? true,
+                    fifthSlotSelectionEnabled: item.fifthSlotSelection ?? true, zhijuGeneratedCandidates: [],
+                    zhijuOutcome: shown?.contextModel.zhijuOutcome?.rawValue ?? "not_triggered",
+                    zhijuLatencyMilliseconds: shown?.contextModel.zhijuLatencyMs,
+                    pageMatchesCore: nil, committed: "", selectedDigit: nil, selectionKey: selectionKey,
+                    keyIntervalMilliseconds: interval, confirmationDelayMilliseconds: confirmationDelay,
+                    actualConfirmationGapMilliseconds: (observedAt - lastKeyTimestamp) * 1_000,
+                    documentCommit: nil, candidateFunnelRecorded: false, selectionDisposition: "page_only",
+                    selectionMarkedText: "", digitSelectionMatchesDisplay: nil, spaceSelectionMatchesDisplay: nil,
+                    fuzzyMask: fuzzyMask, typoCorrectionEnabled: typoCorrectionEnabled,
+                    zhijuTrace: nil, committedPrefix: nil, prefixCommits: nil,
+                    inferenceContext: controller.rankingContextForTesting, recordedHostContext: nil,
+                    contextRankingCalls: controller.contextRankingCallsForPerformance,
+                    attributionTiming: nil, jointRanking: nil))
+                continue
+            }
             guard let shown = controller.latestViewForTesting else {
                 throw CocoaError(.coderInvalidValue)
             }
@@ -385,11 +417,12 @@ import Foundation
                 && $0.comments[4] == "整句 · 知句备选" && $0.selectedDigit == 5
                 && $0.selectionDisposition == "committed" && $0.committed == $0.displayedPage[4] }
             : rows.contains { $0.zhijuOutcome == "applied" && $0.comments.first == "整句 · 知句" })
-        let passed = rows.allSatisfy {
+        let passed = pageOnly || rows.allSatisfy {
             ($0.pageMatchesCore ?? true)
                 && ($0.spaceSelectionMatchesDisplay ?? $0.digitSelectionMatchesDisplay ?? ($0.selectionDisposition == "raw_fallback"))
         } && applicationPassed
-        let selectionPath = rows.contains { $0.selectionKey == "space" } ? "displayed-confirmation" : "displayed-digit"
+        let selectionPath = pageOnly ? "displayed-page-only"
+            : rows.contains { $0.selectionKey == "space" } ? "displayed-confirmation" : "displayed-digit"
         let readiness: ZhijuAttributionReadiness?
         if attribution != nil, let rankingReadyAt, let zhijuReadyAt {
             readiness = ZhijuAttributionReadiness(rankingMilliseconds: Double(rankingReadyAt - loadStarted) / 1_000_000,

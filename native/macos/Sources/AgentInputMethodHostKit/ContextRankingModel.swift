@@ -333,6 +333,45 @@ public final class ContextRankingScorer: @unchecked Sendable {
     public static func modelFirstOrder(scores: [Double], homophone: [Bool]) -> [Int] {
         groupOrder(texts: Array(repeating: "", count: scores.count), scores: scores, homophone: homophone)
     }
+
+    /// Additional promotion is confined to an entire, unrepaired reading and
+    /// an actual Han context. Preserve the decoder's order for weak evidence.
+    static func adjustContextualOrder(_ order: [Int], texts: [String], scores: [Double],
+                                      complete: [Bool], shortInitials: Bool, context: String) -> [Int] {
+        guard complete.count == texts.count, complete.first == true, let first = order.first,
+              complete[first], context.unicodeScalars.contains(where: { (0x3400...0x9fff).contains($0.value) }) else { return order }
+        let lengths = texts.map { $0.unicodeScalars.count }
+        let firstLength = lengths[first]
+        guard firstLength > 0 else { return order }
+        func evidence(_ index: Int) -> Double? {
+            guard complete[index], lengths[index] > 0 else { return nil }
+            let delta = scores[index] - scores[first]
+            if shortInitials, lengths[0] == 2, lengths[index] == firstLength, delta > 3 { return delta }
+            // Summed character scores favor shorter rows. A longer complete
+            // reading needs accumulated evidence against the native head and
+            // per-character evidence against the regular ranking's winner.
+            guard lengths[index] > max(lengths[0], firstLength), scores[index] - scores[0] > 2 else { return nil }
+            let perCharacter = scores[index] / Double(lengths[index]) - scores[first] / Double(firstLength)
+            return perCharacter > 2 ? perCharacter : nil
+        }
+        var winner: Int?
+        var best = 0.0
+        for index in order.dropFirst() {
+            guard let strength = evidence(index), strength > best else { continue }
+            let head = Array(texts[0].utf8)
+            let challenger = Array(texts[index].utf8)
+            let keepsHead = head.withUnsafeBufferPointer { prior in
+                challenger.withUnsafeBufferPointer { next in
+                    aim_ranking_owner_keeps(prior.baseAddress, prior.count, next.baseAddress, next.count) != 0
+                }
+            }
+            guard !keepsHead else { continue }
+            winner = index
+            best = strength
+        }
+        guard let winner else { return order }
+        return [winner] + order.filter { $0 != winner }
+    }
 }
 
 /// In-flight bookkeeping for the loader's asynchronous loads, so exit-bound
@@ -616,7 +655,10 @@ struct ContextRankingSession {
     /// `cold` marks a call that starts on a clocked-down engine (no inference for over a
     /// second). Its slowness says nothing about the machine, so it never moves the
     /// consecutive counter that pauses the model.
-    mutating func order(context: String, candidates: [String], startedNanoseconds: UInt64? = nil, cold: Bool = false, homophone: [Bool]? = nil, contextualPriorAllowed: Bool = true, apply: ([Int]) -> Bool = { _ in true }, score: (String, [String]) throws -> [Double]) -> [Int]? {
+    mutating func order(context: String, candidates: [String], startedNanoseconds: UInt64? = nil,
+                        cold: Bool = false, homophone: [Bool]? = nil, contextualPriorAllowed: Bool = true,
+                        complete: [Bool] = [], shortInitials: Bool = false, apply: ([Int]) -> Bool = { _ in true },
+                        score: (String, [String]) throws -> [Double]) -> [Int]? {
         guard enabled else { lastOutcome = .disabled; return nil }
         if let until = pausedUntil {
             guard now() >= until else { lastOutcome = .suspended; return nil }
@@ -642,10 +684,12 @@ struct ContextRankingSession {
             diagnostic("context-model-invalid-output")
             return nil
         }
-        let order = ContextRankingScorer.groupOrder(
+        let standard = ContextRankingScorer.groupOrder(
             texts: candidates, scores: scores,
             homophone: homophone ?? Array(repeating: true, count: candidates.count), context: context, contextualPriorAllowed: contextualPriorAllowed
         )
+        let order = contextualPriorAllowed ? ContextRankingScorer.adjustContextualOrder(standard, texts: candidates,
+            scores: scores, complete: complete, shortInitials: shortInitials, context: context) : standard
         lastElapsedNanoseconds = now() &- started
         if lastElapsedNanoseconds > Self.hardCapNanoseconds {
             lastOutcome = .timeout

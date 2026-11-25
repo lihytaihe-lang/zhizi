@@ -33,6 +33,8 @@ mod skin_packages {
 mod skin_store;
 mod skin_store_window;
 mod skin_choice;
+#[cfg(debug_assertions)]
+mod skin_qa;
 mod snapshot;
 mod storage;
 #[cfg(any(feature = "test-upload", target_os = "macos"))]
@@ -1656,6 +1658,8 @@ fn shared_snapshot_store() -> Result<SnapshotStore, String> {
 }
 
 fn project_runtime_path() -> Result<std::path::PathBuf, String> {
+    #[cfg(debug_assertions)]
+    if let Some(root) = skin_qa::root()? { return Ok(root.join("Runtime/runtime.json")); }
     let home = std::env::var_os("HOME").ok_or_else(|| "无法确定用户目录。".to_string())?;
     Ok(std::path::PathBuf::from(home)
         .join("Library/Application Support/AgentInputMethod/Shared/Profiles/runtime.json"))
@@ -2210,6 +2214,8 @@ fn rollback_lexicon_snapshot(version: u64) -> Result<SnapshotMeta, String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let context = tauri::generate_context!();
+    #[cfg(debug_assertions)]
+    if std::env::var_os("ZHIZI_SKIN_QA_ROOT").is_some() { skin_qa::run(context); return; }
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())

@@ -143,6 +143,10 @@ pub struct AimZhijuSearch {
     inner: zhixu::zhiju::Search,
 }
 
+pub struct AimZhijuDictionary {
+    inner: std::sync::Arc<zhixu::Index>,
+}
+
 pub struct AimZhijuSnapshot {
     inner: state::ZhijuSnapshot,
 }
@@ -645,6 +649,35 @@ pub unsafe extern "C" fn aim_zhiju_search_destroy(search: *mut AimZhijuSearch) {
 }
 
 #[unsafe(no_mangle)]
+/// Retains the current dictionary for background preparation, without any text.
+/// # Safety
+/// The session is live and exclusively accessed for this call.
+pub unsafe extern "C" fn aim_session_zhiju_dictionary_snapshot(session: *const AimSession) -> *mut AimZhijuDictionary {
+    let Some(session) = (unsafe { session.as_ref() }) else { return ptr::null_mut(); };
+    session.inner.zhiju_dictionary_snapshot().map_or(ptr::null_mut(), |inner| {
+        Box::into_raw(Box::new(AimZhijuDictionary { inner }))
+    })
+}
+
+#[unsafe(no_mangle)]
+/// # Safety
+/// A dictionary snapshot is null or live, and is destroyed once after its final use.
+pub unsafe extern "C" fn aim_zhiju_dictionary_destroy(dictionary: *mut AimZhijuDictionary) {
+    if !dictionary.is_null() { unsafe { drop(Box::from_raw(dictionary)); } }
+}
+
+#[unsafe(no_mangle)]
+/// # Safety
+/// The search is worker-owned and exclusive. The dictionary is live for this call.
+pub unsafe extern "C" fn aim_zhiju_search_prepare_dictionary(
+    search: *mut AimZhijuSearch, dictionary: *const AimZhijuDictionary,
+) -> i32 {
+    let (Some(search), Some(dictionary)) = (unsafe { (search.as_mut(), dictionary.as_ref()) }) else { return -1; };
+    search.inner.prepare(&dictionary.inner);
+    0
+}
+
+#[unsafe(no_mangle)]
 /// Captures only immutable dictionary ownership, input, context and identity.
 /// # Safety
 /// Session access is exclusive for this call; `out` is writable pointer storage.
@@ -753,6 +786,19 @@ pub unsafe extern "C" fn aim_zhiju_snapshot_lexical(
     if encoded.len() > capacity { return -6; }
     if !encoded.is_empty() { unsafe { ptr::copy_nonoverlapping(encoded.as_ptr(), out, encoded.len()); } }
     0
+}
+
+#[unsafe(no_mangle)]
+/// Intersects bounded lexical proofs with the same key's supplied C3 shortlist.
+/// # Safety
+/// Snapshot is live and worker-owned. `proposals` is readable for `length` bytes.
+pub unsafe extern "C" fn aim_zhiju_snapshot_prepare_joint_lexical(
+    snapshot: *mut AimZhijuSnapshot, proposals: *const u8, length: usize, budget_ms: u64,
+) -> i32 {
+    if snapshot.is_null() || length == 0 || length > 4096 { return -2; }
+    let Ok(proposals) = (unsafe { utf8_argument(proposals, length) }) else { return -2; };
+    unsafe { &mut *snapshot }.inner.prepare_joint_lexical(&proposals, Duration::from_millis(budget_ms))
+        .err().unwrap_or(0)
 }
 
 #[unsafe(no_mangle)]
@@ -1261,7 +1307,7 @@ pub unsafe extern "C" fn aim_session_offer_composition(
 }
 
 #[unsafe(no_mangle)]
-/// Bounded off-page dictionary alternatives for short initials, UTF-8 TSV.
+/// Bounded off-page dictionary alternatives, UTF-8 TSV.
 /// # Safety
 /// `session` must be live and exclusive; `buffer` writable for `capacity` bytes,
 /// or null with capacity zero to query the negated required size.
@@ -2043,6 +2089,16 @@ mod ffi_tests {
             assert!(encoded.lines().any(|line| line == "我们要求先保留\two men yao qiu xian bao liu\t7"));
             assert!(encoded.lines().any(|line| line.starts_with(competing)));
             assert_eq!(session.inner.current_result().candidates, before.candidates);
+            let proposals = format!("没有读音证明\t{competing}\t{competing}\t{target}");
+            assert_eq!(unsafe { aim_zhiju_snapshot_prepare_joint_lexical(snapshot,
+                proposals.as_ptr(), proposals.len(), 4) }, 0);
+            let joint = unsafe { &*snapshot }.inner.model_candidates();
+            assert_eq!(joint.iter().map(|row| row.text.as_str()).collect::<Vec<_>>(), [competing, target]);
+            assert!(joint.iter().all(|row| row.source == "zhiju-lexical" && row.consumed == 7));
+            assert_eq!(unsafe { aim_session_apply_zhiju_joint(&mut session, snapshot, 0, 1, &mut page) },
+                crate::mixer::LEAD_OUTRANKED_OTHER);
+            assert_eq!(session.inner.current_result().candidates, before.candidates);
+            unsafe { aim_result_free(&mut page) };
             assert_eq!(unsafe { aim_session_apply_zhiju_snapshot_selected(&mut session, snapshot,
                 target.as_ptr(), target.len(), &mut page) }, 0);
             assert_eq!(session.inner.current_result().candidates[0].text, target);
